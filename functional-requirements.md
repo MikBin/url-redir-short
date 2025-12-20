@@ -106,3 +106,20 @@ This document outlines the functional requirements for the Universal Redirector 
 *   **NFR-01:** **Latency:** The redirection overhead at the edge should be minimal (<50ms processing time excluding network).
 *   **NFR-02:** **Scalability:** The architecture must support horizontal scaling of Edge Nodes without reconfiguration of the Admin Service.
 *   **NFR-03:** **Memory Efficiency:** Edge Nodes must optimize memory usage (e.g., via Cuckoo Filters and Language Slicing) to run within constrained environments (e.g., Cloudflare Workers 128MB limit).
+
+---
+
+## 7. Security & Compliance
+
+### 7.1. Redirection Types
+*   **FR-50:** The system MUST allow configuring the HTTP redirection status code per link.
+*   **FR-51:** Supported status codes MUST include **301 Moved Permanently** and **302 Found (Temporary)**.
+*   **FR-52:** The default status code for new links MUST be **301 Moved Permanently**.
+
+### 7.2. HSTS Compliance
+*   **FR-53:** The system MUST enforce **HTTP Strict Transport Security (HSTS)** on all responses to ensure secure connections.
+*   **FR-54:** The `Strict-Transport-Security` header MUST be set with `max-age=31536000` (1 year), `includeSubDomains`, and `preload`.
+
+### 7.3. Data Privacy (GDPR / CCPA)
+*   **FR-55:** The system MUST support **IP Address Anonymization** in analytics logs to comply with GDPR/CCPA.
+*   **FR-56:** The anonymization strategy MUST be configurable, with **Hashing** as the default method.
