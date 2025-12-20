@@ -36,6 +36,7 @@ graph TD
     AB --> Geo
     Geo --> Auth
     Auth --> Analytics
+    Analytics -.->|HTTP POST| AS[Analytics Service]
 ```
 
 ---
@@ -234,7 +235,57 @@ The Engines connect to the Admin Service via **Server-Sent Events (SSE)**.
 
 ---
 
-## 6. Deployment Matrix
+## 6. Analytics Integration
+
+The Redirector Engine is completely decoupled from the data processing and visualization layers. Its sole responsibility regarding analytics is to reliably collect and transmit raw engagement data to the **Analytics Service**.
+
+### 6.1 Data Transmission Protocol
+*   **Method:** **Non-blocking HTTP POST** (Fire-and-Forget).
+*   **Timing:** Requests are dispatched asynchronously (`ctx.waitUntil` or background threads) to ensure the user redirection is never delayed by analytics logging.
+*   **Endpoint:** `POST /v1/collect` (Hosted by the Analytics Service).
+
+### 6.2 Data Schema (Payload)
+The engine aggregates all relevant request context into a flat JSON structure.
+
+```json
+{
+  "timestamp": "2023-10-27T10:00:00Z",
+  "event_type": "redirect",
+  "short_code": "/promo-summer",
+  "destination_url": "https://myshop.com/summer-sale?utm_source=twitter",
+  "visitor": {
+    "ip": "203.0.113.1",
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6...)",
+    "geo": {
+      "country": "US",
+      "region": "CA",
+      "city": "San Francisco"
+    }
+  },
+  "referrer": {
+    "url": "https://t.co/xyz",
+    "source_type": "social", // Derived from Hybrid Priority Strategy
+    "explicit_tag": "twitter" // If found in query params
+  },
+  "utm_tags": {
+    "source": "twitter",
+    "medium": "social",
+    "campaign": "summer_sale"
+  },
+  "meta": {
+    "variant_id": "variant_b", // For A/B testing
+    "device_type": "mobile"    // Parsed at edge
+  }
+}
+```
+
+### 6.3 Separation of Concerns
+*   **Redirector Engine:** Responsible for **Extraction** (parsing headers, UTMs) and **Transmission**.
+*   **Analytics Service:** Responsible for **Ingestion**, **Processing** (anonymization, sessionizing), **Storage** (Time-series DB), and **Visualization** (Dashboards).
+
+---
+
+## 7. Deployment Matrix
 
 | Component | Cloudflare Workers | AWS Lambda@Edge | VPS / Docker |
 | :--- | :--- | :--- | :--- |
