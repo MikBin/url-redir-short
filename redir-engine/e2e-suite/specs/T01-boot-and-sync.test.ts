@@ -18,8 +18,9 @@ describe('T01: Boot & Sync', () => {
 
     // 2. Start Engine
     engine = new EngineController(
-      `http://localhost:${adminService.port}`,
-      `http://localhost:${analyticsService.port}`
+      `http://localhost:${adminService.port}/sync/stream`,
+      `http://localhost:${analyticsService.port}`,
+      3001
     );
     await engine.start();
   });

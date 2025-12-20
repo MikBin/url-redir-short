@@ -20,8 +20,8 @@ export class BetterMockAdminService extends EventEmitter {
       return streamSSE(c, async (stream) => {
         const listener = async (payload: any) => {
           await stream.writeSSE({
-            data: JSON.stringify(payload),
-            event: 'message',
+            data: JSON.stringify(payload.data),
+            event: payload.type,
             id: String(Date.now()),
           });
         };
