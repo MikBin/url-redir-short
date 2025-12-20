@@ -24,6 +24,7 @@ graph TD
            AB[A/B Testing]
            Geo[Geo/Lang/Device]
            Auth[Password Gate]
+           HSTS[HSTS Enforcement]
         end
 
         Analytics[Async Analytics]
@@ -35,7 +36,8 @@ graph TD
     Routing --> AB
     AB --> Geo
     Geo --> Auth
-    Auth --> Analytics
+    Auth --> HSTS
+    HSTS --> Analytics
     Analytics -.->|HTTP POST| AS[Analytics Service]
 ```
 
@@ -87,7 +89,7 @@ function resolveReferrer(req: Request, url: URL) {
 
 ### 2.3 Edge Code Structure (HonoJS Example)
 
-The following example combines the Cuckoo Filter gatekeeping with the detailed Referrer Tracking logic.
+The following example combines the Cuckoo Filter gatekeeping with the detailed Referrer Tracking logic, along with dynamic status codes and HSTS enforcement.
 
 ```typescript
 import { Hono } from 'hono';
@@ -99,6 +101,11 @@ const app = new Hono();
 // Mutable State
 const gatekeeper = new CuckooFilter(150000);
 const router = createRouter();
+
+// Config State (Synced from Admin)
+const domainConfig = {
+  hsts_enabled: true
+};
 
 app.get('*', async (c) => {
   const url = new URL(c.req.url);
@@ -121,7 +128,12 @@ app.get('*', async (c) => {
     return c.notFound();
   }
 
-  // 4. Referrer & Analytics
+  // 4. HSTS Enforcement
+  if (domainConfig.hsts_enabled) {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+
+  // 5. Referrer & Analytics
   const ref = resolveReferrer(c.req.raw, url);
 
   // Async Analytics Logging (Non-blocking)
@@ -130,14 +142,22 @@ app.get('*', async (c) => {
       path,
       referrer: ref.val,
       type: ref.type,
-      ua: c.req.header('User-Agent')
+      ua: c.req.header('User-Agent'),
+      ip: c.req.header('CF-Connecting-IP') // Example IP header
     })
   );
 
-  return c.redirect(route.destination, 301);
+  // 6. Redirect (Dynamic Status Code)
+  // Default to 301 if not specified
+  const status = route.status_code || 301;
+  return c.redirect(route.destination, status);
 });
 
 async function logAnalytics(data) {
+  // Handle IP Anonymization if enabled
+  if (data.ip && config.anonymize_ip) {
+      data.ip = await hashIP(data.ip);
+  }
   // Dispatch to Analytics Queue/DB
   console.log('[ANALYTICS]', JSON.stringify(data));
 }
@@ -190,6 +210,18 @@ Link expiration is handled with a focus on performance and eventual consistency.
     *   **Challenge:** Precise global counting is difficult in distributed edge systems without locking.
     *   **Solution:** We accept **Eventual Consistency**. Click counts are aggregated asynchronously. Once the limit is reached, the Admin Service pushes a `DELETE` or `UPDATE` event via SSE to remove the route from all edges. This may allow a small margin of "overshoot" clicks but preserves edge speed.
 
+### 4.3 Redirection Types
+The system allows configuring the HTTP status code per link to support various SEO and caching strategies.
+*   **301 Moved Permanently:** The default for new links. Browsers cache this response aggressively.
+*   **302 Found (Temporary):** Used for links that change frequently or for temporary campaigns.
+*   **Implementation:** The status code is stored as part of the route configuration (`route.status_code`) and applied dynamically at the moment of redirection.
+
+### 4.4 HSTS Enforcement
+To ensure secure communication, the Redirector Engine enforces **HTTP Strict Transport Security (HSTS)** at the domain level.
+*   **Configuration:** The Admin Service provides a domain-wide setting (default: enabled).
+*   **Execution:** If enabled for the requested domain, the Engine injects the `Strict-Transport-Security` header into every response (redirects, 404s, password pages).
+*   **Header Value:** `max-age=31536000; includeSubDomains; preload` (1 Year).
+
 ---
 
 ## 5. The Admin Service (Central)
@@ -222,7 +254,15 @@ The Engines connect to the Admin Service via **Server-Sent Events (SSE)**.
     "rule": {
       "path": "/promo",
       "destination": "https://myshop.com/promo-v2",
-      "host": "myshop.com"
+      "host": "myshop.com",
+      "status_code": 302, // Optional, defaults to 301
+      "meta": {
+          "password_protected": false
+      }
+    },
+    "domain_config": { // Optional sync of domain-level settings
+        "host": "myshop.com",
+        "hsts_enabled": true
     }
   }
 }
@@ -254,7 +294,7 @@ The engine aggregates all relevant request context into a flat JSON structure.
   "short_code": "/promo-summer",
   "destination_url": "https://myshop.com/summer-sale?utm_source=twitter",
   "visitor": {
-    "ip": "203.0.113.1",
+    "ip": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", // Hashed if anonymization enabled
     "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6...)",
     "geo": {
       "country": "US",
@@ -282,6 +322,12 @@ The engine aggregates all relevant request context into a flat JSON structure.
 ### 6.3 Separation of Concerns
 *   **Redirector Engine:** Responsible for **Extraction** (parsing headers, UTMs) and **Transmission**.
 *   **Analytics Service:** Responsible for **Ingestion**, **Processing** (anonymization, sessionizing), **Storage** (Time-series DB), and **Visualization** (Dashboards).
+
+### 6.4 Privacy & Anonymization
+To comply with GDPR, CCPA, and other privacy regulations, the system supports configurable IP anonymization.
+*   **Configuration:** Controlled via a system-wide or per-domain setting synced from the Admin Service.
+*   **Execution:** The Redirector Engine processes the IP address **before** transmission to the Analytics Service.
+*   **Mechanism:** Default behavior is **Hashing** (e.g., SHA-256) to ensure the raw IP is never persisted or transmitted over the wire to the analytics backend.
 
 ---
 
