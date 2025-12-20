@@ -82,7 +82,27 @@ This document outlines the functional requirements for the Universal Redirector 
 
 ---
 
-## 5. Non-Functional Requirements (Constraints)
+## 5. Analytics & Reporting Requirements
+
+### 5.1. Real-Time Engagement
+*   **FR-42:** The system MUST support **Click-Through Rate (CTR)** tracking for all links in real-time.
+*   **FR-43:** Engagement metrics MUST include unique visitor counts and total clicks.
+
+### 5.2. Geographic & Demographics
+*   **FR-44:** The system MUST track **Geographic Data** at the Country and City level (where available from edge headers).
+*   **FR-45:** The system MUST track **Device and Browser** profiles by parsing the User-Agent string.
+
+### 5.3. Source Tracking
+*   **FR-46:** The system MUST provide detailed **Referral Source** tracking, distinguishing between direct traffic, search engines, and social media based on the Referrer header and query parameters.
+*   **FR-47:** The Admin Service MUST support **UTM Parameter Management**, allowing users to easily append and manage UTM tags (Source, Medium, Campaign) during link creation.
+
+### 5.4. Reporting
+*   **FR-48:** The Analytics Service MUST provide **Custom Dashboards** with configurable reporting interfaces.
+*   **FR-49:** The Redirector Engine MUST decouple analytics processing by pushing data to the Analytics Service via a defined interface, ensuring edge performance is not compromised.
+
+---
+
+## 6. Non-Functional Requirements (Constraints)
 *   **NFR-01:** **Latency:** The redirection overhead at the edge should be minimal (<50ms processing time excluding network).
 *   **NFR-02:** **Scalability:** The architecture must support horizontal scaling of Edge Nodes without reconfiguration of the Admin Service.
 *   **NFR-03:** **Memory Efficiency:** Edge Nodes must optimize memory usage (e.g., via Cuckoo Filters and Language Slicing) to run within constrained environments (e.g., Cloudflare Workers 128MB limit).
