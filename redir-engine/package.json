@@ -1,0 +1,22 @@
+{
+  "name": "redir-engine",
+  "version": "0.0.0",
+  "description": "High-performance Redirector Engine",
+  "main": "runtimes/node/index.ts",
+  "scripts": {
+    "dev": "tsx watch runtimes/node/index.ts",
+    "build": "tsc",
+    "test": "echo \"Run tests in e2e-suite directory\" && exit 1"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
