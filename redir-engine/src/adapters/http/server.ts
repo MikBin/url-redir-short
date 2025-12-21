@@ -28,7 +28,22 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
     );
 
     if (rule) {
-      return c.redirect(rule.destination, rule.code);
+      // Create response
+      const res = c.redirect(rule.destination, rule.code);
+
+      // Phase 3.3: HSTS
+      if (rule.hsts && rule.hsts.enabled) {
+        let hstsValue = `max-age=${rule.hsts.maxAge || 31536000}`;
+        if (rule.hsts.includeSubDomains) {
+          hstsValue += '; includeSubDomains';
+        }
+        if (rule.hsts.preload) {
+          hstsValue += '; preload';
+        }
+        res.headers.set('Strict-Transport-Security', hstsValue);
+      }
+
+      return res;
     }
 
     return c.notFound();

@@ -12,7 +12,8 @@
     "@hono/node-server": "^1.19.7",
     "bloom-filters": "^3.0.4",
     "eventsource": "^4.1.0",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "ua-parser-js": "^2.0.7"
   },
   "devDependencies": {
     "@types/eventsource": "^1.1.15",
