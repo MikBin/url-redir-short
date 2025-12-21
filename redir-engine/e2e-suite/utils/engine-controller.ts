@@ -28,21 +28,36 @@ export class EngineController {
       stdio: 'pipe' // Capture output
     });
 
-    if (this.process.stdout) {
-      this.process.stdout.on('data', (data) => {
-        console.log(`[ENGINE]: ${data.toString()}`);
-      });
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.process) return reject(new Error('Process failed to spawn'));
 
-    if (this.process.stderr) {
-      this.process.stderr.on('data', (data) => {
-        console.error(`[ENGINE ERR]: ${data.toString()}`);
-      });
-    }
+      let started = false;
 
-    // Wait for engine to be ready (naive check for now, or just return)
-    // Real implementation might poll health check
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (this.process.stdout) {
+        this.process.stdout.on('data', (data) => {
+          const str = data.toString();
+          console.log(`[ENGINE]: ${str}`);
+          if (str.includes('[SSE] Connected') && !started) {
+            started = true;
+            resolve();
+          }
+        });
+      }
+
+      if (this.process.stderr) {
+        this.process.stderr.on('data', (data) => {
+          console.error(`[ENGINE ERR]: ${data.toString()}`);
+        });
+      }
+
+      // Fallback timeout
+      setTimeout(() => {
+        if (!started) {
+           console.warn('[EngineController] Timeout waiting for SSE connection, proceeding anyway...');
+           resolve();
+        }
+      }, 5000);
+    });
   }
 
   public async stop() {

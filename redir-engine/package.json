@@ -9,9 +9,13 @@
     "test": "echo \"Run tests in e2e-suite directory\" && exit 1"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.7",
+    "bloom-filters": "^3.0.4",
+    "eventsource": "^4.1.0",
     "hono": "^4.0.0"
   },
   "devDependencies": {
+    "@types/eventsource": "^1.1.15",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
