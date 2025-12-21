@@ -29,7 +29,13 @@ export interface RedirectRule {
     maxAge?: number;
     includeSubDomains?: boolean;
     preload?: boolean;
-  }
+  };
+
+  // Phase 4: Extended Features
+  password_protection?: {
+    enabled: boolean;
+    password: string;
+  };
 }
 
 export type RedirectRuleUpdate = {

@@ -7,31 +7,49 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
 
   app.get('/health', (c) => c.text('OK'));
 
-  app.get('*', async (c) => {
+  app.all('*', async (c) => {
+    // Allow GET, POST, and HEAD
+    if (c.req.method !== 'GET' && c.req.method !== 'POST' && c.req.method !== 'HEAD') {
+       return c.text('Method not allowed', 405);
+    }
+
     const path = new URL(c.req.url).pathname;
 
-    // Get IP for analytics (Node.js specific way via conninfo helper, or header fallback)
-    // Cloudflare Workers will have it in c.req.header('CF-Connecting-IP')
     let ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
-
     if (!ip) {
-        // Fallback for Node.js local dev
         const info = getConnInfo(c);
         ip = info.remote.address || '127.0.0.1';
     }
 
-    const rule = await handleRequest.execute(
+    // Try to get password from body if POST
+    let bodyPassword = undefined;
+    if (c.req.method === 'POST') {
+       try {
+         const body = await c.req.parseBody();
+         if (body['password']) {
+            bodyPassword = body['password'] as string;
+         }
+       } catch (e) {
+         // ignore parsing errors
+       }
+    }
+
+    const result = await handleRequest.execute(
         path,
         c.req.raw.headers,
         ip,
-        c.req.url
+        c.req.url,
+        bodyPassword
     );
 
-    if (rule) {
-      // Create response
+    if (!result) {
+      return c.notFound();
+    }
+
+    if (result.type === 'redirect') {
+      const rule = result.rule;
       const res = c.redirect(rule.destination, rule.code);
 
-      // Phase 3.3: HSTS
       if (rule.hsts && rule.hsts.enabled) {
         let hstsValue = `max-age=${rule.hsts.maxAge || 31536000}`;
         if (rule.hsts.includeSubDomains) {
@@ -44,6 +62,29 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
       }
 
       return res;
+    } else if (result.type === 'password_required') {
+       // Render HTML form
+       const errorMsg = result.error ? '<p style="color:red">Incorrect password</p>' : '';
+       // Use empty action to submit to same URL including query string
+       // Or use c.req.url but ensure it's relative or full.
+       // Empty action is standard for "post back to self".
+       // However, we need to ensure method is POST.
+
+       const html = `
+         <!DOCTYPE html>
+         <html>
+         <head><title>Password Protected</title></head>
+         <body>
+           <h2>This link is password protected</h2>
+           ${errorMsg}
+           <form method="POST" action="">
+             <input type="password" name="password" placeholder="Enter password" />
+             <button type="submit">Submit</button>
+           </form>
+         </body>
+         </html>
+       `;
+       return c.html(html);
     }
 
     return c.notFound();
