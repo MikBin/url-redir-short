@@ -16,19 +16,18 @@ export class EngineController {
   public async start() {
     const entryPoint = path.resolve(__dirname, '../../runtimes/node/index.ts');
 
-    // Using npx tsx to run the typescript file directly
     this.process = spawn('npx', ['tsx', entryPoint], {
-      cwd: path.resolve(__dirname, '../..'), // Run from redir-engine root
+      cwd: path.resolve(__dirname, '../..'),
       env: {
         ...process.env,
         ADMIN_SERVICE_URL: this.adminUrl,
         ANALYTICS_SERVICE_URL: this.analyticsUrl,
         PORT: this.port.toString(),
       },
-      stdio: 'pipe' // Capture output
+      stdio: 'pipe'
     });
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       if (!this.process) return reject(new Error('Process failed to spawn'));
 
       let started = false;
@@ -37,11 +36,9 @@ export class EngineController {
         this.process.stdout.on('data', (data) => {
           const str = data.toString();
           console.log(`[ENGINE]: ${str}`);
-          // Resolve on starting message OR connected message.
-          // Resolving on starting is faster, but connection might fail later.
-          // However, T01/T02/T03 wait for updates, so connection is implicit there.
-          // T04 also waits for update.
-          if ((str.includes('[Engine] Starting') || str.includes('[SSE] Connected')) && !started) {
+
+          // Wait for SSE connection to be established to ensure we don't miss initial updates
+          if (str.includes('[SSE] Connected') && !started) {
             started = true;
             resolve();
           }
@@ -54,15 +51,12 @@ export class EngineController {
         });
       }
 
-      // Fallback timeout - REDUCED to prevent long hangs if logic is wrong
       setTimeout(() => {
         if (!started) {
            console.warn('[EngineController] Timeout waiting for Engine start message, proceeding anyway...');
-           // If we resolve here, the test might fail later if engine isn't ready.
-           // But better than hanging for 400s.
            resolve();
         }
-      }, 5000);
+      }, 10000); // Increased timeout
     });
   }
 
