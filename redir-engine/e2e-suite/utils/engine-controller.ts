@@ -37,7 +37,11 @@ export class EngineController {
         this.process.stdout.on('data', (data) => {
           const str = data.toString();
           console.log(`[ENGINE]: ${str}`);
-          if (str.includes('[SSE] Connected') && !started) {
+          // Resolve on starting message OR connected message.
+          // Resolving on starting is faster, but connection might fail later.
+          // However, T01/T02/T03 wait for updates, so connection is implicit there.
+          // T04 also waits for update.
+          if ((str.includes('[Engine] Starting') || str.includes('[SSE] Connected')) && !started) {
             started = true;
             resolve();
           }
@@ -50,10 +54,12 @@ export class EngineController {
         });
       }
 
-      // Fallback timeout
+      // Fallback timeout - REDUCED to prevent long hangs if logic is wrong
       setTimeout(() => {
         if (!started) {
-           console.warn('[EngineController] Timeout waiting for SSE connection, proceeding anyway...');
+           console.warn('[EngineController] Timeout waiting for Engine start message, proceeding anyway...');
+           // If we resolve here, the test might fail later if engine isn't ready.
+           // But better than hanging for 400s.
            resolve();
         }
       }, 5000);

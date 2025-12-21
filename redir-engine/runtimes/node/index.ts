@@ -5,21 +5,25 @@ import { SSEClient } from '../../src/adapters/sse/sse-client';
 import { createApp } from '../../src/adapters/http/server';
 import { SyncStateUseCase } from '../../src/use-cases/sync-state';
 import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
+import { FireAndForgetCollector } from '../../src/adapters/analytics/fire-and-forget';
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const ADMIN_SERVICE_URL = process.env.ADMIN_SERVICE_URL || 'http://localhost:3001/sync/stream';
-// const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:3002/v1/collect'; // Phase 2
+const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:3002';
 
 // 1. Initialize Core Data Structures
 const radixTree = new RadixTree();
 const cuckooFilter = new CuckooFilter();
 
-// 2. Initialize Use Cases
-const syncState = new SyncStateUseCase(radixTree, cuckooFilter);
-const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter);
+// 2. Initialize Analytics
+const analyticsCollector = new FireAndForgetCollector(ANALYTICS_SERVICE_URL);
 
-// 3. Initialize SSE Client and connect
+// 3. Initialize Use Cases
+const syncState = new SyncStateUseCase(radixTree, cuckooFilter);
+const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analyticsCollector);
+
+// 4. Initialize SSE Client and connect
 const sseClient = new SSEClient(ADMIN_SERVICE_URL);
 sseClient.connect(
   (data) => syncState.handleCreate(data),
@@ -27,7 +31,7 @@ sseClient.connect(
   (data) => syncState.handleDelete(data)
 );
 
-// 4. Initialize HTTP Server
+// 5. Initialize HTTP Server
 const app = createApp(handleRequest);
 
 console.log(`[Engine] Starting on port ${PORT}`);
