@@ -13,13 +13,13 @@ In this configuration, Supabase provides the **PostgreSQL** database and **Authe
 *   **Reactive State:** The Admin Service subscribes to Supabase Realtime (Postgres Changes) to detect data mutations, ensuring that changes made directly in the Supabase Dashboard are still propagated to the Edge Nodes.
 *   **One-Way Sync:** The Admin Service maintains the standard SSE (Server-Sent Events) channel to push updates to Redirector Engines.
 
-## 3. System Components (C4 Context)
+## 3. System Components (C4 Component)
 
 ```mermaid
 graph TD
     User[Admin User] -->|Login/Manage| UI[Nuxt Web Dashboard]
     UI -->|Auth Request| SupabaseAuth[Supabase Auth]
-    UI -->|API Request (Bearer Token)| AdminService[Admin Service]
+    UI -->|API Request (Bearer Token)| API
 
     subgraph "Admin Service (NestJS)"
         Core[Core Domain Logic]
