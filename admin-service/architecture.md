@@ -15,7 +15,7 @@ The service is built using **NestJS** and adheres to **Hexagonal Architecture (P
 
 ```mermaid
 graph TD
-    Admin[Admin User] -->|Manage Links| UI[Web Dashboard]
+    Admin[Admin User] -->|Manage Links| UI[Vue.js Web Dashboard]
     UI -->|REST API| AdminService[Admin Service]
 
     subgraph "Admin Service (NestJS)"
@@ -144,3 +144,13 @@ src/
     *   PostgreSQL (via Supabase)
     *   SQLite/Go (via PocketBase)
 *   **Communication:** HTTP/1.1 (REST), Server-Sent Events (SSE)
+
+## 8. Frontend Architecture (Vue.js)
+The **Admin Dashboard** is a Single Page Application (SPA) built with **Vue.js**.
+
+*   **Role:** Provides a graphical user interface for administrators to manage links, domains, and users.
+*   **Integration:**
+    *   **API Client:** Communicates with the Admin Service via standard REST calls (using generic HTTP clients like Axios or Fetch).
+    *   **Auth:** Passes the JWT (obtained from the Auth Provider) in the `Authorization` header.
+    *   **Analytics:** Queries the Analytics Service directly for visualization (bypassing the Admin Service).
+*   **State Management:** Local state handles UI concerns, while the Admin Service remains the source of truth for configuration.

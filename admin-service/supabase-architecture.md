@@ -17,7 +17,7 @@ In this configuration, Supabase provides the **PostgreSQL** database and **Authe
 
 ```mermaid
 graph TD
-    User[Admin User] -->|Login/Manage| UI[Web Dashboard]
+    User[Admin User] -->|Login/Manage| UI[Nuxt Web Dashboard]
     UI -->|Auth Request| SupabaseAuth[Supabase Auth]
     UI -->|API Request (Bearer Token)| AdminService[Admin Service]
 
@@ -115,3 +115,15 @@ SUPABASE_ANON_KEY=ey...          # Used for client-side context if needed
 *   **Service Role Key:** The Admin Service requires the `SERVICE_ROLE_KEY` to bypass Row Level Security (RLS) when performing administrative tasks or bulk operations.
 *   **RLS Policies:** Should still be configured on the Postgres level to protect data from accidental public exposure, even if the Admin Service bypasses them.
 *   **SSE Security:** The SSE endpoint (`/sync/stream`) should be protected by an API Key or internal token mechanism to prevent unauthorized clients from listening to the stream.
+
+## 8. Frontend Architecture (Nuxt)
+When using Supabase, the **Admin Dashboard** is built with **Nuxt** to leverage deeper integration with the ecosystem.
+
+*   **Role:** Provides a server-side rendered (SSR) or statically generated (SSG) interface.
+*   **Integration:**
+    *   **Supabase Module:** Uses `@nuxtjs/supabase` for seamless authentication and client management.
+    *   **Auth:** Direct integration with Supabase Auth for login/signup flows. The session token is then forwarded to the Admin Service for API requests.
+    *   **Data Fetching:**
+        *   **Via Admin Service:** All write operations (Create/Update/Delete) go through the Admin Service API to ensure validation and event triggering.
+        *   **Read Operations:** May query Supabase directly for read-heavy views (e.g. lists) if strict consistency is not required, or continue to use the Admin Service API for a unified data layer.
+    *   **Analytics:** Queries the Analytics Service directly.
