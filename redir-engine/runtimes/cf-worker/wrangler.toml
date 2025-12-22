@@ -1,0 +1,8 @@
+name = "redir-engine"
+main = "index.ts"
+compatibility_date = "2023-10-25"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ADMIN_SERVICE_URL = "PLACEHOLDER_ADMIN_URL"
+ANALYTICS_SERVICE_URL = "PLACEHOLDER_ANALYTICS_URL"

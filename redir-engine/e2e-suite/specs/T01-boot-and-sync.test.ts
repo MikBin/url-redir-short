@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { BetterMockAdminService } from '../mocks/admin-service';
 import { MockAnalyticsService } from '../mocks/analytics-service';
-import { EngineController } from '../utils/engine-controller';
+import { EngineController, RuntimeType } from '../utils/engine-controller';
 
 describe('T01: Boot & Sync', () => {
   let adminService: BetterMockAdminService;
@@ -17,10 +17,12 @@ describe('T01: Boot & Sync', () => {
     await analyticsService.start();
 
     // 2. Start Engine
+    const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
       `http://localhost:${adminService.port}/sync/stream`,
       `http://localhost:${analyticsService.port}`,
-      3001
+      3001,
+      runtime
     );
     await engine.start();
   });

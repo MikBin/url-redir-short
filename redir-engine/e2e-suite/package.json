@@ -3,14 +3,17 @@
   "version": "0.0.0",
   "description": "Black-box E2E test suite for redir-engine",
   "scripts": {
-    "test": "vitest"
+    "test": "vitest",
+    "test:node": "cross-env TEST_RUNTIME=node vitest",
+    "test:cf": "cross-env TEST_RUNTIME=cf-worker vitest"
   },
   "dependencies": {
-    "hono": "^4.0.0",
-    "@hono/node-server": "^1.0.0"
+    "@hono/node-server": "^1.0.0",
+    "hono": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "cross-env": "^7.0.3",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

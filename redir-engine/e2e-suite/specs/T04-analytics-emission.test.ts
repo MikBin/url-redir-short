@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { BetterMockAdminService } from '../mocks/admin-service';
 import { MockAnalyticsService } from '../mocks/analytics-service';
-import { EngineController } from '../utils/engine-controller';
+import { EngineController, RuntimeType } from '../utils/engine-controller';
 
 describe('T04: Analytics Emission', () => {
   let adminService: BetterMockAdminService;
@@ -15,10 +15,12 @@ describe('T04: Analytics Emission', () => {
     analyticsService = new MockAnalyticsService();
     await analyticsService.start();
 
+    const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
       `http://localhost:${adminService.port}/sync/stream`,
       `http://localhost:${analyticsService.port}`,
-      3004
+      3004,
+      runtime
     );
     await engine.start();
   });
