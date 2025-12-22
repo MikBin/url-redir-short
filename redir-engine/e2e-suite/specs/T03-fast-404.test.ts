@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { BetterMockAdminService } from '../mocks/admin-service';
 import { MockAnalyticsService } from '../mocks/analytics-service';
-import { EngineController } from '../utils/engine-controller';
+import { EngineController, RuntimeType } from '../utils/engine-controller';
 
 describe('T03: Fast 404', () => {
   let adminService: BetterMockAdminService;
@@ -15,10 +15,12 @@ describe('T03: Fast 404', () => {
     analyticsService = new MockAnalyticsService();
     await analyticsService.start();
 
+    const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
       `http://localhost:${adminService.port}/sync/stream`,
       `http://localhost:${analyticsService.port}`,
-      3003
+      3003,
+      runtime
     );
     await engine.start();
   });

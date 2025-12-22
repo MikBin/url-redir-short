@@ -1,15 +1,20 @@
-import { EventSource } from 'eventsource';
+
+export interface EventSourceConstructor {
+  new (url: string, eventSourceInitDict?: EventSourceInit): EventSource;
+}
 
 export class SSEClient {
   private eventSource: EventSource | null = null;
   private url: string;
+  private eventSourceClass: EventSourceConstructor;
 
   private onCreate?: (data: any) => void;
   private onUpdate?: (data: any) => void;
   private onDelete?: (data: any) => void;
 
-  constructor(url: string) {
+  constructor(url: string, eventSourceClass: EventSourceConstructor) {
     this.url = url;
+    this.eventSourceClass = eventSourceClass;
   }
 
   public connect(
@@ -22,29 +27,31 @@ export class SSEClient {
     this.onDelete = onDelete;
 
     console.log(`[SSE] Connecting to ${this.url}`);
-    this.eventSource = new EventSource(this.url);
+    // @ts-ignore - The EventSource types might mismatch slightly between dom and node
+    this.eventSource = new this.eventSourceClass(this.url);
 
-    this.eventSource.onopen = () => {
-      console.log('[SSE] Connected');
-    };
+    if (this.eventSource) {
+        this.eventSource.onopen = () => {
+          console.log('[SSE] Connected');
+        };
 
-    this.eventSource.onerror = (err) => {
-      console.error('[SSE] Error:', err);
-      // Optional: Reconnect logic is usually handled by EventSource but good to log
-    };
+        this.eventSource.onerror = (err: any) => {
+          console.error('[SSE] Error:', err);
+        };
 
-    // Listen to custom events
-    this.eventSource.addEventListener('create', (e: MessageEvent) => {
-      if (this.onCreate) this.onCreate(JSON.parse(e.data));
-    });
+        // Listen to custom events
+        this.eventSource.addEventListener('create', (e: any) => {
+          if (this.onCreate) this.onCreate(JSON.parse(e.data));
+        });
 
-    this.eventSource.addEventListener('update', (e: MessageEvent) => {
-      if (this.onUpdate) this.onUpdate(JSON.parse(e.data));
-    });
+        this.eventSource.addEventListener('update', (e: any) => {
+          if (this.onUpdate) this.onUpdate(JSON.parse(e.data));
+        });
 
-    this.eventSource.addEventListener('delete', (e: MessageEvent) => {
-      if (this.onDelete) this.onDelete(JSON.parse(e.data));
-    });
+        this.eventSource.addEventListener('delete', (e: any) => {
+          if (this.onDelete) this.onDelete(JSON.parse(e.data));
+        });
+    }
   }
 
   public close() {

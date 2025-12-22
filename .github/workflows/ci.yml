@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install Dependencies (Root)
+        run: npm ci
+
+      - name: Install Dependencies (Redir Engine)
+        working-directory: redir-engine
+        run: npm install
+
+      - name: Install Dependencies (E2E Suite)
+        working-directory: redir-engine/e2e-suite
+        run: npm install
+
+      - name: Build Engine (Node)
+        working-directory: redir-engine
+        run: npm run build
+
+      - name: Run Tests (Node Runtime)
+        working-directory: redir-engine/e2e-suite
+        run: npm run test:node
+
+      - name: Run Tests (Cloudflare Worker Runtime)
+        working-directory: redir-engine/e2e-suite
+        run: npm run test:cf

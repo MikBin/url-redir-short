@@ -6,6 +6,7 @@ import { createApp } from '../../src/adapters/http/server';
 import { SyncStateUseCase } from '../../src/use-cases/sync-state';
 import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
 import { FireAndForgetCollector } from '../../src/adapters/analytics/fire-and-forget';
+import { EventSource } from 'eventsource';
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -24,7 +25,8 @@ const syncState = new SyncStateUseCase(radixTree, cuckooFilter);
 const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analyticsCollector);
 
 // 4. Initialize SSE Client and connect
-const sseClient = new SSEClient(ADMIN_SERVICE_URL);
+// @ts-ignore - mismatch between eventsource types and our interface
+const sseClient = new SSEClient(ADMIN_SERVICE_URL, EventSource);
 sseClient.connect(
   (data) => syncState.handleCreate(data),
   (data) => syncState.handleUpdate(data),
