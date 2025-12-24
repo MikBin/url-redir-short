@@ -19,6 +19,7 @@ export class EngineController {
   }
 
   public async start() {
+    console.log('[EngineController] start() called');
     if (this.runtime === 'node') {
       return this.startNode();
     } else {
@@ -28,8 +29,12 @@ export class EngineController {
 
   private async startNode() {
     const entryPoint = path.resolve(__dirname, '../../runtimes/node/index.ts');
+    // Use local tsx to avoid npx overhead/issues
+    const tsxPath = path.resolve(__dirname, '../../node_modules/.bin/tsx');
 
-    this.process = spawn('npx', ['tsx', entryPoint], {
+    console.log('[EngineController] Spawning node process using:', tsxPath);
+
+    this.process = spawn(tsxPath, [entryPoint], {
       cwd: path.resolve(__dirname, '../..'),
       env: {
         ...process.env,
@@ -53,16 +58,25 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
 `;
     fs.writeFileSync(devVarsPath, devVarsContent);
 
-    this.process = spawn('npx', [
-      'wrangler',
+    // Use wrangler from node_modules
+    const wranglerPath = path.resolve(__dirname, '../../node_modules/.bin/wrangler');
+
+    console.log('[EngineController] Spawning wrangler process using:', wranglerPath);
+
+    // Use 'node' to spawn to ensure shebang is respected and execution is reliable
+    this.process = spawn('node', [
+      wranglerPath,
       'dev',
       'index.ts',
-      '--port', this.port.toString()
+      '--port', this.port.toString(),
+      '--ip', '127.0.0.1' // Bind to localhost explicitly
     ], {
       cwd: workerDir,
       env: {
         ...process.env,
         WRANGLER_LOG: 'info',
+        CI: 'true', // Disable interactivity
+        WRANGLER_SEND_METRICS: 'false'
       },
       stdio: 'pipe'
     });
@@ -72,7 +86,6 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
 
     // 2. Send warm-up request
     try {
-        // Retry fetch a few times just in case
         for (let i = 0; i < 5; i++) {
             try {
                 await fetch(`http://localhost:${this.port}/health`);
@@ -84,23 +97,6 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
     } catch (e) {
         // ignore
     }
-
-    // 3. Wait for SSE connection log
-    // We create a NEW promise here, attached to the same process output streams
-    // But since `waitForReady` attaches new listeners, it should work fine.
-    // However, if the log happened very quickly after the fetch, we might miss it if we attach listeners too late.
-    // Ideally we should attach listeners EARLIER.
-
-    // NOTE: In the previous failed run, we didn't see "[SSE] Connected" in the logs at all.
-    // This might mean `console.log` from inside the worker is not surfacing or formatted differently.
-
-    // Let's rely on a simpler check: If the warm-up request succeeded, we assume it's running.
-    // But T01 expects "Connected".
-
-    // For now, let's just return. If T01 fails, we know why.
-    // But T01 waits for Admin Service to receive updates.
-
-    // Let's trust that the warm-up request did the job.
     return;
   }
 
@@ -112,9 +108,9 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
 
       const onData = (data: Buffer) => {
         const str = data.toString();
-        // Only log if it's meaningful, to avoid spam
+        // Log output for debugging
         if (str.trim().length > 0) {
-             console.log(`[ENGINE ${this.runtime}]: ${str.trim()}`);
+            console.log(`[ENGINE ${this.runtime}]: ${str.trim()}`);
         }
 
         if (str.includes(marker) && !started) {
