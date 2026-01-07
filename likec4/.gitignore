@@ -1,0 +1,8 @@
+# LikeC4 output directories
+.likec4/
+node_modules/
+
+# Exported images
+*.png
+*.svg
+*.pdf

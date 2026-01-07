@@ -1,0 +1,21 @@
+{
+  "name": "url-redir-short-architecture",
+  "version": "1.0.0",
+  "description": "LikeC4 architecture model for Universal Redirector System",
+  "private": true,
+  "scripts": {
+    "start": "likec4 start",
+    "build": "likec4 build",
+    "export": "likec4 export",
+    "preview": "likec4 preview"
+  },
+  "devDependencies": {
+    "@likec4/cli": "latest"
+  },
+  "keywords": [
+    "architecture",
+    "likec4",
+    "c4-model",
+    "documentation"
+  ]
+}

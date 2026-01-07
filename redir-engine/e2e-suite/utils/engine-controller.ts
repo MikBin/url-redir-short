@@ -30,7 +30,7 @@ export class EngineController {
   private async startNode() {
     const entryPoint = path.resolve(__dirname, '../../runtimes/node/index.ts');
     // Use local tsx to avoid npx overhead/issues
-    const tsxPath = path.resolve(__dirname, '../../node_modules/.bin/tsx');
+    const tsxPath = path.resolve(__dirname, '../../node_modules/.bin/tsx' + (process.platform === 'win32' ? '.cmd' : ''));
 
     console.log('[EngineController] Spawning node process using:', tsxPath);
 
@@ -42,7 +42,8 @@ export class EngineController {
         ANALYTICS_SERVICE_URL: this.analyticsUrl,
         PORT: this.port.toString(),
       },
-      stdio: 'pipe'
+      stdio: 'pipe',
+      shell: true
     });
 
     return this.waitForReady('[SSE] Connected');
@@ -59,18 +60,21 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
     fs.writeFileSync(devVarsPath, devVarsContent);
 
     // Use wrangler from node_modules
-    const wranglerPath = path.resolve(__dirname, '../../node_modules/.bin/wrangler');
+    const wranglerPath = path.resolve(__dirname, '../../node_modules/.bin/wrangler' + (process.platform === 'win32' ? '.cmd' : ''));
 
     console.log('[EngineController] Spawning wrangler process using:', wranglerPath);
 
-    // Use 'node' to spawn to ensure shebang is respected and execution is reliable
-    this.process = spawn('node', [
-      wranglerPath,
-      'dev',
-      'index.ts',
-      '--port', this.port.toString(),
-      '--ip', '127.0.0.1' // Bind to localhost explicitly
-    ], {
+    // On Windows, use cmd.exe to run .cmd files directly; on Unix, use node to respect shebang
+    const useNode = process.platform !== 'win32';
+    const args = useNode ? [wranglerPath] : [];
+    
+    if (useNode) {
+      args.push('dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1');
+    } else {
+      args.push('/c', wranglerPath, 'dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1');
+    }
+
+    this.process = spawn(useNode ? 'node' : 'cmd.exe', args, {
       cwd: workerDir,
       env: {
         ...process.env,
@@ -78,7 +82,8 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
         CI: 'true', // Disable interactivity
         WRANGLER_SEND_METRICS: 'false'
       },
-      stdio: 'pipe'
+      stdio: 'pipe',
+      shell: false
     });
 
     // 1. Wait for Wrangler to be ready
