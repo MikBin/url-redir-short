@@ -36,6 +36,10 @@ export interface RedirectRule {
     enabled: boolean;
     password: string;
   };
+
+  // Expiration Logic
+  expiresAt?: number;
+  maxClicks?: number;
 }
 
 export type RedirectRuleUpdate = {

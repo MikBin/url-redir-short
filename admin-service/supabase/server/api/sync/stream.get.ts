@@ -21,8 +21,15 @@ export default defineEventHandler(async (event) => {
     start(controller) {
       const encoder = new TextEncoder()
 
-      const send = (data: any) => {
-        const str = `data: ${JSON.stringify(data)}\n\n`
+      const send = (msg: any) => {
+        let str = ''
+        if (msg.event) {
+          str += `event: ${msg.event}\n`
+          str += `data: ${JSON.stringify(msg.data)}\n\n`
+        } else {
+          // Default message
+          str += `data: ${JSON.stringify(msg)}\n\n`
+        }
         controller.enqueue(encoder.encode(str))
       }
 
