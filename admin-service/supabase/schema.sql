@@ -70,3 +70,6 @@ using (auth.uid() = owner_id);
 -- Realtime: Enable for tables
 alter publication supabase_realtime add table public.links;
 alter publication supabase_realtime add table public.domains;
+
+-- Replica Identity: Ensure DELETE events contain the full row
+alter table public.links replica identity full;

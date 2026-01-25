@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { syncEvents, SYNC_EVENT_NAME } from '../utils/broadcaster'
+import { transformLink, SupabaseLink } from '../utils/transformer'
 
 export default defineNitroPlugin((nitroApp) => {
   const config = useRuntimeConfig()
@@ -24,7 +25,32 @@ export default defineNitroPlugin((nitroApp) => {
       { event: '*', schema: 'public', table: 'links' },
       (payload) => {
         console.log('Change received!', payload)
-        syncEvents.emit(SYNC_EVENT_NAME, { type: 'link', ...payload })
+
+        const eventType = payload.eventType
+        let action = ''
+        let data = null
+
+        try {
+          if (eventType === 'INSERT') {
+             action = 'create'
+             data = transformLink(payload.new as SupabaseLink)
+          } else if (eventType === 'UPDATE') {
+             action = 'update'
+             data = transformLink(payload.new as SupabaseLink)
+          } else if (eventType === 'DELETE') {
+             action = 'delete'
+             // Assumes REPLICA IDENTITY FULL is enabled so payload.old contains the record
+             if (payload.old) {
+                data = transformLink(payload.old as SupabaseLink)
+             }
+          }
+
+          if (action && data) {
+             syncEvents.emit(SYNC_EVENT_NAME, { event: action, data: data })
+          }
+        } catch (err) {
+           console.error('Error transforming payload:', err)
+        }
       }
     )
     .subscribe()
@@ -35,8 +61,8 @@ export default defineNitroPlugin((nitroApp) => {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'domains' },
       (payload) => {
-        console.log('Change received!', payload)
-        syncEvents.emit(SYNC_EVENT_NAME, { type: 'domain', ...payload })
+        console.log('Domain change received but ignored for now:', payload)
+        // syncEvents.emit(SYNC_EVENT_NAME, { type: 'domain', ...payload })
       }
     )
     .subscribe()
