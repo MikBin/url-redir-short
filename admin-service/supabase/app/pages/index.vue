@@ -106,6 +106,43 @@
               <button type="button" @click="removeTargetingRule(index)" class="text-red-600 hover:text-red-900 p-2">Remove</button>
             </div>
             <button type="button" @click="addTargetingRule" class="text-sm text-blue-600 hover:text-blue-800 font-medium">+ Add Rule</button>
+
+            <!-- Preview Section -->
+            <div class="mt-6 border-t border-dashed pt-4">
+               <h4 class="text-sm font-bold mb-3 text-gray-700">Preview Routing</h4>
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Country (Code)</label>
+                      <input v-model="previewContext.country" type="text" placeholder="e.g. US" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Language</label>
+                      <input v-model="previewContext.language" type="text" placeholder="e.g. en-US" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Device Type</label>
+                      <select v-model="previewContext.deviceType" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm">
+                          <option value="desktop">Desktop / None</option>
+                          <option value="mobile">Mobile</option>
+                          <option value="tablet">Tablet</option>
+                      </select>
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">OS</label>
+                      <select v-model="previewContext.os" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm">
+                          <option value="other">Other / Windows / MacOS</option>
+                          <option value="iOS">iOS</option>
+                          <option value="Android">Android</option>
+                      </select>
+                  </div>
+               </div>
+               <div class="bg-gray-100 p-3 rounded text-sm">
+                   <span class="font-medium text-gray-700">Result:</span>
+                   <a :href="previewResult" target="_blank" class="text-blue-600 ml-2 hover:underline truncate inline-block align-bottom max-w-full">{{ previewResult || 'Default Destination' }}</a>
+                   <span v-if="previewResult === newLink.destination" class="ml-2 text-xs text-gray-500">(Default)</span>
+                   <span v-else class="ml-2 text-xs text-green-600 font-bold">(Matched Rule)</span>
+               </div>
+            </div>
           </div>
         </div>
 
@@ -234,17 +271,12 @@
 </template>
 
 <script setup lang="ts">
+import { checkTarget, type TargetingRule, type PreviewContext } from '../utils/targeting'
+
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
 // Types
-interface TargetingRule {
-  id: string
-  target: 'language' | 'device' | 'country'
-  value: string
-  destination: string
-}
-
 interface ABVariation {
   id: string
   destination: string
@@ -511,6 +543,25 @@ const addABVariation = () => {
 const removeABVariation = (index: number) => {
   newLink.value.ab_testing.variations.splice(index, 1)
 }
+
+// Preview Logic
+const previewContext = ref<PreviewContext>({
+    country: '',
+    language: '',
+    deviceType: 'desktop',
+    os: 'other'
+})
+
+const previewResult = computed(() => {
+    if (!newLink.value.targeting.enabled) return newLink.value.destination
+
+    for (const rule of newLink.value.targeting.rules) {
+        if (checkTarget(rule, previewContext.value)) {
+            return rule.destination
+        }
+    }
+    return newLink.value.destination
+})
 
 // QR Code Logic
 const showQRModal = ref(false)
