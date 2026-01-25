@@ -1,8 +1,9 @@
-import { defineVitestConfig } from '@nuxt/test-utils/config'
+import { defineConfig } from 'vitest/config'
 
-export default defineVitestConfig({
+export default defineConfig({
   test: {
     environment: 'node',
-    globals: true
+    globals: true,
+    include: ['tests/**/*.test.ts']
   }
 })

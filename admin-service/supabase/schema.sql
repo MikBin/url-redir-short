@@ -29,7 +29,23 @@ create table public.links (
   unique(slug, domain_id) -- Uniqueness per domain (if domain_id is null, it's the default domain)
 );
 
--- Table: analytics_events
+-- Table: sessions (for tracking user sessions)
+create table public.sessions (
+  id uuid default gen_random_uuid() primary key,
+  session_id text not null unique,
+  user_id uuid references auth.users,
+  created_at timestamptz default now(),
+  expires_at timestamptz not null,
+  device_fingerprint text,
+  last_activity_at timestamptz default now()
+);
+
+-- Index for session lookups
+create index idx_sessions_session_id on public.sessions(session_id);
+create index idx_sessions_user_id on public.sessions(user_id);
+create index idx_sessions_expires_at on public.sessions(expires_at);
+
+-- Table: analytics_events (enhanced with new columns)
 create table public.analytics_events (
   id uuid default gen_random_uuid() primary key,
   path text not null,
@@ -40,13 +56,53 @@ create table public.analytics_events (
   referrer text,
   referrer_source text,
   status integer,
+  session_id text,
+  country text,
+  city text,
+  device_type text,
+  browser text,
+  os text,
+  link_id uuid references public.links(id),
   created_at timestamptz default now()
 );
+
+-- Indexes for analytics_events
+create index idx_analytics_path_timestamp on public.analytics_events(path, timestamp);
+create index idx_analytics_destination_timestamp on public.analytics_events(destination, timestamp);
+create index idx_analytics_device_type on public.analytics_events(device_type);
+create index idx_analytics_country on public.analytics_events(country);
+create index idx_analytics_link_id on public.analytics_events(link_id);
+create index idx_analytics_session_id on public.analytics_events(session_id);
+create index idx_analytics_created_at on public.analytics_events(created_at);
+
+-- Table: analytics_aggregates (for hourly/daily stats)
+create table public.analytics_aggregates (
+  id uuid default gen_random_uuid() primary key,
+  link_id uuid references public.links(id) not null,
+  date date not null,
+  hour smallint, -- 0-23, null for daily aggregates
+  click_count integer default 0,
+  unique_visitors integer default 0,
+  conversion_data jsonb default '{}',
+  country_breakdown jsonb default '{}',
+  device_breakdown jsonb default '{}',
+  browser_breakdown jsonb default '{}',
+  referrer_breakdown jsonb default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(link_id, date, hour)
+);
+
+-- Indexes for analytics_aggregates
+create index idx_aggregates_link_date on public.analytics_aggregates(link_id, date);
+create index idx_aggregates_date on public.analytics_aggregates(date);
 
 -- RLS: Enable
 alter table public.domains enable row level security;
 alter table public.links enable row level security;
 alter table public.analytics_events enable row level security;
+alter table public.sessions enable row level security;
+alter table public.analytics_aggregates enable row level security;
 
 -- Policies: Domains
 create policy "Users can view their own domains"
@@ -91,6 +147,24 @@ using (auth.uid() = owner_id);
 -- Since we don't have owner_id, we'll let any authenticated user view all stats for now (internal admin tool).
 create policy "Authenticated users can view all analytics"
 on public.analytics_events for select
+using (auth.role() = 'authenticated');
+
+-- Policies: Sessions
+create policy "Users can view their own sessions"
+on public.sessions for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own sessions"
+on public.sessions for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own sessions"
+on public.sessions for delete
+using (auth.uid() = user_id);
+
+-- Policies: Analytics Aggregates
+create policy "Authenticated users can view all aggregates"
+on public.analytics_aggregates for select
 using (auth.role() = 'authenticated');
 
 -- Realtime: Enable for tables
