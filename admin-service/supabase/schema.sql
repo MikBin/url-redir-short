@@ -173,3 +173,58 @@ alter publication supabase_realtime add table public.domains;
 
 -- Replica Identity: Ensure DELETE events contain the full row
 alter table public.links replica identity full;
+
+-- Function to atomically increment analytics aggregates
+create or replace function public.increment_analytics_aggregate(
+  p_link_id uuid,
+  p_date date,
+  p_hour integer,
+  p_country text,
+  p_device_type text,
+  p_browser text,
+  p_count integer default 1
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_country_json jsonb;
+  v_device_json jsonb;
+  v_browser_json jsonb;
+begin
+  -- Construct partial JSONBs for the initial insert
+  v_country_json := case when p_country is not null then jsonb_build_object(p_country, p_count) else '{}'::jsonb end;
+  v_device_json := case when p_device_type is not null then jsonb_build_object(p_device_type, p_count) else '{}'::jsonb end;
+  v_browser_json := case when p_browser is not null then jsonb_build_object(p_browser, p_count) else '{}'::jsonb end;
+
+  insert into public.analytics_aggregates (
+    link_id, date, hour, click_count, unique_visitors,
+    country_breakdown, device_breakdown, browser_breakdown
+  )
+  values (
+    p_link_id, p_date, p_hour, p_count, p_count,
+    v_country_json, v_device_json, v_browser_json
+  )
+  on conflict (link_id, date, hour)
+  do update set
+    click_count = analytics_aggregates.click_count + p_count,
+    unique_visitors = analytics_aggregates.unique_visitors + p_count,
+    country_breakdown = case
+      when p_country is not null then
+        analytics_aggregates.country_breakdown || jsonb_build_object(p_country, coalesce((analytics_aggregates.country_breakdown->>p_country)::int, 0) + p_count)
+      else analytics_aggregates.country_breakdown
+    end,
+    device_breakdown = case
+      when p_device_type is not null then
+        analytics_aggregates.device_breakdown || jsonb_build_object(p_device_type, coalesce((analytics_aggregates.device_breakdown->>p_device_type)::int, 0) + p_count)
+      else analytics_aggregates.device_breakdown
+    end,
+    browser_breakdown = case
+      when p_browser is not null then
+        analytics_aggregates.browser_breakdown || jsonb_build_object(p_browser, coalesce((analytics_aggregates.browser_breakdown->>p_browser)::int, 0) + p_count)
+      else analytics_aggregates.browser_breakdown
+    end,
+    updated_at = now();
+end;
+$$;

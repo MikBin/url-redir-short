@@ -2,6 +2,7 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'
+import { config } from '../../../utils/config'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -32,7 +33,7 @@ const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
 
 // Helper function to hash IP addresses for privacy
 function hashIP(ip: string): string {
-  return createHash('sha256').update(ip + process.env.IP_HASH_SALT || 'default-salt').digest('hex')
+  return createHash('sha256').update(ip + config.IP_HASH_SALT).digest('hex')
 }
 
 // Helper function to validate and sanitize input
@@ -68,7 +69,7 @@ function logAnalyticsEvent(level: 'info' | 'warn' | 'error', message: string, da
   const logEntry = {
     timestamp: new Date().toISOString(),
     level,
-    service: 'analytics-ingestion',
+    service: config.SERVICE_NAME,
     message,
     data
   }
@@ -118,6 +119,21 @@ export default defineEventHandler(async (event) => {
     // Set default timestamp if not provided
     const timestamp = sanitizedData.timestamp || new Date().toISOString()
 
+    // Lookup link_id
+    let linkId: string | null = null
+    try {
+      const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
+      const { data } = await client
+        .from('links')
+        .select('id')
+        .eq('slug', slug)
+        .limit(1)
+        .maybeSingle()
+      linkId = data?.id || null
+    } catch (e) {
+      // Ignore lookup error
+    }
+
     // Prepare database record
     const dbRecord = {
       path: sanitizedData.path,
@@ -133,7 +149,8 @@ export default defineEventHandler(async (event) => {
       city: sanitizedData.city,
       device_type: sanitizedData.device_type,
       browser: sanitizedData.browser,
-      os: sanitizedData.os
+      os: sanitizedData.os,
+      link_id: linkId
     }
 
     // Insert into database with retry logic
@@ -166,6 +183,26 @@ export default defineEventHandler(async (event) => {
         data: dbRecord 
       })
       throw createErrorResponse(500, 'Failed to store analytics data', { retryCount })
+    }
+
+    // Update aggregates if linkId exists
+    if (linkId) {
+      const date = new Date(timestamp)
+      const dateStr = date.toISOString().split('T')[0]
+      const hour = date.getUTCHours()
+
+      // Async atomic update using RPC (fire and forget)
+      client.rpc('increment_analytics_aggregate', {
+        p_link_id: linkId,
+        p_date: dateStr,
+        p_hour: hour,
+        p_country: sanitizedData.country || null,
+        p_device_type: sanitizedData.device_type || null,
+        p_browser: sanitizedData.browser || null,
+        p_count: 1
+      }).then(({ error }: any) => {
+        if (error) console.error('Failed to increment aggregate:', error)
+      }).catch((e: any) => console.error('Failed to increment aggregate (exception):', e))
     }
 
     // Log successful ingestion
