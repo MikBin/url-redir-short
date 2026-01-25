@@ -13,4 +13,10 @@ describe('QR Code Utility', () => {
   it('should throw an error if text is empty', async () => {
     await expect(generateQRCode('')).rejects.toThrow('Text is required')
   })
+
+  it('should accept options', async () => {
+    const text = 'https://example.com'
+    const qrCode = await generateQRCode(text, { width: 100, color: { dark: '#000000', light: '#ffffff' } })
+    expect(qrCode).toContain('data:image/png;base64,')
+  })
 })
