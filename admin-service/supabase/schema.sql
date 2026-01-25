@@ -20,6 +20,12 @@ create table public.links (
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   is_active boolean default true,
+  targeting jsonb,
+  ab_testing jsonb,
+  hsts jsonb,
+  password_protection jsonb,
+  expires_at timestamptz,
+  max_clicks integer,
   unique(slug, domain_id) -- Uniqueness per domain (if domain_id is null, it's the default domain)
 );
 
