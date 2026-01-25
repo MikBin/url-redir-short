@@ -1,6 +1,9 @@
 <template>
   <div>
-    <h1 class="text-2xl font-bold mb-4">Dashboard</h1>
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold">Dashboard</h1>
+      <button @click="showBulkModal = true" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Bulk Import</button>
+    </div>
 
     <!-- Create/Edit Link Form -->
     <div class="bg-white p-6 rounded shadow mb-8">
@@ -147,6 +150,7 @@
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">/{{ link.slug }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs">{{ link.destination }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <button @click="showQR(link)" class="text-gray-600 hover:text-gray-900 mr-4">QR</button>
               <button @click="editLink(link)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
               <button @click="deleteLink(link.id)" class="text-red-600 hover:text-red-900">Delete</button>
             </td>
@@ -156,6 +160,48 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div v-if="showQRModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+      <div class="bg-white p-5 rounded shadow-lg text-center max-w-sm mx-auto">
+        <h3 class="text-lg font-bold mb-4">QR Code</h3>
+        <p class="text-sm text-gray-500 mb-4" v-if="currentQRLink">/{{ currentQRLink.slug }}</p>
+        <div v-if="qrCodeUrl" class="flex justify-center mb-4">
+            <img :src="qrCodeUrl" alt="QR Code" />
+        </div>
+        <div v-else class="text-gray-500 mb-4">Loading...</div>
+        <button @click="closeQRModal" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Close</button>
+      </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div v-if="showBulkModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded shadow-lg w-full max-w-lg mx-auto">
+        <h3 class="text-xl font-bold mb-4">Bulk Import Links</h3>
+        <p class="text-sm text-gray-600 mb-2">Paste JSON array of links. Example:</p>
+        <pre class="bg-gray-100 p-2 rounded text-xs mb-4 text-gray-700 overflow-x-auto">
+[
+  { "slug": "link1", "destination": "https://example.com/1" },
+  { "slug": "link2", "destination": "https://example.com/2" }
+]
+        </pre>
+        <textarea v-model="bulkInput" rows="10" class="w-full border border-gray-300 rounded p-2 text-sm font-mono mb-4" placeholder="Paste JSON here..."></textarea>
+
+        <div v-if="bulkStatus" class="mb-4 p-2 rounded" :class="bulkStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+           {{ bulkStatus.message }}
+           <ul v-if="bulkStatus.details" class="list-disc list-inside mt-2 text-xs">
+              <li v-for="(item, i) in bulkStatus.details" :key="i">{{ item }}</li>
+           </ul>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <button @click="closeBulkModal" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
+            <button @click="importLinks" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" :disabled="isImporting">
+                {{ isImporting ? 'Importing...' : 'Import' }}
+            </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -393,6 +439,85 @@ const addABVariation = () => {
 
 const removeABVariation = (index: number) => {
   newLink.value.ab_testing.variations.splice(index, 1)
+}
+
+// QR Code Logic
+const showQRModal = ref(false)
+const qrCodeUrl = ref<string | null>(null)
+const currentQRLink = ref<any>(null)
+
+const showQR = async (link: any) => {
+  currentQRLink.value = link
+  showQRModal.value = true
+  qrCodeUrl.value = null
+
+  // Use current origin as base for now, ideal would be configurable ENGINE_URL
+  const baseUrl = window.location.origin
+  const shortUrl = `${baseUrl}/${link.slug}`
+
+  try {
+     // Fetch directly from API
+     const data = await $fetch('/api/qr', { query: { text: shortUrl } })
+     qrCodeUrl.value = data as string
+  } catch (e) {
+     console.error(e)
+     alert('Failed to generate QR')
+     showQRModal.value = false
+  }
+}
+
+const closeQRModal = () => {
+  showQRModal.value = false
+  qrCodeUrl.value = null
+  currentQRLink.value = null
+}
+
+// Bulk Import Logic
+const showBulkModal = ref(false)
+const bulkInput = ref('')
+const isImporting = ref(false)
+const bulkStatus = ref<any>(null)
+
+const importLinks = async () => {
+  bulkStatus.value = null
+  isImporting.value = true
+
+  try {
+     const parsed = JSON.parse(bulkInput.value)
+     if (!Array.isArray(parsed)) throw new Error('Input must be an array')
+
+     const data = await $fetch('/api/bulk', {
+         method: 'POST',
+         body: { links: parsed }
+     })
+
+     if (data.success > 0) {
+         bulkStatus.value = {
+             type: 'success',
+             message: `Successfully imported ${data.success} links. Failed: ${data.failed}.`
+         }
+         fetchLinks()
+         setTimeout(() => {
+             if (data.failed === 0) closeBulkModal()
+         }, 2000)
+     } else {
+         bulkStatus.value = {
+             type: 'error',
+             message: `Import failed. 0 links imported. Failed: ${data.failed}.`,
+             details: data.invalid_items?.map((i: any) => `Invalid item: ${JSON.stringify(i)}`)
+         }
+     }
+  } catch (e: any) {
+     bulkStatus.value = { type: 'error', message: 'Error: ' + e.message }
+  } finally {
+     isImporting.value = false
+  }
+}
+
+const closeBulkModal = () => {
+  showBulkModal.value = false
+  bulkInput.value = ''
+  bulkStatus.value = null
 }
 
 // Initial Fetch
