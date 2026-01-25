@@ -27,7 +27,14 @@ describe('Data Transformer', () => {
       max_clicks: 100,
       targeting: { enabled: true, rules: [] },
       hsts: { enabled: true },
-      password_protection: { enabled: true, password: 'abc' }
+      password_protection: { enabled: true, password: 'abc' },
+      ab_testing: {
+        enabled: true,
+        variations: [
+          { id: 'v1', destination: 'https://v1.bar.com', weight: 50 },
+          { id: 'v2', destination: 'https://v2.bar.com', weight: 50 }
+        ]
+      }
     }
 
     const rule = transformLink(link)
@@ -38,6 +45,7 @@ describe('Data Transformer', () => {
     expect(rule.targeting).toEqual(link.targeting)
     expect(rule.hsts).toEqual(link.hsts)
     expect(rule.password_protection).toEqual(link.password_protection)
+    expect(rule.ab_testing).toEqual(link.ab_testing)
   })
 
   it('should ignore invalid date', () => {
