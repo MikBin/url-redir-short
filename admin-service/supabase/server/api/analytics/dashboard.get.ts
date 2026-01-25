@@ -44,25 +44,17 @@ export default defineEventHandler(async (event) => {
         .select('*', { count: 'exact', head: true })
         .gte('timestamp', monthStart.toISOString()),
 
-      // Fetch aggregates for last 30 days
-      client.from('analytics_aggregates')
-        .select('link_id, date, hour, click_count, country_breakdown, device_breakdown, browser_breakdown, links(slug)')
-        .gte('date', monthStart.toISOString().split('T')[0])
+      // Fetch raw events for last 30 days for aggregation (fallback since analytics_aggregates is unused)
+      client.from('analytics_events')
+        .select('path, timestamp, country, device_type, browser')
+        .gte('timestamp', monthStart.toISOString())
+        .limit(10000)
     ])
 
-    const aggData = aggregatesResult.data || []
+    const rawEvents = aggregatesResult.data || []
 
     // Process Top Links
     const linkClicks: Record<string, number> = {}
-    aggData.forEach((row: any) => {
-      const slug = row.links?.slug || 'unknown'
-      linkClicks[slug] = (linkClicks[slug] || 0) + (row.click_count || 0)
-    })
-    const topLinks = Object.entries(linkClicks)
-      .map(([path, clicks]) => ({ path, clicks }))
-      .sort((a, b) => b.clicks - a.clicks)
-      .slice(0, 10)
-
     // Process geographic distribution
     const geoMap: Record<string, number> = {}
     // Process device distribution
@@ -80,39 +72,40 @@ export default defineEventHandler(async (event) => {
       hourlyBreakdown[hourKey] = 0
     }
 
-    aggData.forEach((row: any) => {
+    rawEvents.forEach((event: any) => {
+      // Top Links
+      const path = event.path || 'unknown'
+      linkClicks[path] = (linkClicks[path] || 0) + 1
+
       // Geo
-      if (row.country_breakdown) {
-        Object.entries(row.country_breakdown).forEach(([k, v]) => {
-          geoMap[k] = (geoMap[k] || 0) + (v as number)
-        })
-      }
-      // Device
-      if (row.device_breakdown) {
-        Object.entries(row.device_breakdown).forEach(([k, v]) => {
-          deviceMap[k] = (deviceMap[k] || 0) + (v as number)
-        })
-      }
-      // Browser
-      if (row.browser_breakdown) {
-        Object.entries(row.browser_breakdown).forEach(([k, v]) => {
-          browserMap[k] = (browserMap[k] || 0) + (v as number)
-        })
+      if (event.country) {
+        geoMap[event.country] = (geoMap[event.country] || 0) + 1
       }
 
+      // Device
+      const device = event.device_type || 'unknown'
+      deviceMap[device] = (deviceMap[device] || 0) + 1
+
+      // Browser
+      const browser = event.browser || 'unknown'
+      browserMap[browser] = (browserMap[browser] || 0) + 1
+
       // Hourly (only if within last 24h)
-      // row.date is string YYYY-MM-DD, row.hour is int
-      if (row.date && row.hour !== null) {
-        const rowDate = new Date(row.date)
-        rowDate.setUTCHours(row.hour)
-        if (rowDate >= trendStart && rowDate <= now) {
-           const hourKey = rowDate.toISOString().substring(0, 13) + ':00:00Z'
+      if (event.timestamp) {
+        const eventTime = new Date(event.timestamp)
+        if (eventTime >= trendStart && eventTime <= now) {
+           const hourKey = eventTime.toISOString().substring(0, 13) + ':00:00Z'
            if (hourlyBreakdown[hourKey] !== undefined) {
-             hourlyBreakdown[hourKey] += (row.click_count || 0)
+             hourlyBreakdown[hourKey]++
            }
         }
       }
     })
+
+    const topLinks = Object.entries(linkClicks)
+      .map(([path, clicks]) => ({ path, clicks }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 10)
 
     const geoDistribution = Object.entries(geoMap)
       .map(([country, count]) => ({ country, count }))
