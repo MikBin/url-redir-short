@@ -1,7 +1,10 @@
 <template>
   <div>
     <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold">Dashboard</h1>
+      <div class="flex items-baseline gap-4">
+          <h1 class="text-2xl font-bold">Dashboard</h1>
+          <NuxtLink to="/status" class="text-sm text-indigo-600 hover:text-indigo-800">System Status</NuxtLink>
+      </div>
       <button @click="showBulkModal = true" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Bulk Import</button>
     </div>
 
@@ -12,7 +15,8 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700">Slug</label>
-            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border border-gray-300 rounded p-2" required />
+            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" required />
+            <p v-if="slugError" class="text-red-500 text-xs mt-1">{{ slugError }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Destination</label>
@@ -142,6 +146,7 @@
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clicks</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
@@ -149,6 +154,7 @@
           <tr v-for="link in links" :key="link.id">
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">/{{ link.slug }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs">{{ link.destination }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ link.clicks ?? '-' }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button @click="showQR(link)" class="text-gray-600 hover:text-gray-900 mr-4">QR</button>
               <button @click="editLink(link)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
@@ -171,6 +177,27 @@
             <img :src="qrCodeUrl" alt="QR Code" />
         </div>
         <div v-else class="text-gray-500 mb-4">Loading...</div>
+
+        <!-- QR Options -->
+        <div class="grid grid-cols-2 gap-4 mb-4 text-left">
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Size</label>
+              <input v-model.number="qrOptions.width" type="number" min="100" max="1000" class="w-full border rounded p-1 text-sm" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Margin</label>
+              <input v-model.number="qrOptions.margin" type="number" min="0" class="w-full border rounded p-1 text-sm" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Color</label>
+              <input v-model="qrOptions.color" type="color" class="w-full h-8 p-0 border rounded cursor-pointer" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Background</label>
+              <input v-model="qrOptions.bgcolor" type="color" class="w-full h-8 p-0 border rounded cursor-pointer" />
+           </div>
+        </div>
+
         <button @click="closeQRModal" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Close</button>
       </div>
     </div>
@@ -291,11 +318,55 @@ const fetchLinks = async () => {
     console.error('Error fetching links:', error)
   } else {
     links.value = data || []
+
+    // Fetch metrics
+    try {
+        const stats = await $fetch<Record<string, number>>('/api/analytics/links/overview')
+        links.value = links.value.map(l => ({
+            ...l,
+            clicks: stats[l.id] || 0
+        }))
+    } catch (e) {
+        console.error('Failed to fetch link stats', e)
+    }
   }
 }
 
+// Validation
+const slugPattern = /^[a-zA-Z0-9-_]+$/
+const slugError = computed(() => {
+    if (!newLink.value.slug) return null
+    if (!slugPattern.test(newLink.value.slug)) return 'Slug can only contain letters, numbers, hyphens, and underscores.'
+    return null
+})
+
 // Save Link (Create or Update)
 const saveLink = async () => {
+  if (slugError.value) {
+      alert('Please fix errors before saving.')
+      return
+  }
+
+  // Validate targeting
+  if (newLink.value.targeting.enabled) {
+      for (const rule of newLink.value.targeting.rules) {
+          if (!rule.target || !rule.value || !rule.destination) {
+              alert('Please complete all targeting rules.')
+              return
+          }
+      }
+  }
+
+  // Validate A/B testing
+  if (newLink.value.ab_testing.enabled) {
+      for (const variation of newLink.value.ab_testing.variations) {
+          if (!variation.destination || variation.weight < 0) {
+              alert('Please complete all A/B testing variations.')
+              return
+          }
+      }
+  }
+
   if (isEditing.value) {
     await updateLink()
   } else {
@@ -445,26 +516,52 @@ const removeABVariation = (index: number) => {
 const showQRModal = ref(false)
 const qrCodeUrl = ref<string | null>(null)
 const currentQRLink = ref<any>(null)
+const qrOptions = ref({
+  width: 200,
+  margin: 4,
+  color: '#000000',
+  bgcolor: '#ffffff'
+})
 
-const showQR = async (link: any) => {
-  currentQRLink.value = link
-  showQRModal.value = true
+const fetchQR = async () => {
+  if (!currentQRLink.value) return
   qrCodeUrl.value = null
-
-  // Use current origin as base for now, ideal would be configurable ENGINE_URL
   const baseUrl = window.location.origin
-  const shortUrl = `${baseUrl}/${link.slug}`
+  const shortUrl = `${baseUrl}/${currentQRLink.value.slug}`
 
   try {
-     // Fetch directly from API
-     const data = await $fetch('/api/qr', { query: { text: shortUrl } })
+     const data = await $fetch('/api/qr', {
+       query: {
+         text: shortUrl,
+         width: qrOptions.value.width,
+         margin: qrOptions.value.margin,
+         color: qrOptions.value.color,
+         bgcolor: qrOptions.value.bgcolor
+       }
+     })
      qrCodeUrl.value = data as string
   } catch (e) {
      console.error(e)
      alert('Failed to generate QR')
-     showQRModal.value = false
   }
 }
+
+const showQR = async (link: any) => {
+  currentQRLink.value = link
+  showQRModal.value = true
+  qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff' } // Reset defaults
+  await fetchQR()
+}
+
+let debounceTimer: any = null
+watch(qrOptions, () => {
+    if (showQRModal.value) {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+            fetchQR()
+        }, 500)
+    }
+}, { deep: true })
 
 const closeQRModal = () => {
   showQRModal.value = false

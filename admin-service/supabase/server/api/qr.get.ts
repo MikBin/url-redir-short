@@ -1,5 +1,5 @@
 import { serverSupabaseUser } from '#supabase/server'
-import { generateQRCode } from '../utils/qr'
+import { generateQRCode, QRCodeOptions } from '../utils/qr'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -17,10 +17,29 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const options: QRCodeOptions = {}
+
+  if (query.width) {
+    options.width = parseInt(query.width as string, 10)
+  }
+
+  if (query.margin) {
+    options.margin = parseInt(query.margin as string, 10)
+  }
+
+  if (query.color || query.bgcolor) {
+    options.color = {}
+    if (query.color) {
+      options.color.dark = query.color as string
+    }
+    if (query.bgcolor) {
+      options.color.light = query.bgcolor as string
+    }
+  }
+
   try {
-    const qrCode = await generateQRCode(text)
-    // qrCode is a data URL (data:image/png;base64,...), we can return it directly or stream the image.
-    // For simplicity, let's return it as text so the frontend can put it in an <img src="...">
+    const qrCode = await generateQRCode(text, options)
+    // qrCode is a data URL (data:image/png;base64,...)
     return qrCode
   } catch (error) {
     throw createError({
