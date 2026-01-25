@@ -40,6 +40,7 @@ export interface RedirectRule {
   // Expiration Logic
   expiresAt?: number;
   maxClicks?: number;
+  clicks?: number;
 }
 
 export type RedirectRuleUpdate = {
