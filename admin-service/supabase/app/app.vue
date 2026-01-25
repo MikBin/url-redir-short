@@ -1,7 +1,11 @@
 <template>
   <div class="min-h-screen bg-gray-100">
     <nav class="bg-white shadow mb-4 p-4 flex justify-between items-center" v-if="user">
-      <div class="font-bold text-xl">Redir Admin</div>
+      <div class="flex items-center space-x-4">
+        <div class="font-bold text-xl">Redir Admin</div>
+        <NuxtLink to="/" class="text-gray-700 hover:text-blue-500">Links</NuxtLink>
+        <NuxtLink to="/analytics" class="text-gray-700 hover:text-blue-500">Analytics</NuxtLink>
+      </div>
       <div>
         <span class="mr-4 text-sm text-gray-600">{{ user.email }}</span>
         <button @click="logout" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Logout</button>

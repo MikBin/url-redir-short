@@ -29,9 +29,24 @@ create table public.links (
   unique(slug, domain_id) -- Uniqueness per domain (if domain_id is null, it's the default domain)
 );
 
+-- Table: analytics_events
+create table public.analytics_events (
+  id uuid default gen_random_uuid() primary key,
+  path text not null,
+  destination text not null,
+  timestamp timestamptz not null,
+  ip text,
+  user_agent text,
+  referrer text,
+  referrer_source text,
+  status integer,
+  created_at timestamptz default now()
+);
+
 -- RLS: Enable
 alter table public.domains enable row level security;
 alter table public.links enable row level security;
+alter table public.analytics_events enable row level security;
 
 -- Policies: Domains
 create policy "Users can view their own domains"
@@ -66,6 +81,17 @@ using (auth.uid() = owner_id);
 create policy "Users can delete their own links"
 on public.links for delete
 using (auth.uid() = owner_id);
+
+-- Policies: Analytics Events
+-- Ideally, users should only see analytics for links they own.
+-- This requires a join or ensuring we store owner_id (which isn't in the payload).
+-- For MVP Phase 3, we allow authenticated users to view all analytics (or we can rely on service role for the API and disable RLS for public read, but keep RLS enabled to deny public access).
+-- Let's deny all public access by default (implicit) and only allow service role (which bypasses RLS) to insert.
+-- We will add a policy for authenticated users to VIEW events.
+-- Since we don't have owner_id, we'll let any authenticated user view all stats for now (internal admin tool).
+create policy "Authenticated users can view all analytics"
+on public.analytics_events for select
+using (auth.role() = 'authenticated');
 
 -- Realtime: Enable for tables
 alter publication supabase_realtime add table public.links;
