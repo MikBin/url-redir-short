@@ -45,6 +45,16 @@ export class HandleRequestUseCase {
       return null;
     }
 
+    // Check Expiration Logic
+    const now = Date.now();
+    if (rule.expiresAt && now > rule.expiresAt) {
+      return null;
+    }
+
+    if (rule.maxClicks && rule.clicks !== undefined && rule.clicks >= rule.maxClicks) {
+      return null;
+    }
+
     // Clone rule
     let finalRule = { ...rule };
 
