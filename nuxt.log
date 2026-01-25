@@ -1,0 +1,167 @@
+
+> dev
+> nuxt dev
+
+│
+●  Nuxt 4.2.2 (with Nitro 2.12.9, Vite 7.3.0 and Vue 3.5.26)
+
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
+
+[nuxt:tailwindcss] ℹ Using default Tailwind CSS file
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.1.1)
+
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+✔ Vite client built in 50ms
+✔ Vite server built in 79ms
+
+ WARN  "PostgrestError" is imported from external module "file:///app/admin-service/supabase/node_modules/@supabase/postgrest-js/dist/index.mjs" but never used in "node_modules/@supabase/supabase-js/dist/index.mjs".
+
+
+ WARN  "FunctionRegion", "FunctionsError", "FunctionsFetchError", "FunctionsHttpError" and "FunctionsRelayError" are imported from external module "file:///app/admin-service/supabase/node_modules/@supabase/functions-js/dist/main/index.js" but never used in "node_modules/@supabase/supabase-js/dist/index.mjs".
+
+[nitro] ✔ Nuxt Nitro server built in 1818ms
+ℹ Vite server warmed up in 2ms
+ℹ Vite client warmed up in 3ms
+WARN  Supabase credentials not found. Realtime sync will not work.
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+✔ Vite server hmr 1 files in 6.53ms
+ERROR  [unhandledRejection] Cannot read properties of null (reading 'email')
+
+    at _sfc_ssrRender (app/app.vue:73:117)
+    at renderComponentSubTree (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)
+    at renderComponentVNode (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:686:12)
+    at ssrRenderComponent (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:100:10)
+    at default (node_modules/nuxt/dist/app/components/nuxt-root.vue:96:59)
+    at ssrRenderSuspense (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:507:5)
+    at _sfc_ssrRender (node_modules/nuxt/dist/app/components/nuxt-root.vue:85:46)
+    at renderComponentSubTree (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)
+    at renderComponentVNode (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:686:12)
+    at renderToString (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:968:24)
+WARN  [nuxt] Your project has pages but the <NuxtPage /> component has not been used. You might be using the <RouterView /> component instead, which will not work correctly in Nuxt. You can set pages: false in nuxt.config if you do not wish to use the Nuxt vue-router integration.
+WARN  [nuxt] Failed to stringify dev server logs. Received DevalueError: Cannot stringify arbitrary non-POJOs. You can define your own reducer/reviver for rich types following the instructions in https://nuxt.com/docs/4.x/api/composables/use-nuxt-app#payload.
+ERROR  [unhandledRejection] Cannot read properties of null (reading 'email')
+
+    at _sfc_ssrRender (app/app.vue:73:117)
+    at renderComponentSubTree (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)
+    at renderComponentVNode (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:686:12)
+    at ssrRenderComponent (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:100:10)
+    at default (node_modules/nuxt/dist/app/components/nuxt-root.vue:96:59)
+    at ssrRenderSuspense (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:507:5)
+    at _sfc_ssrRender (node_modules/nuxt/dist/app/components/nuxt-root.vue:85:46)
+    at renderComponentSubTree (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)
+    at renderComponentVNode (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:686:12)
+    at renderToString (node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:968:24)
+WARN  [nuxt] Your project has pages but the <NuxtPage /> component has not been used. You might be using the <RouterView /> component instead, which will not work correctly in Nuxt. You can set pages: false in nuxt.config if you do not wish to use the Nuxt vue-router integration.
+WARN  [nuxt] Failed to stringify dev server logs. Received DevalueError: Cannot stringify arbitrary non-POJOs. You can define your own reducer/reviver for rich types following the instructions in https://nuxt.com/docs/4.x/api/composables/use-nuxt-app#payload.
+ℹ hmr update /app.vue, /app/admin-service/supabase/node_modules/tailwindcss/tailwind.css?direct, /@fs/app/admin-service/supabase/node_modules/tailwindcss/tailwind.css
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+✔ Vite server hmr 6 files in 1.075ms
+ERROR  [request error] [unhandled] [GET] http://localhost:3000/analytics
+
+
+[31mℹ Error: Cannot read properties of undefined (reading 'totalClicks')[39m
+
+ ⁃ at _sfc_ssrRender [33m(app/pages/analytics.vue:29:158)[39m
+
+   [2m24[22m [2m┃[22m            [34m<[0mtbody[34m>[0m
+   [2m25[22m [2m┃[22m              [34m<[0mtr v[34m-[0m[31mfor[0m[34m=[0m[32m"event in data.events"[0m [34m:[0mkey[34m=[0m[32m"event.id"[0m[34m>[0m
+   [2m26[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m{{ event[34m.[0mpath }}[34m</[0mtd[34m>[0m
+   [2m27[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m
+   [2m28[22m [2m┃[22m                  [34m<[0mdiv [31mclass[0m[34m=[0m[32m"truncate max-w-xs"[0m [34m:[0mtitle[34m=[0m[32m"event.destination"[0m[34m>[0m{{ event[34m.[0mdestination }}[34m</[0mdiv[34m>[0m
+ [41m❯ 29 ┃                </td>[49m
+   [2m30[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm whitespace-nowrap"[0m[34m>[0m{{ [31mnew[0m [33mDate[0m(event[34m.[0mtimestamp)[34m.[0m[35mtoLocaleString[0m() }}[34m</[0mtd[34m>[0m
+   [2m31[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m{{ event[34m.[0mip }}[34m</[0mtd[34m>[0m
+   [2m32[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m
+   [2m33[22m [2m┃[22m                   [34m<[0mdiv [31mclass[0m[34m=[0m[32m"truncate max-w-xs"[0m [34m:[0mtitle[34m=[0m[32m"event.referrer"[0m[34m>[0m{{ event[34m.[0mreferrer [34m||[0m [32m'-'[0m }}[34m</[0mdiv[34m>[0m
+   [2m34[22m [2m┃[22m                [34m</[0mtd[34m>[0m
+
+ ⁃ at renderComponentSubTree [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)[39m
+ ⁃ [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:684:25)[39m
+[2m ⁃ at [3mprocess.processTicksAndRejections[23m ([3mnode:internal/process/task_queues:105:5[23m)[22m
+ ⁃ at async renderToString [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:969:18)[39m
+ ⁃ at async Object.renderToString$1 [as renderToString] [33m(node_modules/@nuxt/nitro-server/dist/runtime/utils/renderer/build-files.js:26:17)[39m
+ ⁃ at async Object.renderToString [33m(node_modules/vue-bundle-renderer/dist/runtime.mjs:288:20)[39m
+ ⁃ at async Object.render [33m(node_modules/@nuxt/nitro-server/dist/runtime/handlers/renderer.js:86:20)[39m
+ ⁃ at async Object.handler [33m(node_modules/nitropack/dist/runtime/internal/renderer.mjs:25:21)[39m
+ ⁃ [33m(async file://node_modules/h3/dist/index.mjs:2004:19)[39m
+
+[31m[CAUSE][39m
+TypeError {
+  stack: "Cannot read properties of undefined (reading 'totalClicks')\n" +
+  'at _sfc_ssrRender (./app/pages/analytics.vue:29:158)\n' +
+  'at renderComponentSubTree (./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)\n' +
+  'at ./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:684:25)\n' +
+  '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n' +
+  'at async renderToString (./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:969:18)\n' +
+  'at async Object.renderToString$1 [as renderToString] (./node_modules/@nuxt/nitro-server/dist/runtime/utils/renderer/build-files.js:26:17)\n' +
+  'at async Object.renderToString (./node_modules/vue-bundle-renderer/dist/runtime.mjs:288:20)\n' +
+  'at async Object.render (./node_modules/@nuxt/nitro-server/dist/runtime/handlers/renderer.js:86:20)\n' +
+  'at async Object.handler'... 178 more characters,
+  message: "Cannot read properties of undefined (reading 'totalClicks')",
+}
+ERROR  [request error] [unhandled] [GET] http://localhost:3000/analytics
+
+
+[31mℹ Error: Cannot read properties of undefined (reading 'totalClicks')[39m
+
+ ⁃ at _sfc_ssrRender [33m(app/pages/analytics.vue:29:158)[39m
+
+   [2m24[22m [2m┃[22m            [34m<[0mtbody[34m>[0m
+   [2m25[22m [2m┃[22m              [34m<[0mtr v[34m-[0m[31mfor[0m[34m=[0m[32m"event in data.events"[0m [34m:[0mkey[34m=[0m[32m"event.id"[0m[34m>[0m
+   [2m26[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m{{ event[34m.[0mpath }}[34m</[0mtd[34m>[0m
+   [2m27[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m
+   [2m28[22m [2m┃[22m                  [34m<[0mdiv [31mclass[0m[34m=[0m[32m"truncate max-w-xs"[0m [34m:[0mtitle[34m=[0m[32m"event.destination"[0m[34m>[0m{{ event[34m.[0mdestination }}[34m</[0mdiv[34m>[0m
+ [41m❯ 29 ┃                </td>[49m
+   [2m30[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm whitespace-nowrap"[0m[34m>[0m{{ [31mnew[0m [33mDate[0m(event[34m.[0mtimestamp)[34m.[0m[35mtoLocaleString[0m() }}[34m</[0mtd[34m>[0m
+   [2m31[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m{{ event[34m.[0mip }}[34m</[0mtd[34m>[0m
+   [2m32[22m [2m┃[22m                [34m<[0mtd [31mclass[0m[34m=[0m[32m"px-5 py-5 border-b border-gray-200 bg-white text-sm"[0m[34m>[0m
+   [2m33[22m [2m┃[22m                   [34m<[0mdiv [31mclass[0m[34m=[0m[32m"truncate max-w-xs"[0m [34m:[0mtitle[34m=[0m[32m"event.referrer"[0m[34m>[0m{{ event[34m.[0mreferrer [34m||[0m [32m'-'[0m }}[34m</[0mdiv[34m>[0m
+   [2m34[22m [2m┃[22m                [34m</[0mtd[34m>[0m
+
+ ⁃ at renderComponentSubTree [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)[39m
+ ⁃ [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:684:25)[39m
+[2m ⁃ at [3mprocess.processTicksAndRejections[23m ([3mnode:internal/process/task_queues:105:5[23m)[22m
+ ⁃ at async renderToString [33m(node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:969:18)[39m
+ ⁃ at async Object.renderToString$1 [as renderToString] [33m(node_modules/@nuxt/nitro-server/dist/runtime/utils/renderer/build-files.js:26:17)[39m
+ ⁃ at async Object.renderToString [33m(node_modules/vue-bundle-renderer/dist/runtime.mjs:288:20)[39m
+ ⁃ at async Object.render [33m(node_modules/@nuxt/nitro-server/dist/runtime/handlers/renderer.js:86:20)[39m
+ ⁃ at async Object.handler [33m(node_modules/nitropack/dist/runtime/internal/renderer.mjs:25:21)[39m
+ ⁃ [33m(async file://node_modules/h3/dist/index.mjs:2004:19)[39m
+
+[31m[CAUSE][39m
+TypeError {
+  stack: "Cannot read properties of undefined (reading 'totalClicks')\n" +
+  'at _sfc_ssrRender (./app/pages/analytics.vue:29:158)\n' +
+  'at renderComponentSubTree (./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:737:9)\n' +
+  'at ./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:684:25)\n' +
+  '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n' +
+  'at async renderToString (./node_modules/@vue/server-renderer/dist/server-renderer.cjs.js:969:18)\n' +
+  'at async Object.renderToString$1 [as renderToString] (./node_modules/@nuxt/nitro-server/dist/runtime/utils/renderer/build-files.js:26:17)\n' +
+  'at async Object.renderToString (./node_modules/vue-bundle-renderer/dist/runtime.mjs:288:20)\n' +
+  'at async Object.render (./node_modules/@nuxt/nitro-server/dist/runtime/handlers/renderer.js:86:20)\n' +
+  'at async Object.handler'... 178 more characters,
+  message: "Cannot read properties of undefined (reading 'totalClicks')",
+}
+ℹ hmr update /pages/analytics.vue, /app/admin-service/supabase/node_modules/tailwindcss/tailwind.css?direct, /@fs/app/admin-service/supabase/node_modules/tailwindcss/tailwind.css, /pages/analytics.vue?macro=true, /@id/virtual:nuxt:%2Fapp%2Fadmin-service%2Fsupabase%2F.nuxt%2Froutes.mjs
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+✔ Vite server hmr 11 files in 1.095ms
+ℹ hmr update /app.vue, /app/admin-service/supabase/node_modules/tailwindcss/tailwind.css?direct, /@fs/app/admin-service/supabase/node_modules/tailwindcss/tailwind.css
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+ℹ hmr update /app.vue, /app/admin-service/supabase/node_modules/tailwindcss/tailwind.css?direct, /@fs/app/admin-service/supabase/node_modules/tailwindcss/tailwind.css (x2)
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
+
+ℹ hmr update /pages/analytics.vue, /app/admin-service/supabase/node_modules/tailwindcss/tailwind.css?direct, /@fs/app/admin-service/supabase/node_modules/tailwindcss/tailwind.css, /pages/analytics.vue?macro=true, /@id/virtual:nuxt:%2Fapp%2Fadmin-service%2Fsupabase%2F.nuxt%2Froutes.mjs
+
+[@nuxt/supabase]  WARN  Database types configured at "~/types/database.types.ts" but file not found at "/app/admin-service/supabase/app/types/database.types.ts". Using "Database = unknown".
