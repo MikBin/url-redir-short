@@ -4,6 +4,40 @@ import { MockAnalyticsService } from '../mocks/analytics-service';
 import { EngineController, RuntimeType } from '../utils/engine-controller';
 import { CacheMetricsCollector } from '../../src/adapters/cache/cache-metrics';
 
+// Quick mode configuration
+const IS_QUICK = process.env.E2E_QUICK_MODE === 'true';
+
+// Scaling constants
+const WARMUP_HOT_PATHS = IS_QUICK ? 20 : 100;
+const WARMUP_REQUESTS = IS_QUICK ? 50 : 500;
+const PROGRESSION_PATHS = IS_QUICK ? 10 : 50;
+const MEM_SIZES = IS_QUICK ? [10, 50, 100] : [100, 500, 1000];
+const MEM_ITERATIONS = IS_QUICK ? 20 : 100;
+
+// DB Load Scenarios
+const DB_SCENARIOS = IS_QUICK
+  ? [
+      { workingSet: 1000, label: '1K' },
+      { workingSet: 5000, label: '5K' },
+      { workingSet: 10000, label: '10K' },
+    ]
+  : [
+      { workingSet: 100000, label: '100K' },
+      { workingSet: 500000, label: '500K' },
+      { workingSet: 1000000, label: '1M' },
+    ];
+
+const DB_REQUESTS = IS_QUICK ? 50 : 5000;
+const CACHE_PER_WORKER = IS_QUICK ? 1000 : 100000;
+
+// Real world constants
+const RW_TOTAL_PATHS = IS_QUICK ? 100 : 1000;
+const RW_HOT_COUNT = Math.floor(RW_TOTAL_PATHS * 0.2);
+const RW_REQUESTS = IS_QUICK ? 200 : 2000;
+
+const SYNC_WAIT_DEFAULT = IS_QUICK ? 500 : 2000;
+const SYNC_WAIT_HEAVY = IS_QUICK ? 1000 : 15000;
+
 describe('T13: Cache Performance & DB Fallback', () => {
   let adminService: BetterMockAdminService;
   let analyticsService: MockAnalyticsService;
@@ -44,8 +78,8 @@ describe('T13: Cache Performance & DB Fallback', () => {
       console.log('[T13] Test: Cold start cache warm-up');
       metricsCollector.reset();
 
-      const hotPaths = 100;
-      const requests = 500;
+      const hotPaths = WARMUP_HOT_PATHS;
+      const requests = WARMUP_REQUESTS;
 
       // Create hot paths
       for (let i = 0; i < hotPaths; i++) {
@@ -59,7 +93,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
           },
         });
       }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, SYNC_WAIT_DEFAULT));
 
       // Make requests to hot paths (80%) and cold paths (20%)
       console.log(`[T13] Making ${requests} requests with 80/20 distribution...`);
@@ -98,7 +132,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
       console.log('[T13] Test: Cache warm-up progression');
       metricsCollector.reset();
 
-      const paths = 50;
+      const paths = PROGRESSION_PATHS;
 
       // Create paths
       for (let i = 0; i < paths; i++) {
@@ -112,7 +146,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
           },
         });
       }
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, SYNC_WAIT_DEFAULT));
 
       // Phase 1: Cold access
       console.log('[T13] Phase 1: Cold cache access');
@@ -165,7 +199,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
       console.log('[T13] Test: Memory profile');
       metricsCollector.reset();
 
-      const sizes = [100, 500, 1000];
+      const sizes = MEM_SIZES;
 
       for (const size of sizes) {
         console.log(`[T13] Creating ${size} paths...`);
@@ -182,13 +216,13 @@ describe('T13: Cache Performance & DB Fallback', () => {
             },
           });
         }
-        await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, SYNC_WAIT_DEFAULT));
 
         // Measure latency
         metricsCollector.reset();
         let times: number[] = [];
 
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < MEM_ITERATIONS; i++) {
           const idx = Math.floor(Math.random() * size);
           const start = performance.now();
 
@@ -225,16 +259,12 @@ describe('T13: Cache Performance & DB Fallback', () => {
     it('estimates DB load across different working set sizes', async () => {
       console.log('[T13] Test: DB load estimation');
 
-      const scenarios = [
-        { workingSet: 100000, label: '100K' },
-        { workingSet: 500000, label: '500K' },
-        { workingSet: 1000000, label: '1M' },
-      ];
+      const scenarios = DB_SCENARIOS;
 
-      const cachePerWorker = 100000;
+      const cachePerWorker = CACHE_PER_WORKER;
       const workers = 10;
       const totalCacheCapacity = workers * cachePerWorker;
-      const requestsPerScenario = 5000;
+      const requestsPerScenario = DB_REQUESTS;
 
       console.log(`[T13] Cache Configuration:`);
       console.log(`  Workers: ${workers}`);
@@ -275,7 +305,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
             },
           });
         }
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, SYNC_WAIT_HEAVY));
 
         // Simulate traffic: 80% hot paths, 20% cold paths
         metricsCollector.reset();
@@ -389,7 +419,7 @@ ${ws} Working Set (${(result.hitRatio * 100).toFixed(1)}% hit rate):
       console.log('[T13] Test: Optimal cache sizing');
 
       // Assume: 1M items in DB, targeting 90% cache hit ratio
-      const dbSize = 1000000;
+      const dbSize = IS_QUICK ? 10000 : 1000000;
       const hotsetRatio = 0.2; // 20% of traffic is hot
       const hotsetSize = Math.floor(dbSize * hotsetRatio);
       const targetHitRatio = 0.9;
@@ -437,12 +467,12 @@ ${requiredCachePerWorker > 100000
       console.log('[T13] Test: Hot path performance');
       metricsCollector.reset();
 
-      const totalPaths = 1000;
-      const hotPathCount = 200; // 20% hot
-      const requests = 2000;
+      const totalPaths = RW_TOTAL_PATHS;
+      const hotPathCount = RW_HOT_COUNT;
+      const requests = RW_REQUESTS;
 
       // Create hot paths
-      console.log('[T13] Creating 1000 paths (200 hot, 800 cold)...');
+      console.log(`[T13] Creating ${totalPaths} paths (${hotPathCount} hot, ${totalPaths - hotPathCount} cold)...`);
       for (let i = 0; i < totalPaths; i++) {
         if (i % 100 === 0) {
           await new Promise(r => setTimeout(r, 50));
@@ -457,7 +487,7 @@ ${requiredCachePerWorker > 100000
           },
         });
       }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, SYNC_WAIT_DEFAULT));
 
       // Traffic: 80% hot (0-199), 20% cold (200-999)
       console.log(`[T13] Making ${requests} requests...`);
