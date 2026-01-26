@@ -1,15 +1,10 @@
 import { H3Event, createError } from 'h3'
 import { createHash } from 'crypto'
+import { checkRateLimit } from '../utils/rate-limit'
 
 interface RateLimitConfig {
   windowMs: number
   maxRequests: number
-}
-
-interface RateLimitRecord {
-  count: number
-  resetTime: number
-  blockedUntil?: number
 }
 
 // Rate limit configurations per endpoint pattern
@@ -31,25 +26,6 @@ const rateLimitConfigs: Record<string, RateLimitConfig> = {
   
   // Default for all other endpoints
   'default': { windowMs: 60_000, maxRequests: 60 }
-}
-
-// In-memory store (use Redis in production for distributed systems)
-const rateLimitStore = new Map<string, RateLimitRecord>()
-
-// Cleanup old entries periodically
-const CLEANUP_INTERVAL = 5 * 60_000 // 5 minutes
-let lastCleanup = Date.now()
-
-function cleanup() {
-  const now = Date.now()
-  if (now - lastCleanup < CLEANUP_INTERVAL) return
-  
-  lastCleanup = now
-  for (const [key, record] of rateLimitStore.entries()) {
-    if (now > record.resetTime && (!record.blockedUntil || now > record.blockedUntil)) {
-      rateLimitStore.delete(key)
-    }
-  }
 }
 
 function getClientIdentifier(event: H3Event): string {
@@ -75,70 +51,46 @@ function getConfig(path: string): RateLimitConfig {
   return rateLimitConfigs.default
 }
 
-export default defineEventHandler((event: H3Event) => {
+export default defineEventHandler(async (event: H3Event) => {
   // Skip rate limiting for non-API routes
   if (!event.path.startsWith('/api/')) return
 
-  cleanup()
-
   const clientId = getClientIdentifier(event)
   const config = getConfig(event.path)
+
+  // Group by path prefix (e.g. /api/analytics)
   const key = `${clientId}:${event.path.split('/').slice(0, 3).join('/')}`
-  const now = Date.now()
+  const windowSeconds = Math.ceil(config.windowMs / 1000)
 
-  let record = rateLimitStore.get(key)
+  try {
+    const result = await checkRateLimit(key, config.maxRequests, windowSeconds)
 
-  // Check if client is blocked
-  if (record?.blockedUntil && now < record.blockedUntil) {
-    const retryAfter = Math.ceil((record.blockedUntil - now) / 1000)
-    event.node.res.setHeader('Retry-After', retryAfter.toString())
-    event.node.res.setHeader('X-RateLimit-Limit', config.maxRequests.toString())
-    event.node.res.setHeader('X-RateLimit-Remaining', '0')
-    event.node.res.setHeader('X-RateLimit-Reset', Math.ceil(record.blockedUntil / 1000).toString())
-    
-    throw createError({
-      statusCode: 429,
-      statusMessage: 'Too Many Requests',
-      data: {
-        message: 'Rate limit exceeded. Please try again later.',
-        retryAfter
-      }
-    })
-  }
+    // Set rate limit headers
+    event.node.res.setHeader('X-RateLimit-Limit', result.limit.toString())
+    event.node.res.setHeader('X-RateLimit-Remaining', result.remaining.toString())
+    event.node.res.setHeader('X-RateLimit-Reset', result.reset.toString())
 
-  // Initialize or reset record
-  if (!record || now > record.resetTime) {
-    record = {
-      count: 1,
-      resetTime: now + config.windowMs
+    // Check if limit exceeded
+    if (!result.allowed) {
+      const retryAfter = result.retryAfter || 60
+      event.node.res.setHeader('Retry-After', retryAfter.toString())
+
+      throw createError({
+        statusCode: 429,
+        statusMessage: 'Too Many Requests',
+        data: {
+          message: 'Rate limit exceeded. Please try again later.',
+          retryAfter
+        }
+      })
     }
-    rateLimitStore.set(key, record)
-  } else {
-    record.count++
-  }
-
-  // Set rate limit headers
-  const remaining = Math.max(0, config.maxRequests - record.count)
-  event.node.res.setHeader('X-RateLimit-Limit', config.maxRequests.toString())
-  event.node.res.setHeader('X-RateLimit-Remaining', remaining.toString())
-  event.node.res.setHeader('X-RateLimit-Reset', Math.ceil(record.resetTime / 1000).toString())
-
-  // Check if limit exceeded
-  if (record.count > config.maxRequests) {
-    // Block for increasing duration based on violations
-    const blockDuration = Math.min(60_000 * Math.pow(2, Math.floor(record.count / config.maxRequests)), 3600_000)
-    record.blockedUntil = now + blockDuration
+  } catch (error: any) {
+    // If it's the 429 error we just threw, rethrow it
+    if (error.statusCode === 429) {
+      throw error
+    }
     
-    const retryAfter = Math.ceil(blockDuration / 1000)
-    event.node.res.setHeader('Retry-After', retryAfter.toString())
-    
-    throw createError({
-      statusCode: 429,
-      statusMessage: 'Too Many Requests',
-      data: {
-        message: 'Rate limit exceeded. Please try again later.',
-        retryAfter
-      }
-    })
+    // Log unexpected errors (e.g., Redis down) but fail open to avoid downtime
+    console.error('Rate limit middleware error:', error)
   }
 })
