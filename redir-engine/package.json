@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch runtimes/node/index.ts",
     "build": "tsc",
-    "test": "echo \"Run tests in e2e-suite directory\" && exit 1"
+    "test": "vitest run"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
@@ -23,6 +23,7 @@
     "miniflare": "^4.20251217.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
+    "vitest": "^4.0.18",
     "wrangler": "^4.56.0"
   },
   "engines": {
