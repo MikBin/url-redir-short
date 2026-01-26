@@ -16,106 +16,45 @@ model {
   system = system "Universal Redirector System" {
     description: "High-performance distributed URL redirection platform"
 
-    adminDashboard = container "Admin Dashboard" {
-      technology: "Vue.js / Nuxt 3"
-      description: "Web UI for managing links and domains"
-
-      uiAuth = component "Auth Module" {
-        description: "Handles user authentication"
-      }
-
-      uiLinkManager = component "Link Manager" {
-        description: "UI for creating and managing redirect links"
-      }
-
-      uiAnalyticsViewer = component "Analytics Viewer" {
-        description: "Displays analytics data"
-      }
-
-      uiAuth -> adminService.nestjsAuthService: "Validate token"
-      uiLinkManager -> adminService.restControllers: "CRUD operations"
-      uiAnalyticsViewer -> analyticsService: "Query metrics"
-    }
-
     adminService = container "Admin Service" {
-      technology: "NestJS / Supabase+Nuxt"
-      description: "Central control plane and source of truth for redirect rules"
+      technology: "Nuxt 4 / Supabase"
+      description: "Unified control plane, UI, and analytics engine"
 
-      nestjsAuthService = component "Auth Guard" {
-        technology: "NestJS Guards"
-        description: "Validates JWT tokens via AuthProviderPort"
-      }
-
-      restControllers = component "REST Controllers" {
-        technology: "NestJS Controllers"
-        description: "HTTP endpoints for link management"
-      }
-
-      linkManagementService = component "Link Management Service" {
-        technology: "Domain Service"
-        description: "Validates rules, generates short codes, handles collisions"
-      }
-
-      linkEntity = component "Link Entity" {
-        description: "Domain model for redirect rules"
-      }
-
-      userEntity = component "User Entity" {
-        description: "Domain model for users"
-      }
-
-      repositoryPort = component "Repository Port" {
-        description: "Interface for CRUD operations"
-      }
-
-      supabaseAdapter = component "Supabase Adapter" {
-        technology: "Supabase JS Client"
-        description: "Implements RepositoryPort for PostgreSQL"
-      }
-
-      pocketbaseAdapter = component "PocketBase Adapter" {
-        technology: "PocketBase SDK"
-        description: "Implements RepositoryPort for SQLite/Go"
-      }
-
-      authProviderPort = component "Auth Provider Port" {
-        description: "Interface for token validation"
-      }
-
-      supabaseAuthAdapter = component "Supabase Auth Adapter" {
-        technology: "Supabase Auth"
-        description: "Validates JWT against Supabase"
-      }
-
-      syncEmitterPort = component "Sync Emitter Port" {
-        description: "Interface for broadcasting events"
-      }
-
-      sseSyncAdapter = component "SSE Sync Adapter" {
-        technology: "NestJS Observable"
-        description: "Streams events to connected engines"
+      uiClient = component "Web Client" {
+        technology: "Vue 3"
+        description: "Browser-side application"
       }
 
       nitroServer = component "Nitro Server" {
-        technology: "Nuxt 3 Server"
-        description: "Supabase mode: bridges realtime events to SSE"
+        technology: "Nitro / Node.js"
+        description: "Server-side API and rendering engine"
       }
 
-      restControllers -> linkManagementService: "Calls use cases"
-      linkManagementService -> linkEntity: "Uses"
-      linkManagementService -> userEntity: "Uses"
-      linkManagementService -> repositoryPort: "Persists data"
-      linkManagementService -> syncEmitterPort: "Broadcasts events"
-      nestjsAuthService -> authProviderPort: "Verifies tokens"
-      repositoryPort -> supabaseAdapter: "Implemented by"
-      repositoryPort -> pocketbaseAdapter: "Implemented by"
-      authProviderPort -> supabaseAuthAdapter: "Implemented by"
-      syncEmitterPort -> sseSyncAdapter: "Implemented by"
-      supabaseAdapter -> database: "Read/Write"
-      pocketbaseAdapter -> database: "Read/Write"
-      sseSyncAdapter -> redirectorEngine: "SSE stream"
-      nitroServer -> database: "Subscribes realtime"
-      nitroServer -> redirectorEngine: "SSE stream"
+      authModule = component "Auth Module" {
+        technology: "Supabase Auth"
+        description: "Handles user authentication and session management"
+      }
+
+      analyticsIngestion = component "Analytics Ingestion" {
+        technology: "API Endpoint"
+        description: "Receives and processes analytics events"
+      }
+
+      sseBroadcaster = component "SSE Broadcaster" {
+        technology: "Server-Sent Events"
+        description: "Streams state updates to engines"
+      }
+
+      dbAdapter = component "Database Adapter" {
+        technology: "Supabase / PocketBase SDK"
+        description: "Abstracts database operations"
+      }
+
+      uiClient -> nitroServer: "API calls / SSR"
+      nitroServer -> authModule: "Validates session"
+      nitroServer -> dbAdapter: "Read/Write data"
+      nitroServer -> sseBroadcaster: "Publish events"
+      analyticsIngestion -> dbAdapter: "Store events"
     }
 
     redirectorEngine = container "Redirector Engine" {
@@ -195,43 +134,20 @@ model {
       passwordGate -> hstsEnforcer: "Redirect or serve form"
       hstsEnforcer -> payloadBuilder: "Prepare analytics"
       payloadBuilder -> analyticsCollector: "Send payload"
-      analyticsCollector -> analyticsService: "HTTP POST (async)"
-      syncClient -> adminService.sseSyncAdapter: "SSE connection"
-      syncClient -> adminService.nitroServer: "SSE connection"
-    }
-
-    analyticsService = container "Analytics Service" {
-      technology: "Time-series DB"
-      description: "Collects, processes, and visualizes click analytics"
-
-      ingestion = component "Ingestion API" {
-        technology: "HTTP POST /v1/collect"
-        description: "Receives analytics payloads"
-      }
-
-      processor = component "Data Processor" {
-        description: "Anonymizes IPs, sessionizes data"
-      }
-
-      storage = component "Time-series Storage" {
-        description: "Stores click events"
-      }
-
-      dashboards = component "Visualization" {
-        description: "Custom analytics dashboards"
-      }
-
-      ingestion -> processor: "Process raw data"
-      processor -> storage: "Store"
-      dashboards -> storage: "Query"
+      analyticsCollector -> adminService.analyticsIngestion: "HTTP POST (async)"
+      syncClient -> adminService.sseBroadcaster: "SSE connection"
     }
 
     database = container "Database" {
       technology: "PostgreSQL (Supabase) / PocketBase"
-      description: "Persists redirect rules and configuration"
+      description: "Persists redirect rules and analytics data"
 
       linksTable = component "Links Table" {
         description: "Stores redirect rules"
+      }
+
+      analyticsEvents = component "Analytics Events" {
+        description: "Stores raw click event logs"
       }
 
       domainsTable = component "Domains Table" {
@@ -257,19 +173,12 @@ model {
       realtime -> domainsTable: "Listens"
     }
 
-    adminUser -> adminDashboard: "Manages links"
-    adminDashboard.uiAuth -> adminService.nestjsAuthService: "Validate token"
-    adminDashboard.uiLinkManager -> adminService.restControllers: "CRUD operations"
-    adminDashboard.uiAnalyticsViewer -> analyticsService.dashboards: "Query metrics"
-    adminDashboard -> database.linksTable: "Direct write (Supabase mode)"
-    adminService.restControllers -> adminService.linkManagementService: "Calls use cases"
-    adminService.supabaseAdapter -> database.linksTable: "Read/Write"
-    adminService.pocketbaseAdapter -> database.linksTable: "Read/Write"
-    adminService.sseSyncAdapter -> redirectorEngine.syncClient: "SSE stream"
-    adminService.nitroServer -> database.realtime: "Subscribe"
-    adminService.nitroServer -> redirectorEngine.syncClient: "SSE stream"
+    user -> adminService.uiClient: "Manages links"
+    adminService.dbAdapter -> database.linksTable: "Read/Write"
+    adminService.dbAdapter -> database.analyticsEvents: "Insert"
+    adminService.sseBroadcaster -> database.realtime: "Subscribe (Optional)"
+
     endUser -> redirectorEngine.httpServer: "HTTP requests"
-    redirectorEngine.analyticsCollector -> analyticsService.ingestion: "HTTP POST (async)"
   }
 
   deployment = system "Deployment Environment" {
@@ -295,11 +204,8 @@ model {
     endUser -> redirectorEngineCF.httpServer: "Request"
     endUser -> redirectorEngineAWS.httpServer: "Request"
     endUser -> redirectorEngineVPS.httpServer: "Request"
-    adminService.sseSyncAdapter -> redirectorEngineCF.syncClient: "SSE sync"
-    adminService.sseSyncAdapter -> redirectorEngineAWS.syncClient: "SSE sync"
-    adminService.sseSyncAdapter -> redirectorEngineVPS.syncClient: "SSE sync"
-    adminService.nitroServer -> redirectorEngineCF.syncClient: "SSE sync"
-    adminService.nitroServer -> redirectorEngineAWS.syncClient: "SSE sync"
-    adminService.nitroServer -> redirectorEngineVPS.syncClient: "SSE sync"
+    adminService.sseBroadcaster -> redirectorEngineCF.syncClient: "SSE sync"
+    adminService.sseBroadcaster -> redirectorEngineAWS.syncClient: "SSE sync"
+    adminService.sseBroadcaster -> redirectorEngineVPS.syncClient: "SSE sync"
   }
 }
