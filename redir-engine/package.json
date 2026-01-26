@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "tsx watch runtimes/node/index.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/ --exclude tests/perf/",
+    "test:perf": "vitest run tests/perf/",
+    "test:perf:watch": "vitest watch tests/perf/",
+    "test:all": "npm run test:unit && npm run test:perf",
+    "test:e2e": "cd e2e-suite && npm test",
+    "test:e2e:performance": "cd e2e-suite && npm test -- specs/T12-performance.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
