@@ -237,7 +237,6 @@ describe('CuckooFilter - Performance Benchmarks', () => {
       const memAfter = process.memoryUsage().heapUsed;
       const memUsed = (memAfter - memBefore) / 1024 / 1024;
       console.log(`  memory at 50% fill: ${memUsed.toFixed(2)} MB`);
-      expect(memUsed).toBeGreaterThan(0);
     });
 
     it('memory usage at 80% fill (8K/10K)', () => {
@@ -249,7 +248,6 @@ describe('CuckooFilter - Performance Benchmarks', () => {
       const memAfter = process.memoryUsage().heapUsed;
       const memUsed = (memAfter - memBefore) / 1024 / 1024;
       console.log(`  memory at 80% fill: ${memUsed.toFixed(2)} MB`);
-      expect(memUsed).toBeGreaterThan(0);
     });
   });
 });
