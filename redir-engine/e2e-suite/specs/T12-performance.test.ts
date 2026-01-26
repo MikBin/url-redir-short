@@ -3,6 +3,23 @@ import { BetterMockAdminService } from '../mocks/admin-service';
 import { MockAnalyticsService } from '../mocks/analytics-service';
 import { EngineController, RuntimeType } from '../utils/engine-controller';
 
+// Quick mode configuration
+const IS_QUICK = process.env.E2E_QUICK_MODE === 'true';
+
+// Constants scaling
+const SCALE_SMALL = IS_QUICK ? 100 : 1000;
+const SCALE_LARGE = IS_QUICK ? 500 : 10000;
+const BATCH_REPEAT_10 = IS_QUICK ? 2 : 10;
+const BATCH_REPEAT_50 = IS_QUICK ? 2 : 5;
+const BATCH_REPEAT_100 = IS_QUICK ? 1 : 3;
+const CHECK_ITERATIONS = IS_QUICK ? 20 : 100;
+const MIX_ITERATIONS = IS_QUICK ? 50 : 200;
+const SIMULATION_DURATION = IS_QUICK ? 1000 : 10000;
+
+// Sync wait times
+const SYNC_WAIT_SMALL = IS_QUICK ? 1000 : 5000;
+const SYNC_WAIT_LARGE = IS_QUICK ? 2000 : 15000;
+
 describe('T12: Performance & Load Testing', () => {
   let adminService: BetterMockAdminService;
   let analyticsService: MockAnalyticsService;
@@ -36,11 +53,11 @@ describe('T12: Performance & Load Testing', () => {
   });
 
   describe('Routing Table Size Scaling', () => {
-    it('should handle 1K redirects with acceptable latency', async () => {
-      console.log('[T12] Populating 1K redirects');
+    it(`should handle ${SCALE_SMALL} redirects with acceptable latency`, async () => {
+      console.log(`[T12] Populating ${SCALE_SMALL} redirects`);
       
-      // Create 1K redirects
-      for (let i = 0; i < 1000; i++) {
+      // Create redirects
+      for (let i = 0; i < SCALE_SMALL; i++) {
         adminService.pushUpdate({
           type: 'create',
           data: {
@@ -52,12 +69,12 @@ describe('T12: Performance & Load Testing', () => {
         });
       }
 
-      await new Promise(r => setTimeout(r, 1000)); // Wait for sync
+      await new Promise(r => setTimeout(r, SYNC_WAIT_SMALL)); // Wait for sync
 
       // Measure latency of lookups across the table
       const times: number[] = [];
-      for (let i = 0; i < 100; i++) {
-        const idx = Math.floor(Math.random() * 1000);
+      for (let i = 0; i < CHECK_ITERATIONS; i++) {
+        const idx = Math.floor(Math.random() * SCALE_SMALL);
         const start = performance.now();
         const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
           redirect: 'manual',
@@ -71,18 +88,18 @@ describe('T12: Performance & Load Testing', () => {
       const p95 = times.sort((a, b) => a - b)[Math.floor(times.length * 0.95)];
       const p99 = times.sort((a, b) => a - b)[Math.floor(times.length * 0.99)];
 
-      console.log(`[T12] 1K redirects - Avg: ${avg.toFixed(2)}ms, P95: ${p95.toFixed(2)}ms, P99: ${p99.toFixed(2)}ms`);
+      console.log(`[T12] ${SCALE_SMALL} redirects - Avg: ${avg.toFixed(2)}ms, P95: ${p95.toFixed(2)}ms, P99: ${p99.toFixed(2)}ms`);
 
       // Assert reasonable performance thresholds
       expect(avg).toBeLessThan(100); // Average < 100ms
       expect(p99).toBeLessThan(200); // P99 < 200ms
     });
 
-    it('should handle 10K redirects with acceptable latency', async () => {
-      console.log('[T12] Populating 10K redirects');
+    it(`should handle ${SCALE_LARGE} redirects with acceptable latency`, async () => {
+      console.log(`[T12] Populating ${SCALE_LARGE} redirects`);
       
-      // Create additional 9K redirects (1K already exist)
-      for (let i = 1000; i < 10000; i++) {
+      // Create additional redirects
+      for (let i = SCALE_SMALL; i < SCALE_LARGE; i++) {
         adminService.pushUpdate({
           type: 'create',
           data: {
@@ -94,11 +111,11 @@ describe('T12: Performance & Load Testing', () => {
         });
       }
 
-      await new Promise(r => setTimeout(r, 2000)); // Wait for sync
+      await new Promise(r => setTimeout(r, SYNC_WAIT_LARGE)); // Wait for sync
 
       const times: number[] = [];
-      for (let i = 0; i < 100; i++) {
-        const idx = Math.floor(Math.random() * 10000);
+      for (let i = 0; i < CHECK_ITERATIONS; i++) {
+        const idx = Math.floor(Math.random() * SCALE_LARGE);
         const start = performance.now();
         const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
           redirect: 'manual',
@@ -112,7 +129,7 @@ describe('T12: Performance & Load Testing', () => {
       const p95 = times.sort((a, b) => a - b)[Math.floor(times.length * 0.95)];
       const p99 = times.sort((a, b) => a - b)[Math.floor(times.length * 0.99)];
 
-      console.log(`[T12] 10K redirects - Avg: ${avg.toFixed(2)}ms, P95: ${p95.toFixed(2)}ms, P99: ${p99.toFixed(2)}ms`);
+      console.log(`[T12] ${SCALE_LARGE} redirects - Avg: ${avg.toFixed(2)}ms, P95: ${p95.toFixed(2)}ms, P99: ${p99.toFixed(2)}ms`);
 
       expect(avg).toBeLessThan(150);
       expect(p99).toBeLessThan(300);
@@ -126,11 +143,11 @@ describe('T12: Performance & Load Testing', () => {
       const times: number[] = [];
       const batchSize = 10;
 
-      for (let batch = 0; batch < 10; batch++) {
+      for (let batch = 0; batch < BATCH_REPEAT_10; batch++) {
         const start = performance.now();
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
-          const idx = Math.floor(Math.random() * 10000);
+          const idx = Math.floor(Math.random() * SCALE_LARGE);
           return fetch(`http://localhost:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
@@ -159,11 +176,11 @@ describe('T12: Performance & Load Testing', () => {
       const times: number[] = [];
       const batchSize = 50;
 
-      for (let batch = 0; batch < 5; batch++) {
+      for (let batch = 0; batch < BATCH_REPEAT_50; batch++) {
         const start = performance.now();
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
-          const idx = Math.floor(Math.random() * 10000);
+          const idx = Math.floor(Math.random() * SCALE_LARGE);
           return fetch(`http://localhost:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
@@ -192,11 +209,11 @@ describe('T12: Performance & Load Testing', () => {
       const times: number[] = [];
       const batchSize = 100;
 
-      for (let batch = 0; batch < 3; batch++) {
+      for (let batch = 0; batch < BATCH_REPEAT_100; batch++) {
         const start = performance.now();
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
-          const idx = Math.floor(Math.random() * 10000);
+          const idx = Math.floor(Math.random() * SCALE_LARGE);
           return fetch(`http://localhost:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
@@ -221,14 +238,14 @@ describe('T12: Performance & Load Testing', () => {
   });
 
   describe('404 Rejection Performance (Cuckoo Filter)', () => {
-    it('should reject 404s efficiently with 10K valid redirects', async () => {
+    it(`should reject 404s efficiently with ${SCALE_LARGE} valid redirects`, async () => {
       console.log('[T12] Testing 404 rejection rate');
       
       const times: number[] = [];
 
       // Test mix of hits and misses
-      for (let i = 0; i < 200; i++) {
-        const idx = Math.floor(Math.random() * 10000);
+      for (let i = 0; i < MIX_ITERATIONS; i++) {
+        const idx = Math.floor(Math.random() * SCALE_LARGE);
         const isValid = Math.random() > 0.5;
         const path = isValid ? `/r${idx}` : `/missing-${idx}`;
 
@@ -246,16 +263,20 @@ describe('T12: Performance & Load Testing', () => {
         }
       }
 
-      const hitTimes = times.slice(0, 100);
-      const missTimes = times.slice(100);
+      const split = Math.floor(MIX_ITERATIONS / 2);
+      const hitTimes = times.slice(0, split);
+      const missTimes = times.slice(split);
 
-      const hitAvg = hitTimes.reduce((a, b) => a + b, 0) / hitTimes.length;
-      const missAvg = missTimes.reduce((a, b) => a + b, 0) / missTimes.length;
+      const hitAvg = hitTimes.reduce((a, b) => a + b, 0) / (hitTimes.length || 1);
+      const missAvg = missTimes.reduce((a, b) => a + b, 0) / (missTimes.length || 1);
 
       console.log(`[T12] 404 rejection - Hit avg: ${hitAvg.toFixed(2)}ms, Miss avg: ${missAvg.toFixed(2)}ms`);
 
       // 404s should be faster (rejected by Cuckoo filter quickly)
-      expect(missAvg).toBeLessThan(hitAvg + 10); // Allow some variance
+      // Note: In small sample sizes this might be flaky, so we relax strict check in quick mode
+      if (!IS_QUICK) {
+        expect(missAvg).toBeLessThan(hitAvg + 10); // Allow some variance
+      }
     });
   });
 
@@ -264,14 +285,14 @@ describe('T12: Performance & Load Testing', () => {
       console.log('[T12] Testing hot path performance');
       
       // 80% of traffic goes to 20% of redirects
-      const hotPathCount = Math.floor(10000 * 0.2); // 2000 redirects
+      const hotPathCount = Math.floor(SCALE_LARGE * 0.2); // 2000 redirects
       const times: number[] = [];
 
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < MIX_ITERATIONS; i++) {
         const isHotPath = Math.random() < 0.8;
         const idx = isHotPath 
           ? Math.floor(Math.random() * hotPathCount) // 0-2000 (hot)
-          : Math.floor(Math.random() * 10000); // Full range
+          : Math.floor(Math.random() * SCALE_LARGE); // Full range
 
         const start = performance.now();
         const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
@@ -292,10 +313,10 @@ describe('T12: Performance & Load Testing', () => {
   });
 
   describe('Real-world Simulation', () => {
-    it('should handle simulated traffic pattern (requests over 10 seconds)', async () => {
-      console.log('[T12] Simulating 10s traffic burst');
+    it(`should handle simulated traffic pattern (requests over ${SIMULATION_DURATION / 1000} seconds)`, async () => {
+      console.log(`[T12] Simulating ${SIMULATION_DURATION}ms traffic burst`);
       
-      const duration = 10000; // 10 seconds
+      const duration = SIMULATION_DURATION;
       const targetRPS = 50; // 50 requests per second
       const requestsPerBatch = Math.floor(targetRPS / 10); // 10 batches per second
       const batchDelayMs = 100;
@@ -307,7 +328,7 @@ describe('T12: Performance & Load Testing', () => {
         const batchStart = performance.now();
         
         const promises = Array.from({ length: requestsPerBatch }, async () => {
-          const idx = Math.floor(Math.random() * 10000);
+          const idx = Math.floor(Math.random() * SCALE_LARGE);
           return fetch(`http://localhost:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
@@ -331,11 +352,13 @@ describe('T12: Performance & Load Testing', () => {
       const max = Math.max(...times);
       const p99 = times.sort((a, b) => a - b)[Math.floor(times.length * 0.99)];
 
-      console.log(`[T12] Real-world sim - ${totalRequests} requests over 10s`);
+      console.log(`[T12] Real-world sim - ${totalRequests} requests over ${duration}ms`);
       console.log(`[T12] Avg batch: ${avg.toFixed(2)}ms, P99: ${p99.toFixed(2)}ms, Max: ${max.toFixed(2)}ms`);
 
       expect(avg).toBeLessThan(200);
-      expect(p99).toBeLessThan(400);
+      if (!IS_QUICK) {
+        expect(p99).toBeLessThan(400);
+      }
     });
   });
 });
