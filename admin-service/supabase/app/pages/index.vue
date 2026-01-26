@@ -413,7 +413,6 @@ const createLink = async () => {
   const payload = {
     slug: newLink.value.slug,
     destination: newLink.value.destination,
-    owner_id: user.value.id,
     expires_at: newLink.value.expires_at ? new Date(newLink.value.expires_at).toISOString() : null,
     max_clicks: newLink.value.max_clicks,
     password_protection: newLink.value.password_protection,
@@ -422,17 +421,17 @@ const createLink = async () => {
     ab_testing: newLink.value.ab_testing
   }
 
-  const { data, error } = await supabase
-    .from('links')
-    .insert(payload)
-    .select()
+  try {
+    await $fetch('/api/links/create', {
+        method: 'POST',
+        body: payload
+    })
 
-  if (error) {
-    alert('Error creating link: ' + error.message)
-  } else {
     // Reset form and refresh list
     newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
     fetchLinks()
+  } catch (error: any) {
+    alert('Error creating link: ' + (error.data?.statusMessage || error.message))
   }
 }
 
@@ -448,20 +447,19 @@ const updateLink = async () => {
     password_protection: newLink.value.password_protection,
     hsts: newLink.value.hsts,
     targeting: newLink.value.targeting,
-    ab_testing: newLink.value.ab_testing,
-    updated_at: new Date().toISOString()
+    ab_testing: newLink.value.ab_testing
   }
 
-  const { error } = await supabase
-    .from('links')
-    .update(payload)
-    .eq('id', currentLinkId.value)
+  try {
+    await $fetch(`/api/links/${currentLinkId.value}`, {
+        method: 'PATCH',
+        body: payload
+    })
 
-  if (error) {
-    alert('Error updating link: ' + error.message)
-  } else {
     cancelEdit()
     fetchLinks()
+  } catch (error: any) {
+    alert('Error updating link: ' + (error.data?.statusMessage || error.message))
   }
 }
 
@@ -501,15 +499,14 @@ const editLink = (link: any) => {
 const deleteLink = async (id: string) => {
   if (!confirm('Are you sure?')) return
 
-  const { error } = await supabase
-    .from('links')
-    .delete()
-    .eq('id', id)
+  try {
+    await $fetch(`/api/links/${id}`, {
+        method: 'DELETE'
+    })
 
-  if (error) {
-    alert('Error deleting link: ' + error.message)
-  } else {
-    fetchLinks() // Or manually remove from list
+    fetchLinks()
+  } catch (error: any) {
+    alert('Error deleting link: ' + (error.data?.statusMessage || error.message))
   }
 }
 

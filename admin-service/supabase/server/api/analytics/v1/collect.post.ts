@@ -3,6 +3,7 @@ import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'
 import { config } from '../../../utils/config'
+import { checkRateLimit } from '../../../utils/rate-limit'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -25,11 +26,8 @@ const AnalyticsPayloadSchema = z.object({
 type AnalyticsPayload = z.infer<typeof AnalyticsPayloadSchema>
 
 // Rate limiting configuration
-const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
+const RATE_LIMIT_WINDOW = 60 // 1 minute in seconds
 const RATE_LIMIT_MAX_REQUESTS = 100 // requests per window per IP
-
-// In-memory rate limiting store (in production, use Redis)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
 
 // Helper function to hash IP addresses for privacy
 function hashIP(ip: string): string {
@@ -42,26 +40,6 @@ function sanitizeInput(input: string): string {
     .replace(/[<>]/g, '') // Remove potential HTML tags
     .replace(/[^\w\s\-._~:/?#[\]@!$&'()*+,;=]/g, '') // Keep URL-safe characters
     .trim()
-}
-
-// Rate limiting middleware
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now()
-  const key = hashIP(ip)
-  const record = rateLimitStore.get(key)
-
-  if (!record || now > record.resetTime) {
-    // Reset window
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
-    return true
-  }
-
-  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return false
-  }
-
-  record.count++
-  return true
 }
 
 // Structured logging helper
@@ -93,7 +71,10 @@ export default defineEventHandler(async (event) => {
                    event.node.req.socket.remoteAddress || 'unknown'
   
   // Apply rate limiting
-  if (!checkRateLimit(clientIP as string)) {
+  const rateLimitKey = `analytics:${hashIP(clientIP as string)}`
+  const rateLimitResult = await checkRateLimit(rateLimitKey, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW)
+
+  if (!rateLimitResult.allowed) {
     throw createErrorResponse(429, 'Rate limit exceeded')
   }
 

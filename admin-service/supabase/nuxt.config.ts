@@ -25,6 +25,7 @@ export default defineNuxtConfig({
     // Server-only env vars
     ipHashSalt: process.env.IP_HASH_SALT || 'default-salt',
     rateLimitSalt: process.env.RATE_LIMIT_SALT || 'default-salt',
+    valkeyUrl: process.env.VALKEY_URL || process.env.REDIS_URL || 'redis://localhost:6379',
     logLevel: process.env.LOG_LEVEL || 'info',
     // Public env vars (exposed to client)
     public: {
