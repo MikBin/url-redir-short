@@ -19,8 +19,15 @@ const cuckooFilter = new CuckooFilter();
 // 2. Initialize Analytics
 const analyticsCollector = new FireAndForgetCollector(config.analyticsServiceUrl);
 
-// 3. Initialize Use Cases
-const syncState = new SyncStateUseCase(radixTree, cuckooFilter);
+// 3. Initialize Use Cases with Cache Eviction
+// Configure eviction based on environment variables
+const evictionConfig = {
+  maxHeapMB: parseInt(process.env.CACHE_MAX_HEAP_MB || '500'),
+  evictionBatchSize: parseInt(process.env.CACHE_EVICTION_BATCH || '1000'),
+  checkIntervalMs: parseInt(process.env.CACHE_CHECK_INTERVAL_MS || '10000'),
+  enableMetrics: process.env.CACHE_METRICS !== 'false',
+};
+const syncState = new SyncStateUseCase(radixTree, cuckooFilter, evictionConfig);
 const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analyticsCollector);
 
 // 4. Initialize SSE Client and connect
