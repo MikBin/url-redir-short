@@ -24,9 +24,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-
-      - name: Install Dependencies (Root)
-        run: npm ci
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Install Dependencies (Redir Engine)
         working-directory: redir-engine
