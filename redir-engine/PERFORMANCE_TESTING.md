@@ -31,9 +31,18 @@ npx vitest run tests/perf/radix-tree.bench.ts
 
 ### Load & Integration Tests
 
-Run the full performance E2E test:
+Run the full performance E2E test (Vitest):
 ```bash
 npm run test:e2e:performance
+```
+
+Run k6 Load Tests:
+```bash
+# Isolated Mode (Mock Admin, default) - High Performance Validation
+npm run load-test
+
+# Integrated Mode (Real Admin/DB) - Connectivity Smoke Test
+npm run load-test -- --integrated
 ```
 
 Run all E2E tests:
