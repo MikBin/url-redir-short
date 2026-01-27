@@ -7,3 +7,7 @@ coverage/
 .env
 **/.vite/
 **/.cache/
+*.log
+
+# OpenSpec draft changes (before approval)
+openspec/changes/DRAFT-*/
