@@ -77,8 +77,19 @@ export class HandleRequestUseCase {
     let targetingMatched = false;
 
     if (finalRule.targeting?.enabled && finalRule.targeting.rules) {
+      let deviceContext: { device: any; os: any } | undefined;
+
       for (const targetRule of finalRule.targeting.rules) {
-        if (this.checkTarget(targetRule, headers)) {
+        if (targetRule.target === 'device' && !deviceContext) {
+          const ua = headers.get('user-agent') || '';
+          const parser = new UAParser(ua);
+          deviceContext = {
+            device: parser.getDevice(),
+            os: parser.getOS(),
+          };
+        }
+
+        if (this.checkTarget(targetRule, headers, deviceContext)) {
           finalRule.destination = targetRule.destination;
           targetingMatched = true;
           break; // First match wins
@@ -116,7 +127,11 @@ export class HandleRequestUseCase {
     return { type: 'redirect', rule: finalRule };
   }
 
-  private checkTarget(rule: { target: string, value: string }, headers: Headers): boolean {
+  private checkTarget(
+    rule: { target: string; value: string },
+    headers: Headers,
+    deviceContext?: { device: any; os: any }
+  ): boolean {
     if (rule.target === 'language') {
       const acceptLanguage = headers.get('accept-language');
       if (!acceptLanguage) return false;
@@ -125,10 +140,17 @@ export class HandleRequestUseCase {
     }
 
     if (rule.target === 'device') {
-      const ua = headers.get('user-agent') || '';
-      const parser = new UAParser(ua);
-      const device = parser.getDevice();
-      const os = parser.getOS();
+      let device, os;
+
+      if (deviceContext) {
+        device = deviceContext.device;
+        os = deviceContext.os;
+      } else {
+        const ua = headers.get('user-agent') || '';
+        const parser = new UAParser(ua);
+        device = parser.getDevice();
+        os = parser.getOS();
+      }
 
       const target = rule.value.toLowerCase();
 
