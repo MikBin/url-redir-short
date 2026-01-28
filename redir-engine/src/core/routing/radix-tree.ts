@@ -74,8 +74,19 @@ export class RadixTree {
     return node.rule;
   }
 
-  private parsePath(path: string): string[] {
+  private *parsePath(path: string): IterableIterator<string> {
     // /foo/bar -> ["foo", "bar"]
-    return path.split('/').filter(p => p.length > 0);
+    let start = 0;
+    let end = path.indexOf('/');
+    while (end !== -1) {
+      if (end > start) {
+        yield path.substring(start, end);
+      }
+      start = end + 1;
+      end = path.indexOf('/', start);
+    }
+    if (start < path.length) {
+      yield path.substring(start);
+    }
   }
 }
