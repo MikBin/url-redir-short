@@ -31,7 +31,7 @@ export class HandleRequestUseCase {
     headers: Headers,
     ip: string,
     originalUrl: string,
-    bodyPassword?: string // Optional password from POST body
+    passwordProvider?: () => Promise<string | undefined> | string | undefined
   ): Promise<HandleRequestResult> {
     // 1. Check Cuckoo Filter
     if (!this.cuckooFilter.has(path)) {
@@ -60,6 +60,11 @@ export class HandleRequestUseCase {
 
     // --- Phase 4: Password Protection ---
     if (finalRule.password_protection?.enabled) {
+      let bodyPassword: string | undefined;
+      if (passwordProvider) {
+        bodyPassword = await passwordProvider();
+      }
+
       // If user provided a password
       if (bodyPassword) {
         if (bodyPassword !== finalRule.password_protection.password) {

@@ -111,11 +111,11 @@ describe('HandleRequestUseCase', () => {
     expect(result1).toEqual({ type: 'password_required', rule: protectedRule });
 
     // Wrong password
-    const result2 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', 'wrong');
+    const result2 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', () => 'wrong');
     expect(result2).toEqual({ type: 'password_required', rule: protectedRule, error: true });
 
     // Correct password
-    const result3 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', 'secret');
+    const result3 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', () => 'secret');
     expect(result3).toEqual({ type: 'redirect', rule: protectedRule });
   });
 
