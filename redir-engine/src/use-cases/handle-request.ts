@@ -102,15 +102,18 @@ export class HandleRequestUseCase {
 
     if (this.analyticsCollector) {
       // Async fire-and-forget analytics
-      const payload = await buildAnalyticsPayload(
+      buildAnalyticsPayload(
         path,
         finalRule.destination,
         ip,
         headers,
         finalRule.code,
         originalUrl
-      );
-      this.analyticsCollector.collect(payload);
+      )
+        .then((payload) => this.analyticsCollector?.collect(payload))
+        .catch((err) => {
+          console.error('Failed to collect analytics:', err);
+        });
     }
 
     return { type: 'redirect', rule: finalRule };

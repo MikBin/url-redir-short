@@ -75,6 +75,9 @@ describe('HandleRequestUseCase', () => {
     const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
 
     expect(result).toEqual({ type: 'redirect', rule: mockRule });
+
+    // Wait for async analytics collection
+    await new Promise(resolve => setTimeout(resolve, 50));
     expect(mockAnalyticsCollector.collect).toHaveBeenCalled();
   });
 
