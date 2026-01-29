@@ -17,8 +17,8 @@ describe('T09: Password Protection', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3009,
       runtime // Unique port for this test
     );
@@ -52,7 +52,7 @@ describe('T09: Password Protection', () => {
     await new Promise(r => setTimeout(r, 500));
 
     // 1. GET request should return HTML form
-    const response = await fetch(`http://localhost:${engine.port}/secret`, {
+    const response = await fetch(`http://127.0.0.1:${engine.port}/secret`, {
       redirect: 'manual'
     });
 
@@ -67,7 +67,7 @@ describe('T09: Password Protection', () => {
     const params = new URLSearchParams();
     params.append('password', 'wrongpass');
 
-    const response = await fetch(`http://localhost:${engine.port}/secret`, {
+    const response = await fetch(`http://127.0.0.1:${engine.port}/secret`, {
       method: 'POST',
       body: params,
       redirect: 'manual'
@@ -90,7 +90,7 @@ describe('T09: Password Protection', () => {
     const params = new URLSearchParams();
     params.append('password', 'supersecretpass');
 
-    const response = await fetch(`http://localhost:${engine.port}/secret`, {
+    const response = await fetch(`http://127.0.0.1:${engine.port}/secret`, {
       method: 'POST',
       body: params,
       redirect: 'manual'

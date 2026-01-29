@@ -17,8 +17,8 @@ describe('T06: A/B Testing', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3006,
       runtime
     );
@@ -56,7 +56,7 @@ describe('T06: A/B Testing', () => {
     const totalRequests = 100;
 
     for (let i = 0; i < totalRequests; i++) {
-      const response = await fetch(`http://localhost:${engine.port}/ab-test`, { redirect: 'manual' });
+      const response = await fetch(`http://127.0.0.1:${engine.port}/ab-test`, { redirect: 'manual' });
       expect(response.status).toBe(302);
       const loc = response.headers.get('location');
       if (loc === 'https://example.com/a') countA++;

@@ -17,8 +17,8 @@ describe('T09-Extended: Password & Query Params', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3019
     );
     await engine.start();
@@ -50,7 +50,7 @@ describe('T09-Extended: Password & Query Params', () => {
     await new Promise(r => setTimeout(r, 500));
 
     // 1. GET with query param
-    const getRes = await fetch(`http://localhost:${engine.port}/secret-query?ref=foobar`, {
+    const getRes = await fetch(`http://127.0.0.1:${engine.port}/secret-query?ref=foobar`, {
       redirect: 'manual'
     });
     expect(getRes.status).toBe(200);
@@ -62,7 +62,7 @@ describe('T09-Extended: Password & Query Params', () => {
     const params = new URLSearchParams();
     params.append('password', 'pass');
 
-    const postRes = await fetch(`http://localhost:${engine.port}/secret-query?ref=foobar`, {
+    const postRes = await fetch(`http://127.0.0.1:${engine.port}/secret-query?ref=foobar`, {
       method: 'POST',
       body: params,
       redirect: 'manual'
@@ -91,7 +91,7 @@ describe('T09-Extended: Password & Query Params', () => {
   it('should handle HEAD requests', async () => {
      // HEAD request should probably just return 200 (if password form) or 301 (if not password protected)
      // For password protected, HEAD on the form page -> 200 OK (no body)
-     const res = await fetch(`http://localhost:${engine.port}/secret-query`, {
+     const res = await fetch(`http://127.0.0.1:${engine.port}/secret-query`, {
          method: 'HEAD',
          redirect: 'manual'
      });

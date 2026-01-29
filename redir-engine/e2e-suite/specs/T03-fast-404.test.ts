@@ -17,8 +17,8 @@ describe('T03: Fast 404', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3003,
       runtime
     );
@@ -32,7 +32,7 @@ describe('T03: Fast 404', () => {
   });
 
   it('should return 404 for unknown paths', async () => {
-    const response = await fetch(`http://localhost:${engine.port}/unknown-link`);
+    const response = await fetch(`http://127.0.0.1:${engine.port}/unknown-link`);
     expect(response.status).toBe(404);
   });
 
@@ -48,7 +48,7 @@ describe('T03: Fast 404', () => {
     await new Promise(r => setTimeout(r, 200));
 
     // Verify it exists
-    const res1 = await fetch(`http://localhost:${engine.port}/to-be-deleted`, { redirect: 'manual' });
+    const res1 = await fetch(`http://127.0.0.1:${engine.port}/to-be-deleted`, { redirect: 'manual' });
     expect(res1.status).toBe(302);
 
     // 2. Delete
@@ -56,7 +56,7 @@ describe('T03: Fast 404', () => {
     await new Promise(r => setTimeout(r, 200));
 
     // 3. Verify 404
-    const res2 = await fetch(`http://localhost:${engine.port}/to-be-deleted`, { redirect: 'manual' });
+    const res2 = await fetch(`http://127.0.0.1:${engine.port}/to-be-deleted`, { redirect: 'manual' });
     expect(res2.status).toBe(404);
   });
 });
