@@ -5,6 +5,26 @@ import { AnalyticsCollector } from '../core/analytics/collector';
 import { buildAnalyticsPayload } from '../core/analytics/payload-builder';
 import { UAParser } from 'ua-parser-js';
 
+class LazyDeviceContext {
+  private ua: string;
+  private data?: { device: any; os: any };
+
+  constructor(ua: string) {
+    this.ua = ua;
+  }
+
+  get() {
+    if (!this.data) {
+      const parser = new UAParser(this.ua);
+      this.data = {
+        device: parser.getDevice(),
+        os: parser.getOS(),
+      };
+    }
+    return this.data;
+  }
+}
+
 // Define the result type for handleRequest
 export type HandleRequestResult =
   | { type: 'redirect'; rule: RedirectRule }
@@ -82,18 +102,9 @@ export class HandleRequestUseCase {
     let targetingMatched = false;
 
     if (finalRule.targeting?.enabled && finalRule.targeting.rules) {
-      let deviceContext: { device: any; os: any } | undefined;
+      const deviceContext = new LazyDeviceContext(headers.get('user-agent') || '');
 
       for (const targetRule of finalRule.targeting.rules) {
-        if (targetRule.target === 'device' && !deviceContext) {
-          const ua = headers.get('user-agent') || '';
-          const parser = new UAParser(ua);
-          deviceContext = {
-            device: parser.getDevice(),
-            os: parser.getOS(),
-          };
-        }
-
         if (this.checkTarget(targetRule, headers, deviceContext)) {
           finalRule.destination = targetRule.destination;
           targetingMatched = true;
@@ -138,28 +149,17 @@ export class HandleRequestUseCase {
   private checkTarget(
     rule: { target: string; value: string },
     headers: Headers,
-    deviceContext?: { device: any; os: any }
+    deviceContext: LazyDeviceContext
   ): boolean {
     if (rule.target === 'language') {
       const acceptLanguage = headers.get('accept-language');
       if (!acceptLanguage) return false;
-      const languages = acceptLanguage.split(',').map(l => l.split(';')[0].trim());
-      return languages.some(l => l.startsWith(rule.value));
+      const languages = acceptLanguage.split(',').map((l) => l.split(';')[0].trim());
+      return languages.some((l) => l.startsWith(rule.value));
     }
 
     if (rule.target === 'device') {
-      let device, os;
-
-      if (deviceContext) {
-        device = deviceContext.device;
-        os = deviceContext.os;
-      } else {
-        const ua = headers.get('user-agent') || '';
-        const parser = new UAParser(ua);
-        device = parser.getDevice();
-        os = parser.getOS();
-      }
-
+      const { device, os } = deviceContext.get();
       const target = rule.value.toLowerCase();
 
       if (target === 'mobile') {
