@@ -27,6 +27,7 @@
     "@cloudflare/workers-types": "^4.20251221.0",
     "@types/eventsource": "^1.1.15",
     "@types/node": "^20.0.0",
+    "fast-check": "^4.5.3",
     "miniflare": "^4.20251217.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
