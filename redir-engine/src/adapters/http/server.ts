@@ -21,6 +21,7 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
         ip = info.remote.address || '127.0.0.1';
     }
 
+    // Defer body parsing until we know the route requires a password
     const passwordProvider = async () => {
       if (c.req.method === 'POST') {
          try {
