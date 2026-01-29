@@ -65,7 +65,8 @@ export class BetterMockAdminService extends EventEmitter {
     return new Promise<void>((resolve) => {
       this.server = serve({
         fetch: this.app.fetch,
-        port: this.port
+        port: this.port,
+        hostname: '127.0.0.1'
       }, (info) => {
         // @ts-ignore
         this.port = info.port;

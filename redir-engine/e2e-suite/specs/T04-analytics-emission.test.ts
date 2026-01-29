@@ -17,8 +17,8 @@ describe('T04: Analytics Emission', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3004,
       runtime
     );
@@ -48,7 +48,7 @@ describe('T04: Analytics Emission', () => {
     await new Promise(r => setTimeout(r, 200));
 
     // Perform the redirect
-    await fetch(`http://localhost:${engine.port}/track-me`, {
+    await fetch(`http://127.0.0.1:${engine.port}/track-me`, {
         redirect: 'manual',
         headers: {
             'User-Agent': 'Test-Agent/1.0'

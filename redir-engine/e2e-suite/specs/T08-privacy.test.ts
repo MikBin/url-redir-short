@@ -18,8 +18,8 @@ describe('T08: Privacy (IP Anonymization)', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3008,
       runtime
     );
@@ -47,11 +47,11 @@ describe('T08: Privacy (IP Anonymization)', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 200));
 
-    // We can't easily spoof the source IP in a localhost test without more complex setup,
+    // We can't easily spoof the source IP in a 127.0.0.1 test without more complex setup,
     // but the engine sees '127.0.0.1' or '::1'.
     // We expect the emitted IP to NOT be '127.0.0.1'.
 
-    await fetch(`http://localhost:${engine.port}/privacy`, {
+    await fetch(`http://127.0.0.1:${engine.port}/privacy`, {
         redirect: 'manual'
     });
 

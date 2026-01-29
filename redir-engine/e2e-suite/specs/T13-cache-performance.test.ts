@@ -107,7 +107,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
         const start = performance.now();
 
         try {
-          const response = await fetch(`http://localhost:${engine.port}${path}`, {
+          const response = await fetch(`http://127.0.0.1:${engine.port}${path}`, {
             redirect: 'manual',
           });
           const elapsed = performance.now() - start;
@@ -155,7 +155,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
       for (let i = 0; i < paths; i++) {
         const start = performance.now();
         try {
-          await fetch(`http://localhost:${engine.port}/w${i}`, { redirect: 'manual' });
+          await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
           phase1Results.push(performance.now() - start);
         } catch (e) {}
       }
@@ -172,7 +172,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
         for (let i = 0; i < paths; i++) {
           const start = performance.now();
           try {
-            await fetch(`http://localhost:${engine.port}/w${i}`, { redirect: 'manual' });
+            await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
             phase2Results.push(performance.now() - start);
           } catch (e) {}
         }
@@ -227,7 +227,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
           const start = performance.now();
 
           try {
-            const response = await fetch(`http://localhost:${engine.port}/mem${size}${idx}`, {
+            const response = await fetch(`http://127.0.0.1:${engine.port}/mem${size}${idx}`, {
               redirect: 'manual',
             });
             const elapsed = performance.now() - start;
@@ -329,7 +329,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
           const start = performance.now();
 
           try {
-            const response = await fetch(`http://localhost:${engine.port}/db${pathIdx}`, {
+            const response = await fetch(`http://127.0.0.1:${engine.port}/db${pathIdx}`, {
               redirect: 'manual',
             });
             const elapsed = performance.now() - start;
@@ -500,7 +500,7 @@ ${requiredCachePerWorker > 100000
         const start = performance.now();
 
         try {
-          const response = await fetch(`http://localhost:${engine.port}/p${idx}`, {
+          const response = await fetch(`http://127.0.0.1:${engine.port}/p${idx}`, {
             redirect: 'manual',
           });
           const elapsed = performance.now() - start;

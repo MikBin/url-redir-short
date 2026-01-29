@@ -95,7 +95,7 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
     try {
         for (let i = 0; i < 5; i++) {
             try {
-                await fetch(`http://localhost:${this.port}/health`);
+                await fetch(`http://127.0.0.1:${this.port}/health`);
                 break;
             } catch (e) {
                 await new Promise(r => setTimeout(r, 200));

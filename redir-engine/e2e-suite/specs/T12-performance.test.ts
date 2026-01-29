@@ -76,7 +76,7 @@ describe('T12: Performance & Load Testing', () => {
       for (let i = 0; i < CHECK_ITERATIONS; i++) {
         const idx = Math.floor(Math.random() * SCALE_SMALL);
         const start = performance.now();
-        const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
           redirect: 'manual',
         });
         const end = performance.now();
@@ -117,7 +117,7 @@ describe('T12: Performance & Load Testing', () => {
       for (let i = 0; i < CHECK_ITERATIONS; i++) {
         const idx = Math.floor(Math.random() * SCALE_LARGE);
         const start = performance.now();
-        const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
           redirect: 'manual',
         });
         const end = performance.now();
@@ -148,7 +148,7 @@ describe('T12: Performance & Load Testing', () => {
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://localhost:${engine.port}/r${idx}`, {
+          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
         });
@@ -181,7 +181,7 @@ describe('T12: Performance & Load Testing', () => {
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://localhost:${engine.port}/r${idx}`, {
+          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
         });
@@ -214,7 +214,7 @@ describe('T12: Performance & Load Testing', () => {
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://localhost:${engine.port}/r${idx}`, {
+          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
         });
@@ -250,7 +250,7 @@ describe('T12: Performance & Load Testing', () => {
         const path = isValid ? `/r${idx}` : `/missing-${idx}`;
 
         const start = performance.now();
-        const response = await fetch(`http://localhost:${engine.port}${path}`, {
+        const response = await fetch(`http://127.0.0.1:${engine.port}${path}`, {
           redirect: 'manual',
         });
         const end = performance.now();
@@ -295,7 +295,7 @@ describe('T12: Performance & Load Testing', () => {
           : Math.floor(Math.random() * SCALE_LARGE); // Full range
 
         const start = performance.now();
-        const response = await fetch(`http://localhost:${engine.port}/r${idx}`, {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
           redirect: 'manual',
         });
         const end = performance.now();
@@ -329,7 +329,7 @@ describe('T12: Performance & Load Testing', () => {
         
         const promises = Array.from({ length: requestsPerBatch }, async () => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://localhost:${engine.port}/r${idx}`, {
+          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
             redirect: 'manual',
           });
         });

@@ -36,6 +36,7 @@ export default {
         const syncModule = await import('../../src/use-cases/sync-state');
         const handleModule = await import('../../src/use-cases/handle-request');
         const analyticsModule = await import('../../src/adapters/analytics/fire-and-forget');
+        const fetchEventSourceModule = await import('./fetch-event-source');
 
         CuckooFilterClass = cuckooModule.CuckooFilter;
         RadixTreeClass = radixModule.RadixTree;
@@ -44,6 +45,7 @@ export default {
         SyncStateUseCaseClass = syncModule.SyncStateUseCase;
         HandleRequestUseCaseClass = handleModule.HandleRequestUseCase;
         FireAndForgetCollectorClass = analyticsModule.FireAndForgetCollector;
+        const FetchEventSourceClass = fetchEventSourceModule.FetchEventSource;
 
       radixTree = new RadixTreeClass();
       cuckooFilter = new CuckooFilterClass();
@@ -56,9 +58,8 @@ export default {
       const handleRequest = new HandleRequestUseCaseClass(radixTree, cuckooFilter, analyticsCollector);
 
       // 3. Initialize SSE Client and connect
-      // Using native EventSource available in CF Workers
-      // @ts-ignore
-      sseClient = new SSEClientClass(ADMIN_SERVICE_URL, EventSource);
+      // Use FetchEventSource instead of global EventSource
+      sseClient = new SSEClientClass(ADMIN_SERVICE_URL, FetchEventSourceClass);
       sseClient.connect(
         (data: any) => syncState.handleCreate(data),
         (data: any) => syncState.handleUpdate(data),
