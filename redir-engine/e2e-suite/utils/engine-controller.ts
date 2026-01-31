@@ -1,6 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+// @ts-ignore
+import kill from 'tree-kill';
 
 export type RuntimeType = 'node' | 'cf-worker';
 
@@ -93,7 +95,7 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
     try {
         for (let i = 0; i < 5; i++) {
             try {
-                await fetch(`http://localhost:${this.port}/health`);
+                await fetch(`http://127.0.0.1:${this.port}/health`);
                 break;
             } catch (e) {
                 await new Promise(r => setTimeout(r, 200));
@@ -149,8 +151,14 @@ ANALYTICS_SERVICE_URL=${this.analyticsUrl}
   }
 
   public async stop() {
-    if (this.process) {
-      this.process.kill();
+    if (this.process && this.process.pid) {
+      // Use tree-kill to ensure all child processes (including those spawned by shell) are killed
+      await new Promise<void>((resolve) => {
+        kill(this.process!.pid, 'SIGKILL', (err: any) => {
+          if (err) console.error('Failed to kill process tree:', err);
+          resolve();
+        });
+      });
       this.process = null;
     }
   }

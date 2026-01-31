@@ -17,8 +17,8 @@ describe('T07: Geo/Lang Fallback', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3007,
       runtime
     );
@@ -52,18 +52,18 @@ describe('T07: Geo/Lang Fallback', () => {
     await new Promise(r => setTimeout(r, 500));
 
     // Test Default
-    let response = await fetch(`http://localhost:${engine.port}/lang-test`, { redirect: 'manual' });
+    let response = await fetch(`http://127.0.0.1:${engine.port}/lang-test`, { redirect: 'manual' });
     expect(response.headers.get('location')).toBe('https://example.com/en');
 
     // Test French
-    response = await fetch(`http://localhost:${engine.port}/lang-test`, {
+    response = await fetch(`http://127.0.0.1:${engine.port}/lang-test`, {
       redirect: 'manual',
       headers: { 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8' }
     });
     expect(response.headers.get('location')).toBe('https://example.com/fr');
 
     // Test Spanish
-    response = await fetch(`http://localhost:${engine.port}/lang-test`, {
+    response = await fetch(`http://127.0.0.1:${engine.port}/lang-test`, {
       redirect: 'manual',
       headers: { 'Accept-Language': 'es' }
     });
@@ -88,14 +88,14 @@ describe('T07: Geo/Lang Fallback', () => {
     await new Promise(r => setTimeout(r, 500));
 
     // Test Desktop (Default)
-    let response = await fetch(`http://localhost:${engine.port}/device-test`, {
+    let response = await fetch(`http://127.0.0.1:${engine.port}/device-test`, {
         redirect: 'manual',
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
     });
     expect(response.headers.get('location')).toBe('https://example.com/desktop');
 
     // Test Mobile
-    response = await fetch(`http://localhost:${engine.port}/device-test`, {
+    response = await fetch(`http://127.0.0.1:${engine.port}/device-test`, {
         redirect: 'manual',
         headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)' }
     });

@@ -17,8 +17,8 @@ describe('T11: Expiration Logic', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3011, // Unique port for this test
       runtime
     );
@@ -43,7 +43,7 @@ describe('T11: Expiration Logic', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 200));
 
-    const response = await fetch(`http://localhost:${engine.port}/expired-time`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/expired-time`, { redirect: 'manual' });
     expect(response.status).not.toBe(301);
     expect(response.status).toBe(404);
   });
@@ -61,7 +61,7 @@ describe('T11: Expiration Logic', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 200));
 
-    const response = await fetch(`http://localhost:${engine.port}/expired-clicks`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/expired-clicks`, { redirect: 'manual' });
     expect(response.status).not.toBe(301);
     expect(response.status).toBe(404);
   });
@@ -79,7 +79,7 @@ describe('T11: Expiration Logic', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 200));
 
-    const response = await fetch(`http://localhost:${engine.port}/valid-clicks`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/valid-clicks`, { redirect: 'manual' });
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe('https://example.com/valid');
   });
@@ -96,7 +96,7 @@ describe('T11: Expiration Logic', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 200));
 
-    const response = await fetch(`http://localhost:${engine.port}/valid-time`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/valid-time`, { redirect: 'manual' });
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe('https://example.com/valid');
   });

@@ -5,6 +5,26 @@ import { AnalyticsCollector } from '../core/analytics/collector';
 import { buildAnalyticsPayload } from '../core/analytics/payload-builder';
 import { UAParser } from 'ua-parser-js';
 
+class LazyDeviceContext {
+  private ua: string;
+  private data?: { device: any; os: any };
+
+  constructor(ua: string) {
+    this.ua = ua;
+  }
+
+  get() {
+    if (!this.data) {
+      const parser = new UAParser(this.ua);
+      this.data = {
+        device: parser.getDevice(),
+        os: parser.getOS(),
+      };
+    }
+    return this.data;
+  }
+}
+
 // Define the result type for handleRequest
 export type HandleRequestResult =
   | { type: 'redirect'; rule: RedirectRule }
@@ -31,7 +51,7 @@ export class HandleRequestUseCase {
     headers: Headers,
     ip: string,
     originalUrl: string,
-    bodyPassword?: string // Optional password from POST body
+    passwordProvider?: () => Promise<string | undefined> | string | undefined
   ): Promise<HandleRequestResult> {
     // 1. Check Cuckoo Filter
     if (!this.cuckooFilter.has(path)) {
@@ -60,6 +80,11 @@ export class HandleRequestUseCase {
 
     // --- Phase 4: Password Protection ---
     if (finalRule.password_protection?.enabled) {
+      let bodyPassword: string | undefined;
+      if (passwordProvider) {
+        bodyPassword = await passwordProvider();
+      }
+
       // If user provided a password
       if (bodyPassword) {
         if (bodyPassword !== finalRule.password_protection.password) {
@@ -77,8 +102,10 @@ export class HandleRequestUseCase {
     let targetingMatched = false;
 
     if (finalRule.targeting?.enabled && finalRule.targeting.rules) {
+      const deviceContext = new LazyDeviceContext(headers.get('user-agent') || '');
+
       for (const targetRule of finalRule.targeting.rules) {
-        if (this.checkTarget(targetRule, headers)) {
+        if (this.checkTarget(targetRule, headers, deviceContext)) {
           finalRule.destination = targetRule.destination;
           targetingMatched = true;
           break; // First match wins
@@ -102,34 +129,37 @@ export class HandleRequestUseCase {
 
     if (this.analyticsCollector) {
       // Async fire-and-forget analytics
-      const payload = await buildAnalyticsPayload(
+      buildAnalyticsPayload(
         path,
         finalRule.destination,
         ip,
         headers,
         finalRule.code,
         originalUrl
-      );
-      this.analyticsCollector.collect(payload);
+      )
+        .then((payload) => this.analyticsCollector?.collect(payload))
+        .catch((err) => {
+          console.error('Failed to collect analytics:', err);
+        });
     }
 
     return { type: 'redirect', rule: finalRule };
   }
 
-  private checkTarget(rule: { target: string, value: string }, headers: Headers): boolean {
+  private checkTarget(
+    rule: { target: string; value: string },
+    headers: Headers,
+    deviceContext: LazyDeviceContext
+  ): boolean {
     if (rule.target === 'language') {
       const acceptLanguage = headers.get('accept-language');
       if (!acceptLanguage) return false;
-      const languages = acceptLanguage.split(',').map(l => l.split(';')[0].trim());
-      return languages.some(l => l.startsWith(rule.value));
+      const languages = acceptLanguage.split(',').map((l) => l.split(';')[0].trim());
+      return languages.some((l) => l.startsWith(rule.value));
     }
 
     if (rule.target === 'device') {
-      const ua = headers.get('user-agent') || '';
-      const parser = new UAParser(ua);
-      const device = parser.getDevice();
-      const os = parser.getOS();
-
+      const { device, os } = deviceContext.get();
       const target = rule.value.toLowerCase();
 
       if (target === 'mobile') {

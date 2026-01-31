@@ -1,5 +1,6 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { validateBulkLinks } from '../utils/bulk'
+import { logAudit } from '../utils/audit'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -35,8 +36,25 @@ export default defineEventHandler(async (event) => {
         .select()
 
     if (error) {
+        logAudit({
+            actor: { id: user.id, role: user.role },
+            action: 'bulk_import',
+            resource: { type: 'link', id: 'bulk' },
+            status: 'failure',
+            error: error.message,
+            newValue: { requested: valid.length }
+        })
         throw createError({ statusCode: 500, statusMessage: error.message })
     }
+
+    logAudit({
+        actor: { id: user.id, role: user.role },
+        action: 'bulk_import',
+        resource: { type: 'link', id: 'bulk' },
+        status: 'success',
+        newValue: { count: data ? data.length : 0, failed: invalid.length },
+        metadata: { invalid_items: invalid }
+    })
 
     return {
         success: data ? data.length : 0,

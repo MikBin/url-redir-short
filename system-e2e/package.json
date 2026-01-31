@@ -1,0 +1,21 @@
+{
+  "name": "system-e2e",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "start:services": "ts-node scripts/start-services.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^25.0.10",
+    "playwright": "^1.58.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

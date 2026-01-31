@@ -6,13 +6,21 @@
   "scripts": {
     "dev": "tsx watch runtimes/node/index.ts",
     "build": "tsc",
-    "test": "echo \"Run tests in e2e-suite directory\" && exit 1"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/ --exclude tests/perf/",
+    "test:perf": "vitest run tests/perf/",
+    "test:perf:watch": "vitest watch tests/perf/",
+    "test:all": "npm run test:unit && npm run test:perf",
+    "test:e2e": "cd e2e-suite && npm test",
+    "test:e2e:performance": "cd e2e-suite && npm test -- specs/T12-performance.test.ts",
+    "load-test": "tsx load-tests/run.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
     "bloom-filters": "^3.0.4",
     "buffer": "^6.0.3",
     "eventsource": "^4.1.0",
+    "eventsource-parser": "^3.0.6",
     "hono": "^4.0.0",
     "ua-parser-js": "^2.0.7"
   },
@@ -20,9 +28,11 @@
     "@cloudflare/workers-types": "^4.20251221.0",
     "@types/eventsource": "^1.1.15",
     "@types/node": "^20.0.0",
+    "fast-check": "^4.5.3",
     "miniflare": "^4.20251217.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
+    "vitest": "^4.0.18",
     "wrangler": "^4.56.0"
   },
   "engines": {

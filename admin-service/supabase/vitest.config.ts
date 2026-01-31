@@ -1,9 +1,13 @@
-import { defineConfig } from 'vitest/config'
+import { defineVitestConfig } from '@nuxt/test-utils/config'
 
-export default defineConfig({
+export default defineVitestConfig({
   test: {
-    environment: 'node',
+    environment: 'happy-dom',
     globals: true,
-    include: ['tests/**/*.test.ts']
+    include: ['tests/**/*.test.ts'],
+    env: {
+      SUPABASE_URL: 'https://example.com',
+      SUPABASE_KEY: 'some-random-key'
+    }
   }
 })

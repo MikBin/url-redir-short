@@ -21,25 +21,27 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
         ip = info.remote.address || '127.0.0.1';
     }
 
-    // Try to get password from body if POST
-    let bodyPassword = undefined;
-    if (c.req.method === 'POST') {
-       try {
-         const body = await c.req.parseBody();
-         if (body['password']) {
-            bodyPassword = body['password'] as string;
+    // Defer body parsing until we know the route requires a password
+    const passwordProvider = async () => {
+      if (c.req.method === 'POST') {
+         try {
+           const body = await c.req.parseBody();
+           if (body['password']) {
+              return body['password'] as string;
+           }
+         } catch (e) {
+           // ignore parsing errors
          }
-       } catch (e) {
-         // ignore parsing errors
-       }
-    }
+      }
+      return undefined;
+    };
 
     const result = await handleRequest.execute(
         path,
         c.req.raw.headers,
         ip,
         c.req.url,
-        bodyPassword
+        passwordProvider
     );
 
     if (!result) {

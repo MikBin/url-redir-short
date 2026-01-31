@@ -22,7 +22,7 @@ describe('T01: Boot & Sync', () => {
     // 2. Start Engine
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
 
-    // Use 127.0.0.1 instead of localhost to avoid IPv6/IPv4 mismatches or resolution issues in workers
+    // Use 127.0.0.1 instead of 127.0.0.1 to avoid IPv6/IPv4 mismatches or resolution issues in workers
     const adminUrl = `http://127.0.0.1:${adminService.port}/sync/stream`;
     const analyticsUrl = `http://127.0.0.1:${analyticsService.port}`;
 
@@ -72,7 +72,7 @@ describe('T01: Boot & Sync', () => {
     // 4. Request the link from Engine
     try {
         console.log('[T01] Fetching...');
-        const response = await fetch(`http://localhost:${engine.port}/test-redirect`, {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/test-redirect`, {
             redirect: 'manual'
         });
         console.log('[T01] Fetch done', response.status);

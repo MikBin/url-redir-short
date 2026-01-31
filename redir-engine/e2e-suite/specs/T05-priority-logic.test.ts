@@ -17,8 +17,8 @@ describe('T05: Priority Logic', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3005,
       runtime
     );
@@ -47,7 +47,7 @@ describe('T05: Priority Logic', () => {
     await new Promise(r => setTimeout(r, 200));
 
     // Request with explicit ?ref=... AND Referer header
-    await fetch(`http://localhost:${engine.port}/priority?ref=twitter`, {
+    await fetch(`http://127.0.0.1:${engine.port}/priority?ref=twitter`, {
         redirect: 'manual',
         headers: {
             'Referer': 'https://google.com'
@@ -63,7 +63,7 @@ describe('T05: Priority Logic', () => {
 
   it('should fallback to Referer header (Priority 2)', async () => {
     // Request with NO query param, but WITH Referer header
-    await fetch(`http://localhost:${engine.port}/priority`, {
+    await fetch(`http://127.0.0.1:${engine.port}/priority`, {
         redirect: 'manual',
         headers: {
             'Referer': 'https://google.com'
@@ -78,7 +78,7 @@ describe('T05: Priority Logic', () => {
   });
 
   it('should handle utm_source as explicit', async () => {
-    await fetch(`http://localhost:${engine.port}/priority?utm_source=linkedin`, {
+    await fetch(`http://127.0.0.1:${engine.port}/priority?utm_source=linkedin`, {
         redirect: 'manual'
     });
 
@@ -90,7 +90,7 @@ describe('T05: Priority Logic', () => {
   });
 
     it('should handle source as explicit', async () => {
-    await fetch(`http://localhost:${engine.port}/priority?source=newsletter`, {
+    await fetch(`http://127.0.0.1:${engine.port}/priority?source=newsletter`, {
         redirect: 'manual'
     });
 

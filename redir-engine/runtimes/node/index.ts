@@ -7,26 +7,32 @@ import { SyncStateUseCase } from '../../src/use-cases/sync-state';
 import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
 import { FireAndForgetCollector } from '../../src/adapters/analytics/fire-and-forget';
 import { EventSource } from 'eventsource';
+import { loadConfig } from '../../src/core/config';
 
 // Configuration
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const ADMIN_SERVICE_URL = process.env.ADMIN_SERVICE_URL || 'http://localhost:3001/sync/stream';
-const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:3002';
+const config = loadConfig(process.env);
 
 // 1. Initialize Core Data Structures
 const radixTree = new RadixTree();
 const cuckooFilter = new CuckooFilter();
 
 // 2. Initialize Analytics
-const analyticsCollector = new FireAndForgetCollector(ANALYTICS_SERVICE_URL);
+const analyticsCollector = new FireAndForgetCollector(config.analyticsServiceUrl);
 
-// 3. Initialize Use Cases
-const syncState = new SyncStateUseCase(radixTree, cuckooFilter);
+// 3. Initialize Use Cases with Cache Eviction
+// Configure eviction based on environment variables
+const evictionConfig = {
+  maxHeapMB: parseInt(process.env.CACHE_MAX_HEAP_MB || '500'),
+  evictionBatchSize: parseInt(process.env.CACHE_EVICTION_BATCH || '1000'),
+  checkIntervalMs: parseInt(process.env.CACHE_CHECK_INTERVAL_MS || '10000'),
+  enableMetrics: process.env.CACHE_METRICS !== 'false',
+};
+const syncState = new SyncStateUseCase(radixTree, cuckooFilter, evictionConfig);
 const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analyticsCollector);
 
 // 4. Initialize SSE Client and connect
 // @ts-ignore - mismatch between eventsource types and our interface
-const sseClient = new SSEClient(ADMIN_SERVICE_URL, EventSource);
+const sseClient = new SSEClient(config.adminServiceUrl, EventSource);
 sseClient.connect(
   (data) => syncState.handleCreate(data),
   (data) => syncState.handleUpdate(data),
@@ -36,8 +42,8 @@ sseClient.connect(
 // 5. Initialize HTTP Server
 const app = createApp(handleRequest);
 
-console.log(`[Engine] Starting on port ${PORT}`);
+console.log(`[Engine] Starting on port ${config.port}`);
 serve({
   fetch: app.fetch,
-  port: PORT
+  port: config.port
 });

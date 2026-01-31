@@ -11,3 +11,4 @@ coverage/
 
 # OpenSpec draft changes (before approval)
 openspec/changes/DRAFT-*/
+**/load-tests/k6

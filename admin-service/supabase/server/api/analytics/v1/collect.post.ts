@@ -2,6 +2,8 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'
+import { config } from '../../../utils/config'
+import { checkRateLimit } from '../../../utils/rate-limit'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -24,15 +26,12 @@ const AnalyticsPayloadSchema = z.object({
 type AnalyticsPayload = z.infer<typeof AnalyticsPayloadSchema>
 
 // Rate limiting configuration
-const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
+const RATE_LIMIT_WINDOW = 60 // 1 minute in seconds
 const RATE_LIMIT_MAX_REQUESTS = 100 // requests per window per IP
-
-// In-memory rate limiting store (in production, use Redis)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
 
 // Helper function to hash IP addresses for privacy
 function hashIP(ip: string): string {
-  return createHash('sha256').update(ip + process.env.IP_HASH_SALT || 'default-salt').digest('hex')
+  return createHash('sha256').update(ip + config.IP_HASH_SALT).digest('hex')
 }
 
 // Helper function to validate and sanitize input
@@ -43,32 +42,12 @@ function sanitizeInput(input: string): string {
     .trim()
 }
 
-// Rate limiting middleware
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now()
-  const key = hashIP(ip)
-  const record = rateLimitStore.get(key)
-
-  if (!record || now > record.resetTime) {
-    // Reset window
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
-    return true
-  }
-
-  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return false
-  }
-
-  record.count++
-  return true
-}
-
 // Structured logging helper
 function logAnalyticsEvent(level: 'info' | 'warn' | 'error', message: string, data?: any) {
   const logEntry = {
     timestamp: new Date().toISOString(),
     level,
-    service: 'analytics-ingestion',
+    service: config.SERVICE_NAME,
     message,
     data
   }
@@ -92,7 +71,10 @@ export default defineEventHandler(async (event) => {
                    event.node.req.socket.remoteAddress || 'unknown'
   
   // Apply rate limiting
-  if (!checkRateLimit(clientIP as string)) {
+  const rateLimitKey = `analytics:${hashIP(clientIP as string)}`
+  const rateLimitResult = await checkRateLimit(rateLimitKey, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW)
+
+  if (!rateLimitResult.allowed) {
     throw createErrorResponse(429, 'Rate limit exceeded')
   }
 
@@ -118,6 +100,21 @@ export default defineEventHandler(async (event) => {
     // Set default timestamp if not provided
     const timestamp = sanitizedData.timestamp || new Date().toISOString()
 
+    // Lookup link_id
+    let linkId: string | null = null
+    try {
+      const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
+      const { data } = await client
+        .from('links')
+        .select('id')
+        .eq('slug', slug)
+        .limit(1)
+        .maybeSingle()
+      linkId = data?.id || null
+    } catch (e) {
+      // Ignore lookup error
+    }
+
     // Prepare database record
     const dbRecord = {
       path: sanitizedData.path,
@@ -133,7 +130,8 @@ export default defineEventHandler(async (event) => {
       city: sanitizedData.city,
       device_type: sanitizedData.device_type,
       browser: sanitizedData.browser,
-      os: sanitizedData.os
+      os: sanitizedData.os,
+      link_id: linkId
     }
 
     // Insert into database with retry logic
@@ -166,6 +164,26 @@ export default defineEventHandler(async (event) => {
         data: dbRecord 
       })
       throw createErrorResponse(500, 'Failed to store analytics data', { retryCount })
+    }
+
+    // Update aggregates if linkId exists
+    if (linkId) {
+      const date = new Date(timestamp)
+      const dateStr = date.toISOString().split('T')[0]
+      const hour = date.getUTCHours()
+
+      // Async atomic update using RPC (fire and forget)
+      client.rpc('increment_analytics_aggregate', {
+        p_link_id: linkId,
+        p_date: dateStr,
+        p_hour: hour,
+        p_country: sanitizedData.country || null,
+        p_device_type: sanitizedData.device_type || null,
+        p_browser: sanitizedData.browser || null,
+        p_count: 1
+      }).then(({ error }: any) => {
+        if (error) console.error('Failed to increment aggregate:', error)
+      }).catch((e: any) => console.error('Failed to increment aggregate (exception):', e))
     }
 
     // Log successful ingestion

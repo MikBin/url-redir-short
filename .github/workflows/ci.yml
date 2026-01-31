@@ -24,9 +24,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-
-      - name: Install Dependencies (Root)
-        run: npm ci
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Install Dependencies (Redir Engine)
         working-directory: redir-engine
@@ -40,10 +38,24 @@ jobs:
         working-directory: redir-engine
         run: npm run build
 
+      - name: Run Unit Tests (Redir Engine)
+        working-directory: redir-engine
+        run: npm test
+
       - name: Run Tests (Node Runtime)
         working-directory: redir-engine/e2e-suite
         run: npm run test:node
+        env:
+          E2E_QUICK_MODE: 'true'
 
       - name: Run Tests (Cloudflare Worker Runtime)
         working-directory: redir-engine/e2e-suite
         run: npm run test:cf
+
+      - name: Install Dependencies (Admin Service)
+        working-directory: admin-service/supabase
+        run: npm install
+
+      - name: Run Tests (Admin Service)
+        working-directory: admin-service/supabase
+        run: npm test

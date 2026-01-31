@@ -17,8 +17,8 @@ describe('T10: HSTS', () => {
 
     const runtime = (process.env.TEST_RUNTIME || 'node') as RuntimeType;
     engine = new EngineController(
-      `http://localhost:${adminService.port}/sync/stream`,
-      `http://localhost:${analyticsService.port}`,
+      `http://127.0.0.1:${adminService.port}/sync/stream`,
+      `http://127.0.0.1:${analyticsService.port}`,
       3010
     );
     await engine.start();
@@ -49,7 +49,7 @@ describe('T10: HSTS', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 500));
 
-    const response = await fetch(`http://localhost:${engine.port}/hsts-enabled`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/hsts-enabled`, { redirect: 'manual' });
     expect(response.status).toBe(301);
 
     const hsts = response.headers.get('Strict-Transport-Security');
@@ -71,7 +71,7 @@ describe('T10: HSTS', () => {
     adminService.pushUpdate({ type: 'create', data: rule });
     await new Promise(r => setTimeout(r, 500));
 
-    const response = await fetch(`http://localhost:${engine.port}/hsts-disabled`, { redirect: 'manual' });
+    const response = await fetch(`http://127.0.0.1:${engine.port}/hsts-disabled`, { redirect: 'manual' });
     expect(response.status).toBe(301);
     expect(response.headers.get('Strict-Transport-Security')).toBeNull();
   });
