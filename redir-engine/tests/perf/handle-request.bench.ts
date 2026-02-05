@@ -72,7 +72,7 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
             const start = performance.now();
             const iterations = 1000;
             for (let i = 0; i < iterations; i++) {
-                await useCase.execute('/perf', headers, '127.0.0.1', 'https://short.ly/perf');
+                await useCase.execute('/perf', headers, '127.0.0.1', new URL('https://short.ly/perf'));
             }
             const elapsed = performance.now() - start;
             const opsPerSec = (iterations / (elapsed / 1000)).toFixed(0);
@@ -118,7 +118,7 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
                     '/fast',
                     new Headers(),
                     '127.0.0.1',
-                    'http://localhost/fast'
+                    new URL('http://localhost/fast')
                 );
             }
 
