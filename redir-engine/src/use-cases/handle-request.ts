@@ -25,6 +25,26 @@ class LazyDeviceContext {
   }
 }
 
+class LazyLanguageContext {
+  private header: string | null;
+  private languages?: string[];
+
+  constructor(header: string | null) {
+    this.header = header;
+  }
+
+  get(): string[] {
+    if (!this.languages) {
+      if (!this.header) {
+        this.languages = [];
+      } else {
+        this.languages = this.header.split(',').map((l) => l.split(';')[0].trim());
+      }
+    }
+    return this.languages;
+  }
+}
+
 // Define the result type for handleRequest
 export type HandleRequestResult =
   | { type: 'redirect'; rule: RedirectRule }
@@ -103,9 +123,10 @@ export class HandleRequestUseCase {
 
     if (finalRule.targeting?.enabled && finalRule.targeting.rules) {
       const deviceContext = new LazyDeviceContext(headers.get('user-agent') || '');
+      const languageContext = new LazyLanguageContext(headers.get('accept-language'));
 
       for (const targetRule of finalRule.targeting.rules) {
-        if (this.checkTarget(targetRule, headers, deviceContext)) {
+        if (this.checkTarget(targetRule, headers, deviceContext, languageContext)) {
           finalRule.destination = targetRule.destination;
           targetingMatched = true;
           break; // First match wins
@@ -149,12 +170,12 @@ export class HandleRequestUseCase {
   private checkTarget(
     rule: { target: string; value: string },
     headers: Headers,
-    deviceContext: LazyDeviceContext
+    deviceContext: LazyDeviceContext,
+    languageContext: LazyLanguageContext
   ): boolean {
     if (rule.target === 'language') {
-      const acceptLanguage = headers.get('accept-language');
-      if (!acceptLanguage) return false;
-      const languages = acceptLanguage.split(',').map((l) => l.split(';')[0].trim());
+      const languages = languageContext.get();
+      if (languages.length === 0) return false;
       return languages.some((l) => l.startsWith(rule.value));
     }
 
