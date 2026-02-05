@@ -38,9 +38,8 @@ export async function buildAnalyticsPayload(
   ip: string,
   headers: Headers,
   status: number,
-  originalUrl: string
+  url: URL
 ): Promise<AnalyticsPayload> {
-  const url = new URL(originalUrl);
   const { referrer, referrer_source } = await resolveReferrer(url, headers);
   const anonymizedIp = await anonymizeIp(ip);
 

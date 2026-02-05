@@ -13,7 +13,8 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
        return c.text('Method not allowed', 405);
     }
 
-    const path = new URL(c.req.url).pathname;
+    const url = new URL(c.req.url);
+    const path = url.pathname;
 
     let ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
     if (!ip) {
@@ -40,7 +41,7 @@ export const createApp = (handleRequest: HandleRequestUseCase) => {
         path,
         c.req.raw.headers,
         ip,
-        c.req.url,
+        url,
         passwordProvider
     );
 

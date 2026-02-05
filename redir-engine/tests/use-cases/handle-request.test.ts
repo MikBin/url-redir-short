@@ -52,7 +52,7 @@ describe('HandleRequestUseCase', () => {
   it('should return null if path is not in CuckooFilter', async () => {
     (mockCuckooFilter.has as Mock).mockReturnValue(false);
 
-    const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', 'http://localhost/unknown');
+    const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', new URL('http://localhost/unknown'));
 
     expect(result).toBeNull();
     expect(mockRadixTree.find).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe('HandleRequestUseCase', () => {
     (mockCuckooFilter.has as Mock).mockReturnValue(true);
     (mockRadixTree.find as Mock).mockReturnValue(null);
 
-    const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', 'http://localhost/unknown');
+    const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', new URL('http://localhost/unknown'));
 
     expect(result).toBeNull();
     expect(mockRadixTree.find).toHaveBeenCalledWith('/unknown');
@@ -72,7 +72,7 @@ describe('HandleRequestUseCase', () => {
     (mockCuckooFilter.has as Mock).mockReturnValue(true);
     (mockRadixTree.find as Mock).mockReturnValue(mockRule);
 
-    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
+    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
     expect(result).toEqual({ type: 'redirect', rule: mockRule });
 
@@ -86,7 +86,7 @@ describe('HandleRequestUseCase', () => {
     const expiredRule = { ...mockRule, expiresAt: Date.now() - 1000 };
     (mockRadixTree.find as Mock).mockReturnValue(expiredRule);
 
-    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
+    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
     expect(result).toBeNull();
   });
@@ -96,7 +96,7 @@ describe('HandleRequestUseCase', () => {
     const maxedRule = { ...mockRule, maxClicks: 10, clicks: 10 };
     (mockRadixTree.find as Mock).mockReturnValue(maxedRule);
 
-    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
+    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
     expect(result).toBeNull();
   });
@@ -110,15 +110,15 @@ describe('HandleRequestUseCase', () => {
     (mockRadixTree.find as Mock).mockReturnValue(protectedRule);
 
     // No password provided
-    const result1 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
+    const result1 = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
     expect(result1).toEqual({ type: 'password_required', rule: protectedRule });
 
     // Wrong password
-    const result2 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', () => 'wrong');
+    const result2 = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'), () => 'wrong');
     expect(result2).toEqual({ type: 'password_required', rule: protectedRule, error: true });
 
     // Correct password
-    const result3 = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test', () => 'secret');
+    const result3 = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'), () => 'secret');
     expect(result3).toEqual({ type: 'redirect', rule: protectedRule });
   });
 
@@ -137,7 +137,7 @@ describe('HandleRequestUseCase', () => {
 
     // Match
     const frHeaders = new Headers({ 'accept-language': 'fr-FR' });
-    const result1 = await useCase.execute('/test', frHeaders, '127.0.0.1', 'http://localhost/test');
+    const result1 = await useCase.execute('/test', frHeaders, '127.0.0.1', new URL('http://localhost/test'));
     expect(result1?.type).toBe('redirect');
     if (result1?.type === 'redirect') {
         expect(result1.rule.destination).toBe('https://example.com/fr');
@@ -145,7 +145,7 @@ describe('HandleRequestUseCase', () => {
 
     // No Match
     const enHeaders = new Headers({ 'accept-language': 'en-US' });
-    const result2 = await useCase.execute('/test', enHeaders, '127.0.0.1', 'http://localhost/test');
+    const result2 = await useCase.execute('/test', enHeaders, '127.0.0.1', new URL('http://localhost/test'));
     expect(result2?.type).toBe('redirect');
     if (result2?.type === 'redirect') {
         expect(result2.rule.destination).toBe('https://example.com'); // Default
@@ -165,7 +165,7 @@ describe('HandleRequestUseCase', () => {
     };
     (mockRadixTree.find as Mock).mockReturnValue(abRule);
 
-    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', 'http://localhost/test');
+    const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
     expect(result?.type).toBe('redirect');
     if (result?.type === 'redirect') {
         expect(result.rule.destination).toBe('https://example.com/a');

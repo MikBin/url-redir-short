@@ -70,7 +70,7 @@ export class HandleRequestUseCase {
     path: string,
     headers: Headers,
     ip: string,
-    originalUrl: string,
+    originalUrl: URL,
     passwordProvider?: () => Promise<string | undefined> | string | undefined
   ): Promise<HandleRequestResult> {
     // 1. Check Cuckoo Filter
