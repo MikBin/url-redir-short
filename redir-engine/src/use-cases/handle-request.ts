@@ -38,7 +38,7 @@ class LazyLanguageContext {
       if (!this.header) {
         this.languages = [];
       } else {
-        this.languages = this.header.split(',').map((l) => l.split(';')[0].trim());
+        this.languages = this.header.toLowerCase().split(',').map((l) => l.split(';')[0].trim());
       }
     }
     return this.languages;
@@ -181,7 +181,7 @@ export class HandleRequestUseCase {
 
     if (rule.target === 'device') {
       const { device, os } = deviceContext.get();
-      const target = rule.value.toLowerCase();
+      const target = rule.value;
 
       if (target === 'mobile') {
         return device.type === 'mobile';
@@ -203,7 +203,7 @@ export class HandleRequestUseCase {
     if (rule.target === 'country') {
        const country = headers.get('cf-ipcountry');
        if (country) {
-         return country.toLowerCase() === rule.value.toLowerCase();
+         return country.toLowerCase() === rule.value;
        }
     }
 

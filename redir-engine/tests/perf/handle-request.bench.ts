@@ -80,6 +80,51 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
         });
     });
 
+    describe('Country Targeting Rules', () => {
+        let useCase: HandleRequestUseCase;
+        let radixTree: RadixTree;
+        let cuckooFilter: CuckooFilter;
+
+        beforeEach(() => {
+            radixTree = new RadixTree();
+            cuckooFilter = new CuckooFilter();
+            useCase = new HandleRequestUseCase(radixTree, cuckooFilter);
+        });
+
+        it('processes 10000 requests with country targeting', async () => {
+             const rule: RedirectRule = {
+                id: 'country-bench',
+                path: '/country',
+                destination: 'https://default.com',
+                code: 301,
+                targeting: {
+                    enabled: true,
+                    rules: [
+                        { id: '1', target: 'country', value: 'fr', destination: 'https://fr.com' },
+                        { id: '2', target: 'country', value: 'de', destination: 'https://de.com' },
+                        { id: '3', target: 'country', value: 'gb', destination: 'https://gb.com' },
+                        { id: '4', target: 'country', value: 'us', destination: 'https://us.com' }
+                    ]
+                }
+            };
+            radixTree.insert('/country', rule);
+            cuckooFilter.add('/country');
+
+            const headers = new Headers({ 'cf-ipcountry': 'US' });
+            const ip = '1.2.3.4';
+            const url = new URL('https://example.com/country');
+
+            const start = performance.now();
+            const iterations = 10000;
+            for (let i = 0; i < iterations; i++) {
+                await useCase.execute('/country', headers, ip, url);
+            }
+            const elapsed = performance.now() - start;
+            const opsPerSec = (iterations / (elapsed / 1000)).toFixed(0);
+            console.log(`  HandleRequest (Country Targeting): ${elapsed.toFixed(2)}ms (${opsPerSec} ops/sec)`);
+        });
+    });
+
     describe('Request Handling Latency', () => {
         let useCase: HandleRequestUseCase;
         let mockCollector: AnalyticsCollector;

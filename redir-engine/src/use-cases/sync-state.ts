@@ -22,6 +22,7 @@ export class SyncStateUseCase {
   }
 
   public handleCreate(rule: RedirectRule) {
+    this.normalizeRule(rule);
     console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
     this.radixTree.insert(rule.path, rule);
     this.cuckooFilter.add(rule.path);
@@ -29,6 +30,7 @@ export class SyncStateUseCase {
   }
 
   public handleUpdate(rule: RedirectRule) {
+    this.normalizeRule(rule);
     console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
     // Update is same as insert for Radix
     this.radixTree.insert(rule.path, rule);
@@ -44,6 +46,19 @@ export class SyncStateUseCase {
     this.radixTree.delete(rule.path);
     this.cuckooFilter.remove(rule.path);
     this.evictionManager.recordRemoval(rule.path);
+  }
+
+  private normalizeRule(rule: RedirectRule) {
+    if (rule.targeting?.enabled && rule.targeting.rules) {
+      for (const targetRule of rule.targeting.rules) {
+        if (
+          targetRule.value &&
+          ['country', 'device', 'language'].includes(targetRule.target)
+        ) {
+          targetRule.value = targetRule.value.toLowerCase();
+        }
+      }
+    }
   }
 
   /**
