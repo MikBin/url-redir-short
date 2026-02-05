@@ -3,9 +3,8 @@
  * Implements LRU-based eviction when memory threshold is exceeded
  */
 
-import { RadixTree } from '../../core/routing/radix-tree';
-import { CuckooFilter } from '../../core/filtering/cuckoo-filter';
 import { RedirectRule } from '../../core/config/types';
+import { DoublyLinkedList, ListNode } from './doubly-linked-list';
 
 export interface EvictionConfig {
   maxHeapMB: number;           // Trigger eviction at this heap usage (MB)
@@ -27,12 +26,14 @@ interface CacheEntry {
   rule: RedirectRule;
   lastAccessTime: number;
   accessCount: number;
+  node: ListNode<string>;
 }
 
 export class CacheEvictionManager {
   private config: EvictionConfig;
   private metrics: EvictionMetrics;
   private cacheMap: Map<string, CacheEntry> = new Map();
+  private lruList: DoublyLinkedList<string> = new DoublyLinkedList<string>();
   private monitorInterval: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<EvictionConfig> = {}) {
@@ -62,11 +63,16 @@ export class CacheEvictionManager {
       const entry = this.cacheMap.get(path)!;
       entry.lastAccessTime = now;
       entry.accessCount++;
+      // Move to tail (most recently used)
+      this.lruList.moveToTail(entry.node);
     } else {
+      // Add to tail
+      const node = this.lruList.push(path);
       this.cacheMap.set(path, {
         rule,
         lastAccessTime: now,
         accessCount: 1,
+        node,
       });
     }
   }
@@ -75,7 +81,11 @@ export class CacheEvictionManager {
    * Record item removal (e.g., via delete operation)
    */
   public recordRemoval(path: string): void {
-    this.cacheMap.delete(path);
+    const entry = this.cacheMap.get(path);
+    if (entry) {
+      this.lruList.remove(entry.node);
+      this.cacheMap.delete(path);
+    }
   }
 
   /**
@@ -119,15 +129,17 @@ export class CacheEvictionManager {
    */
   public evictLRU(): string[] {
     const evicted: string[] = [];
+    const count = Math.min(this.config.evictionBatchSize, this.cacheMap.size);
 
-    // Sort by last access time (ascending = least recently used first)
-    const sorted = Array.from(this.cacheMap.entries())
-      .sort((a, b) => a[1].lastAccessTime - b[1].lastAccessTime)
-      .slice(0, this.config.evictionBatchSize);
-
-    for (const [path] of sorted) {
-      evicted.push(path);
-      this.cacheMap.delete(path);
+    for (let i = 0; i < count; i++) {
+      // Shift from head (least recently used)
+      const path = this.lruList.shift();
+      if (path !== undefined) {
+        evicted.push(path);
+        this.cacheMap.delete(path);
+      } else {
+        break;
+      }
     }
 
     this.metrics.totalEvictions++;
@@ -162,6 +174,7 @@ export class CacheEvictionManager {
    */
   public clear(): void {
     this.cacheMap.clear();
+    this.lruList.clear();
   }
 
   /**
