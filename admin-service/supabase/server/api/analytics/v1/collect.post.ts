@@ -3,6 +3,7 @@ import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'
 import { config } from '../../../utils/config'
+import { logger } from '../../../utils/logger'
 import { checkRateLimit } from '../../../utils/rate-limit'
 import { useValkey } from '../../../utils/storage'
 
@@ -43,21 +44,9 @@ function sanitizeInput(input: string): string {
     .trim()
 }
 
-// Structured logging helper
-function logAnalyticsEvent(level: 'info' | 'warn' | 'error', message: string, data?: any) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level,
-    service: config.SERVICE_NAME,
-    message,
-    data
-  }
-  console.log(JSON.stringify(logEntry))
-}
-
 // Error response helper
 function createErrorResponse(statusCode: number, message: string, details?: any) {
-  logAnalyticsEvent('error', message, { statusCode, details })
+  logger.error(message, { statusCode, details })
   return createError({
     statusCode,
     statusMessage: message,
@@ -181,7 +170,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (dbError) {
-      logAnalyticsEvent('error', 'Database insertion failed after retries', { 
+      logger.error('Database insertion failed after retries', {
         error: dbError, 
         retryCount,
         data: dbRecord 
@@ -211,7 +200,7 @@ export default defineEventHandler(async (event) => {
 
     // Log successful ingestion
     const processingTime = Date.now() - startTime
-    logAnalyticsEvent('info', 'Analytics event ingested successfully', {
+    logger.info('Analytics event ingested successfully', {
       path: sanitizedData.path,
       processingTime,
       retryCount
@@ -225,7 +214,7 @@ export default defineEventHandler(async (event) => {
 
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logAnalyticsEvent('warn', 'Validation failed', { 
+      logger.warn('Validation failed', {
         errors: error.errors,
         input: body 
       })
@@ -238,7 +227,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Handle unexpected errors
-    logAnalyticsEvent('error', 'Unexpected error in analytics ingestion', {
+    logger.error('Unexpected error in analytics ingestion', {
       error: error.message,
       stack: error.stack,
       input: body
