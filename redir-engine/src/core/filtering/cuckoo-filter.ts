@@ -8,9 +8,7 @@ export class CuckooFilter {
   }
 
   add(item: string): void {
-    if (!this.filter.has(item)) {
-        this.filter.add(item);
-    }
+    this.filter.add(item);
   }
 
   remove(item: string): void {
