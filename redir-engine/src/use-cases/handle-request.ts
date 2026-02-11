@@ -4,6 +4,10 @@ import { RedirectRule } from '../core/config/types';
 import { AnalyticsCollector } from '../core/analytics/collector';
 import { buildAnalyticsPayload } from '../core/analytics/payload-builder';
 import { UAParser } from 'ua-parser-js';
+import { LRUCache } from '../core/utils/lru-cache';
+
+// Shared LRU cache for parsed User Agent results
+const uaCache = new LRUCache<string, { device: any; os: any }>(1000);
 
 class LazyDeviceContext {
   private ua: string;
@@ -15,11 +19,19 @@ class LazyDeviceContext {
 
   get() {
     if (!this.data) {
-      const parser = new UAParser(this.ua);
-      this.data = {
-        device: parser.getDevice(),
-        os: parser.getOS(),
-      };
+      // Check cache first
+      const cached = uaCache.get(this.ua);
+      if (cached) {
+        this.data = cached;
+      } else {
+        const parser = new UAParser(this.ua);
+        this.data = {
+          device: parser.getDevice(),
+          os: parser.getOS(),
+        };
+        // Store in cache for future requests with same UA
+        uaCache.set(this.ua, this.data);
+      }
     }
     return this.data;
   }
