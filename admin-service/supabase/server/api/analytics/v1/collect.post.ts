@@ -4,6 +4,7 @@ import { createHash } from 'crypto'
 import { z } from 'zod'
 import { config } from '../../../utils/config'
 import { checkRateLimit } from '../../../utils/rate-limit'
+import { useValkey } from '../../../utils/storage'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -104,13 +105,35 @@ export default defineEventHandler(async (event) => {
     let linkId: string | null = null
     try {
       const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
-      const { data } = await client
-        .from('links')
-        .select('id')
-        .eq('slug', slug)
-        .limit(1)
-        .maybeSingle()
-      linkId = data?.id || null
+
+      const redis = useValkey()
+      const cacheKey = `link:slug:${slug}`
+      let cachedId: string | null = null
+
+      try {
+        cachedId = await redis.get(cacheKey)
+      } catch (e) {
+        // Redis error, ignore and fall back to DB
+      }
+
+      if (cachedId) {
+        linkId = cachedId === 'null' ? null : cachedId
+      } else {
+        const { data } = await client
+          .from('links')
+          .select('id')
+          .eq('slug', slug)
+          .limit(1)
+          .maybeSingle()
+        linkId = data?.id || null
+
+        // Cache the result (10 minutes)
+        try {
+          await redis.setex(cacheKey, 600, linkId || 'null')
+        } catch (e) {
+          // Redis error, ignore
+        }
+      }
     } catch (e) {
       // Ignore lookup error
     }
