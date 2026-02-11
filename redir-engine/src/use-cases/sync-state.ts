@@ -24,8 +24,22 @@ export class SyncStateUseCase {
   public handleCreate(rule: RedirectRule) {
     this.normalizeRule(rule);
     console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
+
+    // Check if path already exists in Radix Tree to handle replays correctly
+    const existing = this.radixTree.find(rule.path);
     this.radixTree.insert(rule.path, rule);
-    this.cuckooFilter.add(rule.path);
+
+    if (!existing) {
+      // New path: must add to Cuckoo Filter (unconditionally, to handle collisions)
+      this.cuckooFilter.add(rule.path);
+    } else {
+      // Path existed: likely a replay.
+      // Ensure it's in Cuckoo Filter (just in case) but avoid duplicate add if present
+      if (!this.cuckooFilter.has(rule.path)) {
+        this.cuckooFilter.add(rule.path);
+      }
+    }
+
     this.evictionManager.recordAccess(rule.path, rule);
   }
 

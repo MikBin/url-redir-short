@@ -8,6 +8,9 @@ export default defineVitestConfig({
     env: {
       SUPABASE_URL: 'https://example.com',
       SUPABASE_KEY: 'some-random-key'
+    },
+    alias: {
+      'ioredis': 'ioredis-mock'
     }
   }
 })
