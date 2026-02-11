@@ -1,6 +1,6 @@
 import { H3Event, createError } from 'h3'
-import { createHash } from 'crypto'
 import { checkRateLimit } from '../utils/rate-limit'
+import { fnv1a64 } from '../utils/hash'
 
 interface RateLimitConfig {
   windowMs: number
@@ -35,10 +35,7 @@ function getClientIdentifier(event: H3Event): string {
     : event.node.req.socket.remoteAddress || 'unknown'
   
   // Hash the IP for privacy
-  return createHash('sha256')
-    .update(ip + (process.env.RATE_LIMIT_SALT || 'default-salt'))
-    .digest('hex')
-    .substring(0, 16)
+  return fnv1a64(ip + (process.env.RATE_LIMIT_SALT || 'default-salt'))
 }
 
 function getConfig(path: string): RateLimitConfig {
