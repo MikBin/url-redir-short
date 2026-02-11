@@ -3,6 +3,7 @@ import { createHash } from 'crypto'
 import { z } from 'zod'
 import { config } from '../../../utils/config'
 import { checkRateLimit } from '../../../utils/rate-limit'
+import { useValkey } from '../../../utils/storage'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -105,6 +106,24 @@ export default defineEventHandler(async (event) => {
       let linkId: string | null = null
       try {
         const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
+    // Lookup link_id
+    let linkId: string | null = null
+    try {
+      const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
+
+      const redis = useValkey()
+      const cacheKey = `link:slug:${slug}`
+      let cachedId: string | null = null
+
+      try {
+        cachedId = await redis.get(cacheKey)
+      } catch (e) {
+        // Redis error, ignore and fall back to DB
+      }
+
+      if (cachedId) {
+        linkId = cachedId === 'null' ? null : cachedId
+      } else {
         const { data } = await client
           .from('links')
           .select('id')
@@ -115,6 +134,17 @@ export default defineEventHandler(async (event) => {
       } catch (e) {
         // Ignore lookup error
       }
+
+        // Cache the result (10 minutes)
+        try {
+          await redis.setex(cacheKey, 600, linkId || 'null')
+        } catch (e) {
+          // Redis error, ignore
+        }
+      }
+    } catch (e) {
+      // Ignore lookup error
+    }
 
       // Prepare database record
       const dbRecord = {
