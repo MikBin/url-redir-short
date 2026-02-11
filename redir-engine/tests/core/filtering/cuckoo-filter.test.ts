@@ -25,12 +25,15 @@ describe('CuckooFilter', () => {
     expect(filter.has('/test')).toBe(false);
   });
 
-  it('should handle duplicate adds gracefully', () => {
+  it('should handle duplicate adds gracefully (multiset behavior)', () => {
     filter.add('/test');
     filter.add('/test');
     expect(filter.has('/test')).toBe(true);
 
     filter.remove('/test');
-    expect(filter.has('/test')).toBe(false);
+    expect(filter.has('/test')).toBe(true); // Still exists
+
+    filter.remove('/test');
+    expect(filter.has('/test')).toBe(false); // Gone
   });
 });

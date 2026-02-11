@@ -37,7 +37,9 @@ export class SyncStateUseCase {
     // Cuckoo: Add if not present. If present, it's fine.
     // Note: Cuckoo filter generally doesn't support "update" in the sense of changing value associated with key (it only stores keys).
     // So ensuring it is in the filter is enough.
-    this.cuckooFilter.add(rule.path);
+    if (!this.cuckooFilter.has(rule.path)) {
+      this.cuckooFilter.add(rule.path);
+    }
     this.evictionManager.recordAccess(rule.path, rule);
   }
 
