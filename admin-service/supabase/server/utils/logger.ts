@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import pino from 'pino'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -12,37 +13,19 @@ export interface LogContext {
   [key: string]: unknown
 }
 
-export interface LogEntry {
-  timestamp: string
-  level: LogLevel
-  service: string
-  message: string
-  correlationId: string
-  context?: LogContext
-  error?: {
-    name: string
-    message: string
-    stack?: string
-  }
-}
-
-const LOG_LEVELS: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3
-}
-
-const currentLogLevel = (process.env.LOG_LEVEL as LogLevel) || 'info'
 const serviceName = process.env.SERVICE_NAME || 'admin-service'
+const logLevel = (process.env.LOG_LEVEL as LogLevel) || 'info'
 
-function shouldLog(level: LogLevel): boolean {
-  return LOG_LEVELS[level] >= LOG_LEVELS[currentLogLevel]
-}
-
-function formatLogEntry(entry: LogEntry): string {
-  return JSON.stringify(entry)
-}
+// Configure pino for asynchronous logging
+const rootLogger = pino({
+  level: logLevel,
+  timestamp: pino.stdTimeFunctions.isoTime,
+  messageKey: 'message',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  base: undefined, // Removes pid and hostname to match existing structure
+}, pino.destination({ sync: false }))
 
 export function generateCorrelationId(): string {
   return randomUUID()
@@ -51,41 +34,35 @@ export function generateCorrelationId(): string {
 export function createLogger(defaultContext?: LogContext) {
   const correlationId = defaultContext?.correlationId || generateCorrelationId()
 
-  function log(level: LogLevel, message: string, context?: LogContext, error?: Error) {
-    if (!shouldLog(level)) return
+  // Create a child logger with consistent bindings
+  const bindings = {
+    service: serviceName,
+    correlationId,
+  }
 
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level,
-      service: serviceName,
-      message,
-      correlationId,
-      context: { ...defaultContext, ...context }
+  const child = rootLogger.child(bindings)
+
+  function log(level: LogLevel, message: string, context?: LogContext, error?: Error) {
+    const mergedContext = { ...defaultContext, ...context }
+    // Ensure context is not empty before adding it?
+    // Existing logger always adds context field if I recall, wait.
+    // Existing logger: `context: { ...defaultContext, ...context }`
+
+    const logObject: any = {
+      context: mergedContext
     }
 
     if (error) {
-      entry.error = {
+      logObject.error = {
         name: error.name,
         message: error.message,
         stack: error.stack
       }
     }
 
-    const formatted = formatLogEntry(entry)
-
-    switch (level) {
-      case 'error':
-        console.error(formatted)
-        break
-      case 'warn':
-        console.warn(formatted)
-        break
-      case 'debug':
-        console.debug(formatted)
-        break
-      default:
-        console.log(formatted)
-    }
+    // Call pino method
+    // pino types might complain if level is not exactly one of the strings, but it is.
+    (child as any)[level](logObject, message)
   }
 
   return {
