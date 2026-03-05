@@ -36,21 +36,35 @@ async function backfill() {
 
     console.log(`Processing chunk ${page} (${events.length} events)...`);
 
+    // Batch lookup link_ids for events missing them
+    const slugsToLookup = new Set();
+    for (const event of events) {
+      if (!event.link_id) {
+        const slug = event.path.startsWith('/') ? event.path : '/' + event.path;
+        slugsToLookup.add(slug);
+      }
+    }
+
+    const linkMap = new Map();
+    if (slugsToLookup.size > 0) {
+      const { data: links, error: lookupError } = await client
+        .from('links')
+        .select('slug, id')
+        .in('slug', Array.from(slugsToLookup));
+
+      if (lookupError) {
+        console.error('Error looking up links:', lookupError);
+      } else if (links) {
+        links.forEach(l => linkMap.set(l.slug, l.id));
+      }
+    }
+
     for (const event of events) {
       let linkId = event.link_id;
       if (!linkId) {
         // Lookup link_id from path
         const slug = event.path.startsWith('/') ? event.path : '/' + event.path;
-        const { data: link } = await client
-          .from('links')
-          .select('id')
-          .eq('slug', slug)
-          .limit(1)
-          .maybeSingle();
-
-        if (link) {
-          linkId = link.id;
-        }
+        linkId = linkMap.get(slug);
       }
 
       if (linkId) {
