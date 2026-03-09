@@ -30,13 +30,15 @@ export class FetchEventSource {
         this.onopen();
       }
 
-      const parser = createParser((event) => {
-        if (event.type === 'event') {
-          const listeners = this.listeners.get(event.event || 'message');
-          if (listeners) {
-            // Mimic Event interface
-            const e = { data: event.data };
-            listeners.forEach(fn => fn(e));
+      const parser = createParser({
+        onEvent: (event) => {
+          if (event.type === 'event') {
+            const listeners = this.listeners.get(event.event || 'message');
+            if (listeners) {
+              // Mimic Event interface
+              const e = { data: event.data };
+              listeners.forEach(fn => fn(e));
+            }
           }
         }
       });
