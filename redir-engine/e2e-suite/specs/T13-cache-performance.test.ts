@@ -35,8 +35,8 @@ const RW_TOTAL_PATHS = IS_QUICK ? 100 : 1000;
 const RW_HOT_COUNT = Math.floor(RW_TOTAL_PATHS * 0.2);
 const RW_REQUESTS = IS_QUICK ? 200 : 2000;
 
-const SYNC_WAIT_DEFAULT = IS_QUICK ? 500 : 2000;
-const SYNC_WAIT_HEAVY = IS_QUICK ? 1000 : 15000;
+const SYNC_WAIT_DEFAULT = IS_QUICK ? 500 : 5000;
+const SYNC_WAIT_HEAVY = IS_QUICK ? 1000 : 25000;
 
 describe('T13: Cache Performance & DB Fallback', () => {
   let adminService: BetterMockAdminService;

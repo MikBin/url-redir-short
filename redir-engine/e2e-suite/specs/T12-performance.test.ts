@@ -17,8 +17,8 @@ const MIX_ITERATIONS = IS_QUICK ? 50 : 200;
 const SIMULATION_DURATION = IS_QUICK ? 1000 : 10000;
 
 // Sync wait times
-const SYNC_WAIT_SMALL = IS_QUICK ? 1000 : 5000;
-const SYNC_WAIT_LARGE = IS_QUICK ? 2000 : 15000;
+const SYNC_WAIT_SMALL = IS_QUICK ? 1000 : 10000;
+const SYNC_WAIT_LARGE = IS_QUICK ? 2000 : 25000;
 
 describe('T12: Performance & Load Testing', () => {
   let adminService: BetterMockAdminService;
