@@ -53,6 +53,8 @@ function createErrorResponse(statusCode: number, message: string, details?: any)
   })
 }
 
+import type { Database } from '../../../../app/types/database.types'
+
 export default defineEventHandler(async (event) => {
   const startTime = Date.now()
   const clientIP = event.node.req.headers['x-forwarded-for'] || 
@@ -67,7 +69,7 @@ export default defineEventHandler(async (event) => {
     throw createErrorResponse(429, 'Rate limit exceeded')
   }
 
-  const client = serverSupabaseServiceRole(event)
+  const client = serverSupabaseServiceRole<Database>(event)
   const body = await readBody<AnalyticsPayload>(event)
 
   try {
@@ -197,9 +199,9 @@ export default defineEventHandler(async (event) => {
             p_browser: sanitizedData.browser || null,
             p_count: 1
           })
-          if (error) logger.error('Failed to increment aggregate:', error)
+          if (error) logger.error('Failed to increment aggregate:', { error })
         } catch (e: any) {
-          logger.error('Failed to increment aggregate (exception):', e)
+          logger.error('Failed to increment aggregate (exception):', { error: e })
         }
       }
 
@@ -217,7 +219,7 @@ export default defineEventHandler(async (event) => {
       event.waitUntil(ingestTask)
     } else {
       ingestTask.catch(err => {
-        logger.error('Background ingestion task failed:', err)
+        logger.error('Background ingestion task failed:', { error: err })
       })
     }
     return { 

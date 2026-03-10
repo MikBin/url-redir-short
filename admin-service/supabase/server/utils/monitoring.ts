@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { H3Event } from 'h3'
+import type { Database } from '../../app/types/database.types'
 
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -55,7 +56,7 @@ export async function checkDatabaseHealth(event: H3Event): Promise<ComponentHeal
   const startTime = Date.now()
   
   try {
-    const client = serverSupabaseServiceRole(event)
+    const client = serverSupabaseServiceRole<Database>(event)
     
     // Simple health check query
     const { error } = await client
