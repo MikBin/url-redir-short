@@ -1,4 +1,3 @@
-
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'
@@ -90,31 +89,34 @@ export default defineEventHandler(async (event) => {
     // Set default timestamp if not provided
     const timestamp = sanitizedData.timestamp || new Date().toISOString()
 
-    // Lookup link_id
-    let linkId: string | null = null
-    try {
-      const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
-
-      const redis = useValkey()
-      const cacheKey = `link:slug:${slug}`
-      let cachedId: string | null = null
-
+    // Background task for DB ingestion
+    const ingestTask = (async () => {
+      // Lookup link_id
+      let linkId: string | null = null
       try {
-        cachedId = await redis.get(cacheKey)
-      } catch (e) {
-        // Redis error, ignore and fall back to DB
-      }
+        const slug = sanitizedData.path.startsWith('/') ? sanitizedData.path : '/' + sanitizedData.path
 
-      if (cachedId) {
-        linkId = cachedId === 'null' ? null : cachedId
-      } else {
-        const { data } = await client
-          .from('links')
-          .select('id')
-          .eq('slug', slug)
-          .limit(1)
-          .maybeSingle()
-        linkId = data?.id || null
+        const redis = useValkey()
+        const cacheKey = `link:slug:${slug}`
+        let cachedId: string | null = null
+
+        try {
+          cachedId = await redis.get(cacheKey)
+        } catch (e) {
+          // Redis error, ignore and fall back to DB
+        }
+
+        if (cachedId) {
+          linkId = cachedId === 'null' ? null : cachedId
+        } else {
+          const { data } = await client
+            .from('links')
+            .select('id')
+            .eq('slug', slug)
+            .limit(1)
+            .maybeSingle()
+          linkId = data?.id || null
+        }
 
         // Cache the result (10 minutes)
         try {
@@ -122,93 +124,105 @@ export default defineEventHandler(async (event) => {
         } catch (e) {
           // Redis error, ignore
         }
-      }
-    } catch (e) {
-      // Ignore lookup error
-    }
-
-    // Prepare database record
-    const dbRecord = {
-      path: sanitizedData.path,
-      destination: sanitizedData.destination,
-      timestamp,
-      ip: hashedIP,
-      user_agent: sanitizedData.user_agent,
-      referrer: sanitizedData.referrer,
-      referrer_source: sanitizedData.referrer_source || 'none',
-      status: sanitizedData.status,
-      session_id: sanitizedData.session_id,
-      country: sanitizedData.country,
-      city: sanitizedData.city,
-      device_type: sanitizedData.device_type,
-      browser: sanitizedData.browser,
-      os: sanitizedData.os,
-      link_id: linkId
-    }
-
-    // Insert into database with retry logic
-    let retryCount = 0
-    const maxRetries = 3
-    let dbError
-
-    while (retryCount < maxRetries) {
-      const { error } = await client
-        .from('analytics_events')
-        .insert(dbRecord)
-
-      if (!error) {
-        break
+      } catch (e) {
+        // Ignore lookup error
       }
 
-      dbError = error
-      retryCount++
-      
-      if (retryCount < maxRetries) {
-        // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+      // Prepare database record
+      const dbRecord = {
+        path: sanitizedData.path,
+        destination: sanitizedData.destination,
+        timestamp,
+        ip: hashedIP,
+        user_agent: sanitizedData.user_agent,
+        referrer: sanitizedData.referrer,
+        referrer_source: sanitizedData.referrer_source || 'none',
+        status: sanitizedData.status,
+        session_id: sanitizedData.session_id,
+        country: sanitizedData.country,
+        city: sanitizedData.city,
+        device_type: sanitizedData.device_type,
+        browser: sanitizedData.browser,
+        os: sanitizedData.os,
+        link_id: linkId
       }
-    }
 
-    if (dbError) {
-      logger.error('Database insertion failed after retries', {
-        error: dbError, 
-        retryCount,
-        data: dbRecord 
+      // Insert into database with retry logic
+      let retryCount = 0
+      const maxRetries = 3
+      let dbError
+
+      while (retryCount < maxRetries) {
+        const { error } = await client
+          .from('analytics_events')
+          .insert(dbRecord)
+
+        if (!error) {
+          dbError = null
+          break
+        }
+
+        dbError = error
+        retryCount++
+
+        if (retryCount < maxRetries) {
+          // Exponential backoff
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+        }
+      }
+
+      if (dbError) {
+        logger.error('Database insertion failed after retries', {
+          error: dbError,
+          retryCount,
+          data: dbRecord
+        })
+        return
+      }
+
+      // Update aggregates if linkId exists
+      if (linkId) {
+        const date = new Date(timestamp)
+        const dateStr = date.toISOString().split('T')[0]
+        const hour = date.getUTCHours()
+
+        // Async atomic update using RPC
+        try {
+          const { error } = await client.rpc('increment_analytics_aggregate', {
+            p_link_id: linkId,
+            p_date: dateStr,
+            p_hour: hour,
+            p_country: sanitizedData.country || null,
+            p_device_type: sanitizedData.device_type || null,
+            p_browser: sanitizedData.browser || null,
+            p_count: 1
+          })
+          if (error) logger.error('Failed to increment aggregate:', error)
+        } catch (e: any) {
+          logger.error('Failed to increment aggregate (exception):', e)
+        }
+      }
+
+      // Log successful ingestion
+      const processingTime = Date.now() - startTime
+      logger.info('Analytics event ingested successfully', {
+        path: sanitizedData.path,
+        processingTime,
+        retryCount
       })
-      throw createErrorResponse(500, 'Failed to store analytics data', { retryCount })
+    })()
+
+    // Use event.waitUntil to ensure background task completes without blocking response
+    if (event.waitUntil) {
+      event.waitUntil(ingestTask)
+    } else {
+      ingestTask.catch(err => {
+        logger.error('Background ingestion task failed:', err)
+      })
     }
-
-    // Update aggregates if linkId exists
-    if (linkId) {
-      const date = new Date(timestamp)
-      const dateStr = date.toISOString().split('T')[0]
-      const hour = date.getUTCHours()
-
-      // Async atomic update using RPC (fire and forget)
-      client.rpc('increment_analytics_aggregate', {
-        p_link_id: linkId,
-        p_date: dateStr,
-        p_hour: hour,
-        p_country: sanitizedData.country || null,
-        p_device_type: sanitizedData.device_type || null,
-        p_browser: sanitizedData.browser || null,
-        p_count: 1
-      }).then(({ error }: any) => {
-        if (error) console.error('Failed to increment aggregate:', error)
-      }).catch((e: any) => console.error('Failed to increment aggregate (exception):', e))
-    }
-
-    // Log successful ingestion
-    const processingTime = Date.now() - startTime
-    logger.info('Analytics event ingested successfully', {
-      path: sanitizedData.path,
-      processingTime,
-      retryCount
-    })
-
     return { 
       success: true,
-      processingTime,
+      queued: true,
       timestamp
     }
 
