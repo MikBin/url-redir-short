@@ -3,59 +3,8 @@ import { CuckooFilter } from '../core/filtering/cuckoo-filter';
 import { RedirectRule } from '../core/config/types';
 import { AnalyticsCollector } from '../core/analytics/collector';
 import { buildAnalyticsPayload } from '../core/analytics/payload-builder';
-import { UAParser } from 'ua-parser-js';
-import { LRUCache } from '../core/utils/lru-cache';
-
-// Shared LRU cache for parsed User Agent results
-const uaCache = new LRUCache<string, { device: any; os: any }>(1000);
-
-class LazyDeviceContext {
-  private ua: string;
-  private data?: { device: any; os: any };
-
-  constructor(ua: string) {
-    this.ua = ua;
-  }
-
-  get() {
-    if (!this.data) {
-      // Check cache first
-      const cached = uaCache.get(this.ua);
-      if (cached) {
-        this.data = cached;
-      } else {
-        const parser = new UAParser(this.ua);
-        this.data = {
-          device: parser.getDevice(),
-          os: parser.getOS(),
-        };
-        // Store in cache for future requests with same UA
-        uaCache.set(this.ua, this.data);
-      }
-    }
-    return this.data;
-  }
-}
-
-class LazyLanguageContext {
-  private header: string | null;
-  private languages?: string[];
-
-  constructor(header: string | null) {
-    this.header = header;
-  }
-
-  get(): string[] {
-    if (!this.languages) {
-      if (!this.header) {
-        this.languages = [];
-      } else {
-        this.languages = this.header.toLowerCase().split(',').map((l) => l.split(';')[0].trim());
-      }
-    }
-    return this.languages;
-  }
-}
+import { LazyDeviceContext } from '../core/context/lazy-device-context';
+import { LazyLanguageContext } from '../core/context/lazy-language-context';
 
 // Define the result type for handleRequest
 export type HandleRequestResult =
