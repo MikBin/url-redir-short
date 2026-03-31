@@ -12,3 +12,7 @@ coverage/
 # OpenSpec draft changes (before approval)
 openspec/changes/DRAFT-*/
 **/load-tests/k6
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/url-redir-short.iml
+/.idea/vcs.xml
