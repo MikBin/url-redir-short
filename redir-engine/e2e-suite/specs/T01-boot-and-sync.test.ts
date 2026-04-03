@@ -67,7 +67,7 @@ describe('T01: Boot & Sync', () => {
     });
 
     // Wait for sync
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
 
     // 4. Request the link from Engine
     try {

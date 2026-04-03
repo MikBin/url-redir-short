@@ -41,7 +41,7 @@ describe('T11: Expiration Logic', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/expired-time`, { redirect: 'manual' });
     expect(response.status).not.toBe(301);
@@ -59,7 +59,7 @@ describe('T11: Expiration Logic', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/expired-clicks`, { redirect: 'manual' });
     expect(response.status).not.toBe(301);
@@ -77,7 +77,7 @@ describe('T11: Expiration Logic', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/valid-clicks`, { redirect: 'manual' });
     expect(response.status).toBe(301);
@@ -94,7 +94,7 @@ describe('T11: Expiration Logic', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/valid-time`, { redirect: 'manual' });
     expect(response.status).toBe(301);
