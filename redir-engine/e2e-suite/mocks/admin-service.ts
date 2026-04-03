@@ -20,7 +20,6 @@ export class BetterMockAdminService extends EventEmitter {
   private setupRoutes() {
     this.app.get('/sync/stream', async (c) => {
       this.connectionCount++;
-      this.emit('connection');
       console.log(`[MockAdmin] Client connected (Total: ${this.connectionCount})`);
 
       return streamSSE(c, async (stream) => {
@@ -38,6 +37,7 @@ export class BetterMockAdminService extends EventEmitter {
         };
 
         this.on('push', listener);
+        this.emit('connection');
 
         let aborted = false;
         stream.onAbort(() => {
