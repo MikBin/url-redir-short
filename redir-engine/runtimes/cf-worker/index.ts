@@ -28,11 +28,6 @@ export default {
     const ADMIN_SERVICE_URL = env.ADMIN_SERVICE_URL || 'http://localhost:3001/sync/stream';
     const ANALYTICS_SERVICE_URL = env.ANALYTICS_SERVICE_URL || 'http://localhost:3002';
 
-    // Hack to keep Miniflare alive for the SSE stream to process background events in E2E tests
-    if (env.E2E_TEST_MODE === 'true') {
-      ctx.waitUntil(new Promise(() => {}));
-    }
-
     if (!initialized) {
         // Dynamic imports
         const cuckooModule = await import('../../src/core/filtering/cuckoo-filter');
@@ -71,6 +66,13 @@ export default {
         (data: any) => syncState.handleUpdate(data),
         (data: any) => syncState.handleDelete(data)
       );
+
+      // Hack to keep Miniflare alive for the SSE stream to process background events in E2E tests
+      // By attaching the SSE stream's underlying Promise to waitUntil ONLY during initialization, we avoid
+      // exhausting Miniflare's resources with unresolving dummy promises or orphaned background tasks.
+      if (env.E2E_TEST_MODE === 'true' && sseClient.eventSource?.promise) {
+        ctx.waitUntil(sseClient.eventSource.promise);
+      }
 
       initialized = true;
     }
