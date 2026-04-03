@@ -32,6 +32,7 @@ export class FetchEventSource {
 
       const parser = createParser({
         onEvent: (event) => {
+          // EventSourceMessage in v3+ doesn't have a 'type' property
           const listeners = this.listeners.get(event.event || 'message');
           if (listeners) {
             // Mimic Event interface
