@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npm run dev:all",
     "dev:all": "npm-run-all --parallel dev:admin dev:engine",
-    "dev:admin": "cd admin-service/supabase && npm run dev",
+    "dev:admin": "cd admin-service/pocketbase && npm run dev",
+    "dev:admin:supabase": "cd admin-service/supabase && npm run dev",
     "dev:engine": "cd redir-engine && npm run dev",
     "dev:supabase": "npx supabase start",
     "dev:stop": "npx supabase stop",
