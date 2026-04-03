@@ -1,0 +1,522 @@
+[
+  {
+    "name": "domains",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "domain",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "owner_id",
+        "type": "relation",
+        "required": true,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_domains_domain` ON `domains` (`domain`)"
+    ],
+    "listRule": "@request.auth.id = owner_id",
+    "viewRule": "@request.auth.id = owner_id",
+    "createRule": "@request.auth.id = owner_id",
+    "updateRule": "@request.auth.id = owner_id",
+    "deleteRule": "@request.auth.id = owner_id"
+  },
+  {
+    "name": "links",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "slug",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "destination",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "owner_id",
+        "type": "relation",
+        "required": true,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      },
+      {
+        "name": "domain_id",
+        "type": "relation",
+        "required": false,
+        "unique": false,
+        "options": {
+          "collectionId": "domains",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      },
+      {
+        "name": "is_active",
+        "type": "bool",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "targeting",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "ab_testing",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "hsts",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "password_protection",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "expires_at",
+        "type": "date",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "name": "max_clicks",
+        "type": "number",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_links_slug_domain_id` ON `links` (`slug`, `domain_id`)"
+    ],
+    "listRule": "@request.auth.id = owner_id",
+    "viewRule": "@request.auth.id = owner_id",
+    "createRule": "@request.auth.id = owner_id",
+    "updateRule": "@request.auth.id = owner_id",
+    "deleteRule": "@request.auth.id = owner_id"
+  },
+  {
+    "name": "sessions",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "session_id",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "user_id",
+        "type": "relation",
+        "required": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      },
+      {
+        "name": "expires_at",
+        "type": "date",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "name": "device_fingerprint",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "last_activity_at",
+        "type": "date",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_sessions_session_id` ON `sessions` (`session_id`)",
+      "CREATE INDEX `idx_sessions_user_id` ON `sessions` (`user_id`)",
+      "CREATE INDEX `idx_sessions_expires_at` ON `sessions` (`expires_at`)"
+    ],
+    "listRule": "@request.auth.id = user_id",
+    "viewRule": "@request.auth.id = user_id",
+    "createRule": "@request.auth.id = user_id",
+    "updateRule": null,
+    "deleteRule": "@request.auth.id = user_id"
+  },
+  {
+    "name": "analytics_events",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "destination",
+        "type": "text",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "timestamp",
+        "type": "date",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "name": "ip",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "user_agent",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "referrer",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "referrer_source",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "status",
+        "type": "number",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null
+        }
+      },
+      {
+        "name": "session_id",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "country",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "city",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "device_type",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "browser",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "os",
+        "type": "text",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "link_id",
+        "type": "relation",
+        "required": false,
+        "unique": false,
+        "options": {
+          "collectionId": "links",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_analytics_path_timestamp` ON `analytics_events` (`path`, `timestamp`)",
+      "CREATE INDEX `idx_analytics_destination_timestamp` ON `analytics_events` (`destination`, `timestamp`)",
+      "CREATE INDEX `idx_analytics_device_type` ON `analytics_events` (`device_type`)",
+      "CREATE INDEX `idx_analytics_country` ON `analytics_events` (`country`)",
+      "CREATE INDEX `idx_analytics_link_id` ON `analytics_events` (`link_id`)",
+      "CREATE INDEX `idx_analytics_session_id` ON `analytics_events` (`session_id`)",
+      "CREATE INDEX `idx_analytics_created_at` ON `analytics_events` (`created`)"
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
+  },
+  {
+    "name": "analytics_aggregates",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "link_id",
+        "type": "relation",
+        "required": true,
+        "unique": false,
+        "options": {
+          "collectionId": "links",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": []
+        }
+      },
+      {
+        "name": "date",
+        "type": "date",
+        "required": true,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "name": "hour",
+        "type": "number",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null
+        }
+      },
+      {
+        "name": "click_count",
+        "type": "number",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null
+        }
+      },
+      {
+        "name": "unique_visitors",
+        "type": "number",
+        "required": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null
+        }
+      },
+      {
+        "name": "conversion_data",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "country_breakdown",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "device_breakdown",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "browser_breakdown",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "name": "referrer_breakdown",
+        "type": "json",
+        "required": false,
+        "unique": false,
+        "options": {}
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_aggregates_link_date_hour` ON `analytics_aggregates` (`link_id`, `date`, `hour`)",
+      "CREATE INDEX `idx_aggregates_link_date` ON `analytics_aggregates` (`link_id`, `date`)",
+      "CREATE INDEX `idx_aggregates_date` ON `analytics_aggregates` (`date`)"
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
+  }
+]
