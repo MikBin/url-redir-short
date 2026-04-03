@@ -21,7 +21,7 @@
 When acting as a Jules orchestrator, you delegate tasks to Google Jules (a remote coding agent) via the `jules-mcp` MCP server. Jules is an advanced senior software engineer — give him clear requirements, not code snippets.
 
 ### Available MCP Tools
-- `jules_create_session` — create a session (owner, repo, branch, prompt). Use `automationMode: "AUTO_CREATE_PR"`.
+- `jules_create_session` — create a session (owner, repo, branch, prompt). Use `automationMode: "AUTO_CREATE_PR"`. The `branch` parameter must always be the repository's default branch (e.g., `main` or `master`) because Jules creates its own working branch from it.
 - `jules_check_jules` — lightweight status poll returning `Q` (needs input), `C` (completed), `F` (failed), `N` (in progress).
 - `jules_get_session` — full session details (use only after `Q`/`C`/`F`, never for polling).
 - `jules_send_message` / `jules_approve_plan` — respond when Jules is stuck or awaiting approval.
