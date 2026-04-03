@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "description": "Black-box E2E test suite for redir-engine",
   "scripts": {
-    "test": "vitest",
-    "test:node": "cross-env TEST_RUNTIME=node vitest",
-    "test:cf": "cross-env TEST_RUNTIME=cf-worker vitest"
+    "test": "vitest --no-file-parallelism",
+    "test:node": "cross-env TEST_RUNTIME=node vitest --no-file-parallelism",
+    "test:cf": "cross-env TEST_RUNTIME=cf-worker vitest --no-file-parallelism"
   },
   "dependencies": {
     "@hono/node-server": "^1.0.0",

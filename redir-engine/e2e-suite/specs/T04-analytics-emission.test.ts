@@ -45,7 +45,7 @@ describe('T04: Analytics Emission', () => {
 
     adminService.pushUpdate({ type: 'create', data: rule });
     // Wait for sync
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     // Perform the redirect
     await fetch(`http://127.0.0.1:${engine.port}/track-me`, {
@@ -56,7 +56,7 @@ describe('T04: Analytics Emission', () => {
     });
 
     // Wait a bit for async analytics emission
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
 
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);

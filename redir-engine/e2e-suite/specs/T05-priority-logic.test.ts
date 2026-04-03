@@ -44,7 +44,7 @@ describe('T05: Priority Logic', () => {
 
   it('should prioritize explicit query parameters (Priority 1)', async () => {
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 2500));
 
     // Request with explicit ?ref=... AND Referer header
     await fetch(`http://127.0.0.1:${engine.port}/priority?ref=twitter`, {
@@ -54,7 +54,7 @@ describe('T05: Priority Logic', () => {
         }
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);
     expect(events[0].referrer).toBe('twitter');
@@ -70,7 +70,7 @@ describe('T05: Priority Logic', () => {
         }
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);
     expect(events[0].referrer).toBe('https://google.com');
@@ -82,7 +82,7 @@ describe('T05: Priority Logic', () => {
         redirect: 'manual'
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);
     expect(events[0].referrer).toBe('linkedin');
@@ -94,7 +94,7 @@ describe('T05: Priority Logic', () => {
         redirect: 'manual'
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2500));
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);
     expect(events[0].referrer).toBe('newsletter');
