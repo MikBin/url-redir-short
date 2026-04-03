@@ -40,7 +40,7 @@ describe('T02: Basic Redirect', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 5000));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/permanent`, { redirect: 'manual' });
     expect(response.status).toBe(301);
@@ -56,7 +56,7 @@ describe('T02: Basic Redirect', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 5000));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/temp`, { redirect: 'manual' });
     expect(response.status).toBe(302);

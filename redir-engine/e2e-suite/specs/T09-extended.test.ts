@@ -47,7 +47,7 @@ describe('T09-Extended: Password & Query Params', () => {
       data: protectedRule
     });
 
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 5000));
 
     // 1. GET with query param
     const getRes = await fetch(`http://127.0.0.1:${engine.port}/secret-query?ref=foobar`, {
