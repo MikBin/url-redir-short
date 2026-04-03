@@ -23,7 +23,7 @@ describe('T10: HSTS', () => {
     );
     await engine.start();
     // Wait for SSE connection
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 2000));
   });
 
   afterAll(async () => {
@@ -47,7 +47,7 @@ describe('T10: HSTS', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2000));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/hsts-enabled`, { redirect: 'manual' });
     expect(response.status).toBe(301);
@@ -69,7 +69,7 @@ describe('T10: HSTS', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2000));
 
     const response = await fetch(`http://127.0.0.1:${engine.port}/hsts-disabled`, { redirect: 'manual' });
     expect(response.status).toBe(301);

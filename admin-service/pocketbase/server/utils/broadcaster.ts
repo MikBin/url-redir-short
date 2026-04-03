@@ -1,6 +1,10 @@
+import { EventEmitter } from 'events';
+
+export const syncEvents = new EventEmitter();
+export const SYNC_EVENT_NAME = 'db-change';
+
 export const broadcaster = {
-  broadcast: (event: string, data: any) => {
-    // Basic stub for now. Real implementation in T4.
-    console.log(`Broadcasting ${event}`, data);
+  broadcast: (type: string, data: any) => {
+    syncEvents.emit(SYNC_EVENT_NAME, { type, data });
   }
-}
+};

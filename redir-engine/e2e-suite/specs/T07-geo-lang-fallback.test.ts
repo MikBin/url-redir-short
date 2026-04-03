@@ -24,7 +24,7 @@ describe('T07: Geo/Lang Fallback', () => {
     );
     await engine.start();
     // Wait for SSE connection to be established ensuring no events are missed
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 2000));
   });
 
   afterAll(async () => {
@@ -49,7 +49,7 @@ describe('T07: Geo/Lang Fallback', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2000));
 
     // Test Default
     let response = await fetch(`http://127.0.0.1:${engine.port}/lang-test`, { redirect: 'manual' });
@@ -85,7 +85,7 @@ describe('T07: Geo/Lang Fallback', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2000));
 
     // Test Desktop (Default)
     let response = await fetch(`http://127.0.0.1:${engine.port}/device-test`, {

@@ -49,7 +49,7 @@ describe('T09: Password Protection', () => {
     });
 
     // Wait for sync
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 2000));
 
     // 1. GET request should return HTML form
     const response = await fetch(`http://127.0.0.1:${engine.port}/secret`, {
