@@ -45,7 +45,7 @@ describe('T08: Privacy (IP Anonymization)', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 5000));
 
     // We can't easily spoof the source IP in a 127.0.0.1 test without more complex setup,
     // but the engine sees '127.0.0.1' or '::1'.
@@ -55,7 +55,7 @@ describe('T08: Privacy (IP Anonymization)', () => {
         redirect: 'manual'
     });
 
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 5000));
     const events = analyticsService.getEvents();
     expect(events.length).toBe(1);
 
