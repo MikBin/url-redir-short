@@ -5,6 +5,7 @@ globalThis.Buffer = Buffer;
 interface Env {
   ADMIN_SERVICE_URL: string;
   ANALYTICS_SERVICE_URL: string;
+  E2E_TEST_MODE?: string;
 }
 
 // Global State
@@ -26,6 +27,11 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const ADMIN_SERVICE_URL = env.ADMIN_SERVICE_URL || 'http://localhost:3001/sync/stream';
     const ANALYTICS_SERVICE_URL = env.ANALYTICS_SERVICE_URL || 'http://localhost:3002';
+
+    // Hack to keep Miniflare alive for the SSE stream to process background events in E2E tests
+    if (env.E2E_TEST_MODE === 'true') {
+      ctx.waitUntil(new Promise(() => {}));
+    }
 
     if (!initialized) {
         // Dynamic imports

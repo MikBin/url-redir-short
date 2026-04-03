@@ -31,7 +31,7 @@ export class BetterMockAdminService extends EventEmitter {
               id: String(Date.now()),
             });
           } catch (e) {
-            // Stream closed
+            console.error('[MockAdmin] Error writing SSE:', e);
           }
         };
 
