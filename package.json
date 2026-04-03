@@ -1,0 +1,31 @@
+{
+  "name": "url-redir-short",
+  "version": "1.0.0",
+  "description": "URL Redirect Shortener with Admin and Engine services",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "npm-run-all --parallel dev:admin dev:engine",
+    "dev:admin": "cd admin-service/supabase && npm run dev",
+    "dev:engine": "cd redir-engine && npm run dev",
+    "dev:supabase": "npx supabase start",
+    "dev:stop": "npx supabase stop",
+    "build": "npm-run-all build:admin build:engine",
+    "build:admin": "cd admin-service/supabase && npm run build",
+    "build:engine": "cd redir-engine && npm run build",
+    "test": "npm-run-all test:admin test:engine",
+    "test:admin": "cd admin-service/supabase && npm test",
+    "test:engine": "cd redir-engine && npm test",
+    "test:e2e": "cd redir-engine/e2e-suite && npm test",
+    "test:system": "cd system-e2e && npm test",
+    "docker:up": "podman-compose up",
+    "docker:down": "podman-compose down",
+    "docker:build": "podman-compose build",
+    "docker:logs": "podman-compose logs -f",
+    "docker:logs:admin": "podman-compose logs -f admin",
+    "docker:logs:engine": "podman-compose logs -f engine"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}
