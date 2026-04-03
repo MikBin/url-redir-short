@@ -5,6 +5,7 @@ globalThis.Buffer = Buffer;
 interface Env {
   ADMIN_SERVICE_URL: string;
   ANALYTICS_SERVICE_URL: string;
+  E2E_TEST_MODE?: string;
 }
 
 // Global State
@@ -65,6 +66,13 @@ export default {
         (data: any) => syncState.handleUpdate(data),
         (data: any) => syncState.handleDelete(data)
       );
+
+      // Hack to keep Miniflare alive for the SSE stream to process background events in E2E tests
+      // By attaching the SSE stream's underlying Promise to waitUntil ONLY during initialization, we avoid
+      // exhausting Miniflare's resources with unresolving dummy promises or orphaned background tasks.
+      if (env.E2E_TEST_MODE === 'true' && sseClient.eventSource?.promise) {
+        ctx.waitUntil(sseClient.eventSource.promise);
+      }
 
       initialized = true;
     }
