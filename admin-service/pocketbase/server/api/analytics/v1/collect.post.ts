@@ -6,7 +6,7 @@ const AnalyticsPayloadSchema = z.object({
   path: z.string().min(1).max(2048),
   destination: z.string().min(1).max(2048).url(),
   timestamp: z.string().datetime().optional(),
-  ip: z.string().ip().optional(),
+  ip: z.string().optional(),
   user_agent: z.string().max(500).nullable().optional(),
   referrer: z.string().max(2048).url().nullable().optional(),
   referrer_source: z.enum(['explicit', 'implicit', 'none']).optional(),
