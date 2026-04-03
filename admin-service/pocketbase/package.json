@@ -3,10 +3,13 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "nuxt build",
     "dev": "nuxt dev",
-    "generate": "nuxt generate",
+    "build": "nuxt build",
     "preview": "nuxt preview",
+    "test": "vitest",
+    "pb:start": "pocketbase serve",
+    "pb:init": "node pb_init.js",
+    "generate": "nuxt generate",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
