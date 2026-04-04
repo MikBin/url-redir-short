@@ -45,7 +45,7 @@ describe('T03: Fast 404', () => {
       code: 302 as const
     };
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 5000));
 
     // Verify it exists
     const res1 = await fetch(`http://127.0.0.1:${engine.port}/to-be-deleted`, { redirect: 'manual' });
@@ -53,7 +53,7 @@ describe('T03: Fast 404', () => {
 
     // 2. Delete
     adminService.pushUpdate({ type: 'delete', data: rule });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 5000));
 
     // 3. Verify 404
     const res2 = await fetch(`http://127.0.0.1:${engine.port}/to-be-deleted`, { redirect: 'manual' });

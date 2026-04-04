@@ -6,9 +6,13 @@ export class FetchEventSource {
   public onerror: ((err: any) => void) | null = null;
   private listeners: Map<string, ((e: any) => void)[]> = new Map();
 
+  public promise: Promise<void>;
+
   constructor(url: string) {
     this.controller = new AbortController();
-    this.start(url).catch(() => {});
+    this.promise = this.start(url).catch((err) => {
+      console.error('[FetchEventSource] Unhandled error:', err);
+    });
   }
 
   private async start(url: string) {

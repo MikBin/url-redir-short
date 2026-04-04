@@ -58,6 +58,7 @@ export class EngineController {
     const devVarsContent = `
 ADMIN_SERVICE_URL=${this.adminUrl}
 ANALYTICS_SERVICE_URL=${this.analyticsUrl}
+E2E_TEST_MODE=true
 `;
     fs.writeFileSync(devVarsPath, devVarsContent);
 

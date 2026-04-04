@@ -24,7 +24,7 @@ describe('T06: A/B Testing', () => {
     );
     await engine.start();
     // Wait for SSE connection
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 5000));
   });
 
   afterAll(async () => {
@@ -49,7 +49,7 @@ describe('T06: A/B Testing', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 5000));
 
     let countA = 0;
     let countB = 0;

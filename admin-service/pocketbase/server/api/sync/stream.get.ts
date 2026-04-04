@@ -1,0 +1,55 @@
+import { syncEvents, SYNC_EVENT_NAME } from '../../utils/broadcaster'
+
+export default defineEventHandler(async (event) => {
+  // 1. Authorization
+  const authHeader = getHeader(event, 'authorization')
+
+  // Use runtime configuration or environment variables directly
+  const apiKey = process.env.SYNC_API_KEY
+  if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+    setResponseStatus(event, 401)
+    return { error: 'Unauthorized' }
+  }
+
+  // 2. SSE Setup
+  setHeader(event, 'Content-Type', 'text/event-stream')
+  setHeader(event, 'Cache-Control', 'no-cache')
+  setHeader(event, 'Connection', 'keep-alive')
+  setResponseStatus(event, 200)
+
+  // 3. Create Stream
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder()
+
+      const send = (msg: any) => {
+        let str = ''
+        if (msg.event) {
+          str += `event: ${msg.event}\n`
+          str += `data: ${JSON.stringify(msg.data)}\n\n`
+        } else {
+          // Default message without explicit event type (e.g. initial connection)
+          str += `data: ${JSON.stringify(msg)}\n\n`
+        }
+        controller.enqueue(encoder.encode(str))
+      }
+
+      // Send initial connection event
+      send({ type: 'connected', timestamp: Date.now() })
+
+      // Listener for DB changes
+      const listener = (data: any) => {
+        send(data)
+      }
+
+      syncEvents.on(SYNC_EVENT_NAME, listener)
+
+      // Cleanup when request closes
+      event.node.req.on('close', () => {
+        syncEvents.off(SYNC_EVENT_NAME, listener)
+      })
+    }
+  })
+
+  return stream
+})

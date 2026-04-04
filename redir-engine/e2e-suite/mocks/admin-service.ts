@@ -19,11 +19,9 @@ export class BetterMockAdminService extends EventEmitter {
 
   private setupRoutes() {
     this.app.get('/sync/stream', async (c) => {
-      this.connectionCount++;
-      this.emit('connection');
-      console.log(`[MockAdmin] Client connected (Total: ${this.connectionCount})`);
-
       return streamSSE(c, async (stream) => {
+        this.connectionCount++;
+
         const listener = async (payload: any) => {
           if (!this.running) return;
           try {
@@ -33,11 +31,22 @@ export class BetterMockAdminService extends EventEmitter {
               id: String(Date.now()),
             });
           } catch (e) {
-            // Stream closed
+            console.error('[MockAdmin] Error writing SSE:', e);
           }
         };
 
         this.on('push', listener);
+        this.emit('connection');
+
+        // Let the client know it connected successfully
+        await stream.writeSSE({
+          data: 'connected',
+          event: 'connected',
+          id: String(Date.now()),
+        });
+
+        this.emit('connection');
+        console.log(`[MockAdmin] Client connected (Total: ${this.connectionCount})`);
 
         let aborted = false;
         stream.onAbort(() => {
