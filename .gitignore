@@ -16,3 +16,11 @@ openspec/changes/DRAFT-*/
 /.idea/modules.xml
 /.idea/url-redir-short.iml
 /.idea/vcs.xml
+admin-service/pocketbase/pocketbase.exe
+pocketbase.zip
+admin-service/pocketbase/pb_data/data.db
+admin-service/pocketbase/pb_data/data.db-shm
+admin-service/pocketbase/pb_data/data.db-wal
+admin-service/pocketbase/pb_data/logs.db
+admin-service/pocketbase/pb_data/logs.db-shm
+admin-service/pocketbase/pb_data/logs.db-wal
