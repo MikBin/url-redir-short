@@ -14,8 +14,8 @@ async function init() {
     }
 
     console.log(`Authenticating as admin ${adminEmail}...`);
-    // Admin authentication
-    await pb.admins.authWithPassword(
+    // Admin authentication (PocketBase 0.22+ uses _superusers collection)
+    await pb.collection('_superusers').authWithPassword(
       process.env.PB_ADMIN_EMAIL,
       process.env.PB_ADMIN_PASSWORD
     );
