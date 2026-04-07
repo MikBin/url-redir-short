@@ -1,0 +1,669 @@
+<template>
+  <div>
+    <div class="flex justify-between items-center mb-4">
+      <div class="flex items-baseline gap-4">
+          <h1 class="text-2xl font-bold">Dashboard</h1>
+          <NuxtLink to="/status" class="text-sm text-indigo-600 hover:text-indigo-800">System Status</NuxtLink>
+      </div>
+      <button @click="showBulkModal = true" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Bulk Import</button>
+    </div>
+
+    <!-- Create/Edit Link Form -->
+    <div class="bg-white p-6 rounded shadow mb-8">
+      <h2 class="text-xl font-semibold mb-4">{{ isEditing ? 'Edit Link' : 'Create New Link' }}</h2>
+      <form @submit.prevent="saveLink" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Slug</label>
+            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" required />
+            <p v-if="slugError" class="text-red-500 text-xs mt-1">{{ slugError }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Destination</label>
+            <input v-model="newLink.destination" type="url" placeholder="https://..." class="mt-1 w-full border border-gray-300 rounded p-2" required />
+          </div>
+        </div>
+
+        <!-- Expiration Section -->
+        <div class="border-t pt-4">
+          <h3 class="text-lg font-medium mb-3">Expiration</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Expires At</label>
+              <input v-model="newLink.expires_at" type="datetime-local" class="mt-1 w-full border border-gray-300 rounded p-2" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Clicks</label>
+              <input v-model.number="newLink.max_clicks" type="number" placeholder="e.g. 100" class="mt-1 w-full border border-gray-300 rounded p-2" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Section -->
+        <div class="border-t pt-4">
+          <h3 class="text-lg font-medium mb-3">Security</h3>
+
+          <!-- Password Protection -->
+          <div class="mb-4">
+            <div class="flex items-center">
+               <input v-model="newLink.password_protection.enabled" id="pwd-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+               <label for="pwd-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable Password Protection</label>
+            </div>
+            <div v-if="newLink.password_protection.enabled" class="mt-2">
+               <label class="block text-sm font-medium text-gray-700">Password</label>
+               <input v-model="newLink.password_protection.password" type="password" class="mt-1 w-full border border-gray-300 rounded p-2" placeholder="Secret Password" />
+            </div>
+          </div>
+
+          <!-- HSTS -->
+          <div>
+            <div class="flex items-center">
+               <input v-model="newLink.hsts.enabled" id="hsts-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+               <label for="hsts-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable HSTS</label>
+            </div>
+            <div v-if="newLink.hsts.enabled" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div>
+                  <label class="block text-sm font-medium text-gray-700">Max Age (seconds)</label>
+                  <input v-model.number="newLink.hsts.maxAge" type="number" class="mt-1 w-full border border-gray-300 rounded p-2" />
+               </div>
+               <div class="flex items-center mt-6">
+                  <input v-model="newLink.hsts.includeSubDomains" id="hsts-sub" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+                  <label for="hsts-sub" class="ml-2 block text-sm font-medium text-gray-700">Include SubDomains</label>
+               </div>
+               <div class="flex items-center mt-6">
+                  <input v-model="newLink.hsts.preload" id="hsts-preload" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+                  <label for="hsts-preload" class="ml-2 block text-sm font-medium text-gray-700">Preload</label>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Targeting Section -->
+        <div class="border-t pt-4">
+          <h3 class="text-lg font-medium mb-3">Targeting</h3>
+          <div class="flex items-center mb-4">
+             <input v-model="newLink.targeting.enabled" id="targeting-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+             <label for="targeting-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable Targeting</label>
+          </div>
+          <div v-if="newLink.targeting.enabled">
+            <div v-for="(rule, index) in newLink.targeting.rules" :key="rule.id" class="flex flex-col md:flex-row gap-2 mb-2 items-end border p-2 rounded bg-gray-50">
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-gray-500">Target</label>
+                <select v-model="rule.target" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm">
+                  <option value="country">Country</option>
+                  <option value="device">Device</option>
+                  <option value="language">Language</option>
+                </select>
+              </div>
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-gray-500">Value</label>
+                <input v-model="rule.value" type="text" placeholder="e.g. US, mobile, en" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+              </div>
+              <div class="flex-[2]">
+                <label class="block text-xs font-medium text-gray-500">Destination</label>
+                <input v-model="rule.destination" type="url" placeholder="https://..." class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+              </div>
+              <button type="button" @click="removeTargetingRule(index)" class="text-red-600 hover:text-red-900 p-2">Remove</button>
+            </div>
+            <button type="button" @click="addTargetingRule" class="text-sm text-blue-600 hover:text-blue-800 font-medium">+ Add Rule</button>
+
+            <!-- Preview Section -->
+            <div class="mt-6 border-t border-dashed pt-4">
+               <h4 class="text-sm font-bold mb-3 text-gray-700">Preview Routing</h4>
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Country (Code)</label>
+                      <input v-model="previewContext.country" type="text" placeholder="e.g. US" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Language</label>
+                      <input v-model="previewContext.language" type="text" placeholder="e.g. en-US" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">Device Type</label>
+                      <select v-model="previewContext.deviceType" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm">
+                          <option value="desktop">Desktop / None</option>
+                          <option value="mobile">Mobile</option>
+                          <option value="tablet">Tablet</option>
+                      </select>
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-gray-500">OS</label>
+                      <select v-model="previewContext.os" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm">
+                          <option value="other">Other / Windows / MacOS</option>
+                          <option value="iOS">iOS</option>
+                          <option value="Android">Android</option>
+                      </select>
+                  </div>
+               </div>
+               <div class="bg-gray-100 p-3 rounded text-sm">
+                   <span class="font-medium text-gray-700">Result:</span>
+                   <a :href="previewResult" target="_blank" class="text-blue-600 ml-2 hover:underline truncate inline-block align-bottom max-w-full">{{ previewResult || 'Default Destination' }}</a>
+                   <span v-if="previewResult === newLink.destination" class="ml-2 text-xs text-gray-500">(Default)</span>
+                   <span v-else class="ml-2 text-xs text-green-600 font-bold">(Matched Rule)</span>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- A/B Testing Section -->
+        <div class="border-t pt-4">
+          <h3 class="text-lg font-medium mb-3">A/B Testing</h3>
+          <div class="flex items-center mb-4">
+             <input v-model="newLink.ab_testing.enabled" id="ab-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
+             <label for="ab-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable A/B Testing</label>
+          </div>
+          <div v-if="newLink.ab_testing.enabled">
+            <div v-for="(variation, index) in newLink.ab_testing.variations" :key="variation.id" class="flex flex-col md:flex-row gap-2 mb-2 items-end border p-2 rounded bg-gray-50">
+              <div class="flex-[3]">
+                <label class="block text-xs font-medium text-gray-500">Destination</label>
+                <input v-model="variation.destination" type="url" placeholder="https://..." class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+              </div>
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-gray-500">Weight (0-100)</label>
+                <input v-model.number="variation.weight" type="number" class="mt-1 w-full border border-gray-300 rounded p-2 text-sm" />
+              </div>
+              <button type="button" @click="removeABVariation(index)" class="text-red-600 hover:text-red-900 p-2">Remove</button>
+            </div>
+            <button type="button" @click="addABVariation" class="text-sm text-blue-600 hover:text-blue-800 font-medium">+ Add Variation</button>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+            <button type="submit" class="bg-green-600 text-white p-2 rounded hover:bg-green-700 flex-1">{{ isEditing ? 'Update' : 'Create' }}</button>
+            <button v-if="isEditing" @click="cancelEdit" type="button" class="bg-gray-500 text-white p-2 rounded hover:bg-gray-600">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Link List -->
+    <div class="bg-white rounded shadow overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clicks</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr v-for="link in links" :key="link.id">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">/{{ link.slug }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs">{{ link.destination }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ link.clicks ?? '-' }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <button @click="showQR(link)" class="text-gray-600 hover:text-gray-900 mr-4">QR</button>
+              <button @click="editLink(link)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+              <button @click="deleteLink(link.id)" class="text-red-600 hover:text-red-900">Delete</button>
+            </td>
+          </tr>
+          <tr v-if="links.length === 0">
+            <td colspan="3" class="px-6 py-4 text-center text-gray-500">No links found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div v-if="showQRModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+      <div class="bg-white p-5 rounded shadow-lg text-center max-w-sm mx-auto">
+        <h3 class="text-lg font-bold mb-4">QR Code</h3>
+        <p class="text-sm text-gray-500 mb-4" v-if="currentQRLink">/{{ currentQRLink.slug }}</p>
+        <div v-if="qrCodeUrl" class="flex justify-center mb-4">
+            <img :src="qrCodeUrl" alt="QR Code" />
+        </div>
+        <div v-else class="text-gray-500 mb-4">Loading...</div>
+
+        <!-- QR Options -->
+        <div class="grid grid-cols-2 gap-4 mb-4 text-left">
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Size</label>
+              <input v-model.number="qrOptions.width" type="number" min="100" max="1000" class="w-full border rounded p-1 text-sm" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Margin</label>
+              <input v-model.number="qrOptions.margin" type="number" min="0" class="w-full border rounded p-1 text-sm" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Color</label>
+              <input v-model="qrOptions.color" type="color" class="w-full h-8 p-0 border rounded cursor-pointer" />
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Background</label>
+              <input v-model="qrOptions.bgcolor" type="color" class="w-full h-8 p-0 border rounded cursor-pointer" />
+           </div>
+        </div>
+
+        <button @click="closeQRModal" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Close</button>
+      </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div v-if="showBulkModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded shadow-lg w-full max-w-lg mx-auto">
+        <h3 class="text-xl font-bold mb-4">Bulk Import Links</h3>
+        <p class="text-sm text-gray-600 mb-2">Paste JSON array of links. Example:</p>
+        <pre class="bg-gray-100 p-2 rounded text-xs mb-4 text-gray-700 overflow-x-auto">
+[
+  { "slug": "link1", "destination": "https://example.com/1" },
+  { "slug": "link2", "destination": "https://example.com/2" }
+]
+        </pre>
+        <textarea v-model="bulkInput" rows="10" class="w-full border border-gray-300 rounded p-2 text-sm font-mono mb-4" placeholder="Paste JSON here..."></textarea>
+
+        <div v-if="bulkStatus" class="mb-4 p-2 rounded" :class="bulkStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+           {{ bulkStatus.message }}
+           <ul v-if="bulkStatus.details" class="list-disc list-inside mt-2 text-xs">
+              <li v-for="(item, i) in bulkStatus.details" :key="i">{{ item }}</li>
+           </ul>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <button @click="closeBulkModal" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
+            <button @click="importLinks" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" :disabled="isImporting">
+                {{ isImporting ? 'Importing...' : 'Import' }}
+            </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { checkTarget, type TargetingRule, type PreviewContext } from '../utils/targeting'
+
+const user = useCookie('pb_auth')
+
+// Types
+interface ABVariation {
+  id: string
+  destination: string
+  weight: number
+}
+
+interface LinkState {
+  slug: string
+  destination: string
+  expires_at: string | null
+  max_clicks: number | null
+  password_protection: {
+    enabled: boolean
+    password: string
+  }
+  hsts: {
+    enabled: boolean
+    maxAge: number
+    includeSubDomains: boolean
+    preload: boolean
+  }
+  targeting: {
+    enabled: boolean
+    rules: TargetingRule[]
+  }
+  ab_testing: {
+    enabled: boolean
+    variations: ABVariation[]
+  }
+}
+
+const links = ref<any[]>([])
+const isEditing = ref(false)
+const currentLinkId = ref<string | null>(null)
+
+const defaultLinkState: LinkState = {
+  slug: '',
+  destination: '',
+  expires_at: null,
+  max_clicks: null,
+  password_protection: {
+    enabled: false,
+    password: ''
+  },
+  hsts: {
+    enabled: false,
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: false
+  },
+  targeting: {
+    enabled: false,
+    rules: []
+  },
+  ab_testing: {
+    enabled: false,
+    variations: []
+  }
+}
+
+const newLink = ref<LinkState>(JSON.parse(JSON.stringify(defaultLinkState)))
+
+// Fetch Links
+const fetchLinks = async () => {
+  try {
+    const response: any = await $fetch('/api/links')
+    links.value = response.items || response || []
+
+    // Fetch metrics
+    try {
+        const stats = await $fetch<Record<string, number>>('/api/analytics/links/overview')
+        links.value = links.value.map(l => ({
+            ...l,
+            clicks: stats[l.id] || 0
+        }))
+    } catch (e) {
+        console.error('Failed to fetch link stats', e)
+    }
+  } catch (error: any) {
+    console.error('Error fetching links:', error)
+  }
+}
+
+// Validation
+const slugPattern = /^[a-zA-Z0-9-_]+$/
+const slugError = computed(() => {
+    if (!newLink.value.slug) return null
+    if (!slugPattern.test(newLink.value.slug)) return 'Slug can only contain letters, numbers, hyphens, and underscores.'
+    return null
+})
+
+// Save Link (Create or Update)
+const saveLink = async () => {
+  if (slugError.value) {
+      alert('Please fix errors before saving.')
+      return
+  }
+
+  // Validate targeting
+  if (newLink.value.targeting.enabled) {
+      for (const rule of newLink.value.targeting.rules) {
+          if (!rule.target || !rule.value || !rule.destination) {
+              alert('Please complete all targeting rules.')
+              return
+          }
+      }
+  }
+
+  // Validate A/B testing
+  if (newLink.value.ab_testing.enabled) {
+      for (const variation of newLink.value.ab_testing.variations) {
+          if (!variation.destination || variation.weight < 0) {
+              alert('Please complete all A/B testing variations.')
+              return
+          }
+      }
+  }
+
+  if (isEditing.value) {
+    await updateLink()
+  } else {
+    await createLink()
+  }
+}
+
+// Create Link
+const createLink = async () => {
+  if (!user.value) return
+
+  const payload = {
+    slug: newLink.value.slug,
+    destination: newLink.value.destination,
+    expires_at: newLink.value.expires_at ? new Date(newLink.value.expires_at).toISOString() : null,
+    max_clicks: newLink.value.max_clicks,
+    password_protection: newLink.value.password_protection,
+    hsts: newLink.value.hsts,
+    targeting: newLink.value.targeting,
+    ab_testing: newLink.value.ab_testing
+  }
+
+  try {
+    await $fetch('/api/links/create', {
+        method: 'POST',
+        body: payload
+    })
+
+    // Reset form and refresh list
+    newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
+    fetchLinks()
+  } catch (error: any) {
+    alert('Error creating link: ' + (error.data?.statusMessage || error.message))
+  }
+}
+
+// Update Link
+const updateLink = async () => {
+  if (!user.value || !currentLinkId.value) return
+
+  const payload = {
+    slug: newLink.value.slug,
+    destination: newLink.value.destination,
+    expires_at: newLink.value.expires_at ? new Date(newLink.value.expires_at).toISOString() : null,
+    max_clicks: newLink.value.max_clicks,
+    password_protection: newLink.value.password_protection,
+    hsts: newLink.value.hsts,
+    targeting: newLink.value.targeting,
+    ab_testing: newLink.value.ab_testing
+  }
+
+  try {
+    await $fetch(`/api/links/${currentLinkId.value}`, {
+        method: 'PATCH',
+        body: payload
+    })
+
+    cancelEdit()
+    fetchLinks()
+  } catch (error: any) {
+    alert('Error updating link: ' + (error.data?.statusMessage || error.message))
+  }
+}
+
+// Helper to format date for datetime-local input
+const formatDateForInput = (isoString: string | null) => {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  const offset = date.getTimezoneOffset() * 60000
+  const localDate = new Date(date.getTime() - offset)
+  return localDate.toISOString().slice(0, 16)
+}
+
+// Edit Link
+const editLink = (link: any) => {
+  newLink.value = {
+    slug: link.slug,
+    destination: link.destination,
+    expires_at: formatDateForInput(link.expires_at),
+    max_clicks: link.max_clicks,
+    password_protection: link.password_protection || JSON.parse(JSON.stringify(defaultLinkState.password_protection)),
+    hsts: link.hsts || JSON.parse(JSON.stringify(defaultLinkState.hsts)),
+    targeting: link.targeting || JSON.parse(JSON.stringify(defaultLinkState.targeting)),
+    ab_testing: link.ab_testing || JSON.parse(JSON.stringify(defaultLinkState.ab_testing))
+  }
+
+  // Ensure rules/variations arrays exist
+  if (!newLink.value.targeting.rules) newLink.value.targeting.rules = []
+  if (!newLink.value.ab_testing.variations) newLink.value.ab_testing.variations = []
+
+  currentLinkId.value = link.id
+  isEditing.value = true
+
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// Delete Link
+const deleteLink = async (id: string) => {
+  if (!confirm('Are you sure?')) return
+
+  try {
+    await $fetch(`/api/links/${id}`, {
+        method: 'DELETE'
+    })
+
+    fetchLinks()
+  } catch (error: any) {
+    alert('Error deleting link: ' + (error.data?.statusMessage || error.message))
+  }
+}
+
+const cancelEdit = () => {
+  isEditing.value = false
+  currentLinkId.value = null
+  newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
+}
+
+const addTargetingRule = () => {
+  newLink.value.targeting.rules.push({
+    id: Date.now().toString() + Math.random().toString().slice(2),
+    target: 'country',
+    value: '',
+    destination: ''
+  })
+}
+
+const removeTargetingRule = (index: number) => {
+  newLink.value.targeting.rules.splice(index, 1)
+}
+
+const addABVariation = () => {
+  newLink.value.ab_testing.variations.push({
+    id: Date.now().toString() + Math.random().toString().slice(2),
+    destination: '',
+    weight: 50
+  })
+}
+
+const removeABVariation = (index: number) => {
+  newLink.value.ab_testing.variations.splice(index, 1)
+}
+
+// Preview Logic
+const previewContext = ref<PreviewContext>({
+    country: '',
+    language: '',
+    deviceType: 'desktop',
+    os: 'other'
+})
+
+const previewResult = computed(() => {
+    if (!newLink.value.targeting.enabled) return newLink.value.destination
+
+    for (const rule of newLink.value.targeting.rules) {
+        if (checkTarget(rule, previewContext.value)) {
+            return rule.destination
+        }
+    }
+    return newLink.value.destination
+})
+
+// QR Code Logic
+const showQRModal = ref(false)
+const qrCodeUrl = ref<string | null>(null)
+const currentQRLink = ref<any>(null)
+const qrOptions = ref({
+  width: 200,
+  margin: 4,
+  color: '#000000',
+  bgcolor: '#ffffff'
+})
+
+const fetchQR = async () => {
+  if (!currentQRLink.value) return
+  qrCodeUrl.value = null
+  const baseUrl = window.location.origin
+  const shortUrl = `${baseUrl}/${currentQRLink.value.slug}`
+
+  try {
+     const data = await $fetch('/api/qr', {
+       query: {
+         text: shortUrl,
+         width: qrOptions.value.width,
+         margin: qrOptions.value.margin,
+         color: qrOptions.value.color,
+         bgcolor: qrOptions.value.bgcolor
+       }
+     })
+     qrCodeUrl.value = data as string
+  } catch (e) {
+     console.error(e)
+     alert('Failed to generate QR')
+  }
+}
+
+const showQR = async (link: any) => {
+  currentQRLink.value = link
+  showQRModal.value = true
+  qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff' } // Reset defaults
+  await fetchQR()
+}
+
+let debounceTimer: any = null
+watch(qrOptions, () => {
+    if (showQRModal.value) {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+            fetchQR()
+        }, 500)
+    }
+}, { deep: true })
+
+const closeQRModal = () => {
+  showQRModal.value = false
+  qrCodeUrl.value = null
+  currentQRLink.value = null
+}
+
+// Bulk Import Logic
+const showBulkModal = ref(false)
+const bulkInput = ref('')
+const isImporting = ref(false)
+const bulkStatus = ref<any>(null)
+
+const importLinks = async () => {
+  bulkStatus.value = null
+  isImporting.value = true
+
+  try {
+     const parsed = JSON.parse(bulkInput.value)
+     if (!Array.isArray(parsed)) throw new Error('Input must be an array')
+
+     const data = await $fetch('/api/bulk', {
+         method: 'POST',
+         body: { links: parsed }
+     })
+
+     if (data.success > 0) {
+         bulkStatus.value = {
+             type: 'success',
+             message: `Successfully imported ${data.success} links. Failed: ${data.failed}.`
+         }
+         fetchLinks()
+         setTimeout(() => {
+             if (data.failed === 0) closeBulkModal()
+         }, 2000)
+     } else {
+         bulkStatus.value = {
+             type: 'error',
+             message: `Import failed. 0 links imported. Failed: ${data.failed}.`,
+             details: data.invalid_items?.map((i: any) => `Invalid item: ${JSON.stringify(i)}`)
+         }
+     }
+  } catch (e: any) {
+     bulkStatus.value = { type: 'error', message: 'Error: ' + e.message }
+  } finally {
+     isImporting.value = false
+  }
+}
+
+const closeBulkModal = () => {
+  showBulkModal.value = false
+  bulkInput.value = ''
+  bulkStatus.value = null
+}
+
+// Initial Fetch
+onMounted(() => {
+  if (user.value) {
+    fetchLinks()
+  }
+})
+</script>
