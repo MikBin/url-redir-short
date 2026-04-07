@@ -8,6 +8,7 @@
           <nav class="flex space-x-4">
             <NuxtLink to="/" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium" active-class="text-blue-600 bg-gray-50">Home</NuxtLink>
             <NuxtLink to="/analytics" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium" active-class="text-blue-600 bg-gray-50">Analytics</NuxtLink>
+            <NuxtLink to="/domains" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium" active-class="text-blue-600 bg-gray-50">Domains</NuxtLink>
           </nav>
         </div>
         <div class="flex items-center space-x-4">
