@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col justify-center items-center">
-    <h1 class="text-4xl font-bold text-blue-600 mb-4">PocketBase Admin Service</h1>
-    <p class="text-gray-600">Nuxt 4 + Tailwind CSS + PocketBase Setup</p>
+  <div class="min-h-screen bg-gray-100 flex flex-col items-center">
+    <!-- Header or navigation could go here, or just let pages handle layout -->
+    <NuxtPage />
   </div>
 </template>
 
