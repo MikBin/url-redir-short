@@ -228,3 +228,127 @@ begin
     updated_at = now();
 end;
 $$;
+
+-- Function to get detailed link analytics
+create or replace function public.get_link_detailed_stats(
+  p_link_id uuid,
+  p_from timestamptz,
+  p_to timestamptz,
+  p_group_by text default 'day'
+)
+returns json
+language plpgsql
+security invoker
+as $$
+declare
+  v_path text;
+  v_result json;
+begin
+  -- Get path for the link
+  select case when slug ~ '^/' then slug else '/' || slug end
+  into v_path
+  from public.links
+  where id = p_link_id;
+
+  with filtered_events as (
+    select *
+    from public.analytics_events
+    where (link_id = p_link_id or path = v_path)
+      and timestamp >= p_from
+      and timestamp <= p_to
+  ),
+  summary as (
+    select
+      count(*) as total_clicks,
+      count(distinct session_id) as unique_visitors
+    from filtered_events
+  ),
+  periods as (
+    select generate_series(
+      date_trunc(case when p_group_by = 'week' then 'day' else p_group_by end, p_from),
+      date_trunc(case when p_group_by = 'week' then 'day' else p_group_by end, p_to),
+      (case when p_group_by = 'week' then '7 days' else '1 ' || p_group_by end)::interval
+    ) as period_start
+  ),
+  time_series as (
+    select
+      case
+        when p_group_by = 'hour' then to_char(p.period_start, 'YYYY-MM-DD"T"HH24:00:00"Z"')
+        when p_group_by = 'day' then to_char(p.period_start, 'YYYY-MM-DD')
+        when p_group_by = 'week' then to_char(p.period_start - (extract(dow from p.period_start) * interval '1 day'), 'YYYY-MM-DD')
+        when p_group_by = 'month' then to_char(p.period_start, 'YYYY-MM')
+        else to_char(p.period_start, 'YYYY-MM-DD')
+      end as period,
+      count(e.timestamp) as count
+    from periods p
+    left join filtered_events e on (
+      case
+        when p_group_by = 'hour' then date_trunc('hour', e.timestamp) = p.period_start
+        when p_group_by = 'day' then date_trunc('day', e.timestamp) = p.period_start
+        when p_group_by = 'week' then (date_trunc('day', e.timestamp) - (extract(dow from e.timestamp) * interval '1 day')) = (p.period_start - (extract(dow from p.period_start) * interval '1 day'))
+        when p_group_by = 'month' then date_trunc('month', e.timestamp) = p.period_start
+        else date_trunc('day', e.timestamp) = p.period_start
+      end
+    )
+    group by p.period_start, period
+    order by p.period_start
+  ),
+  country_breakdown as (
+    select country as value, count(*) as count
+    from filtered_events
+    where country is not null
+    group by country
+    order by count desc
+  ),
+  city_breakdown as (
+    select city as value, count(*) as count
+    from filtered_events
+    where city is not null
+    group by city
+    order by count desc
+    limit 20
+  ),
+  device_breakdown as (
+    select device_type as value, count(*) as count
+    from filtered_events
+    where device_type is not null
+    group by device_type
+    order by count desc
+  ),
+  browser_breakdown as (
+    select browser as value, count(*) as count
+    from filtered_events
+    where browser is not null
+    group by browser
+    order by count desc
+  ),
+  os_breakdown as (
+    select os as value, count(*) as count
+    from filtered_events
+    where os is not null
+    group by os
+    order by count desc
+  ),
+  referrer_breakdown as (
+    select referrer as value, count(*) as count
+    from filtered_events
+    where referrer is not null
+    group by referrer
+    order by count desc
+    limit 20
+  )
+  select json_build_object(
+    'total_clicks', (select coalesce(total_clicks, 0) from summary),
+    'unique_visitors', (select coalesce(unique_visitors, 0) from summary),
+    'time_series', (select coalesce(json_agg(t), '[]'::json) from time_series t),
+    'countries', (select coalesce(json_agg(t), '[]'::json) from country_breakdown t),
+    'cities', (select coalesce(json_agg(t), '[]'::json) from city_breakdown t),
+    'devices', (select coalesce(json_agg(t), '[]'::json) from device_breakdown t),
+    'browsers', (select coalesce(json_agg(t), '[]'::json) from browser_breakdown t),
+    'operating_systems', (select coalesce(json_agg(t), '[]'::json) from os_breakdown t),
+    'referrers', (select coalesce(json_agg(t), '[]'::json) from referrer_breakdown t)
+  ) into v_result;
+
+  return v_result;
+end;
+$$;
