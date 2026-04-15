@@ -72,9 +72,9 @@ E2E_TEST_MODE=true
     const args = useNode ? [wranglerPath] : [];
     
     if (useNode) {
-      args.push('dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1');
+      args.push('dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1');
     } else {
-      args.push('/c', wranglerPath, 'dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1');
+      args.push('/c', wranglerPath, 'dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1');
     }
 
     this.process = spawn(useNode ? 'node' : 'cmd.exe', args, {
