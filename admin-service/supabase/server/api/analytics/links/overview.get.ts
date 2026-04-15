@@ -11,11 +11,10 @@ export default defineEventHandler(async (event) => {
 
   const client = await serverSupabaseClient(event)
 
-  // Fetch click counts from analytics_aggregates
-  // We want to sum click_count group by link_id
+  // Fetch click counts from aggregated view
   const { data, error } = await client
-    .from('analytics_aggregates')
-    .select('link_id, click_count')
+    .from('link_analytics_overview')
+    .select('link_id, total_clicks')
 
   if (error) {
     console.error('Error fetching aggregates:', error)
@@ -25,9 +24,10 @@ export default defineEventHandler(async (event) => {
   const clicksByLink: Record<string, number> = {}
 
   if (data) {
-    for (const row of data) {
+    for (const row of data as any[]) {
       if (row.link_id) {
-        clicksByLink[row.link_id] = (clicksByLink[row.link_id] || 0) + (row.click_count || 0)
+        // Ensure it's a number as bigint sums might come back as strings from PostgREST
+        clicksByLink[row.link_id] = Number(row.total_clicks) || 0
       }
     }
   }

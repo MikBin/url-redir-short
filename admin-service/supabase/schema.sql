@@ -171,6 +171,14 @@ using (auth.role() = 'authenticated');
 alter publication supabase_realtime add table public.links;
 alter publication supabase_realtime add table public.domains;
 
+-- View for link analytics overview (aggregated clicks per link)
+create or replace view public.link_analytics_overview as
+select
+  link_id,
+  sum(click_count)::bigint as total_clicks
+from public.analytics_aggregates
+group by link_id;
+
 -- Replica Identity: Ensure DELETE events contain the full row
 alter table public.links replica identity full;
 
