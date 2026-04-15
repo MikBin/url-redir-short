@@ -172,7 +172,8 @@ alter publication supabase_realtime add table public.links;
 alter publication supabase_realtime add table public.domains;
 
 -- View for link analytics overview (aggregated clicks per link)
-create or replace view public.link_analytics_overview as
+create or replace view public.link_analytics_overview
+with (security_invoker = true) as
 select
   link_id,
   sum(click_count)::bigint as total_clicks
