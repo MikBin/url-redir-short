@@ -23,7 +23,8 @@ describe('T07: Geo/Lang Fallback', () => {
       runtime
     );
     await engine.start();
-    // Wait for SSE connection to be established ensuring no events are missed
+    await adminService.waitForConnection(15000);
+// Wait for SSE connection to be established ensuring no events are missed
     await new Promise(r => setTimeout(r, 5000));
   });
 

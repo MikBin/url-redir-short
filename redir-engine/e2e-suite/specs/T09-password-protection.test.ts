@@ -23,7 +23,8 @@ describe('T09: Password Protection', () => {
       runtime // Unique port for this test
     );
     await engine.start();
-  });
+    await adminService.waitForConnection(15000);
+});
 
   afterAll(async () => {
     await engine.stop();

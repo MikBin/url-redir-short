@@ -23,7 +23,8 @@ describe('T06: A/B Testing', () => {
       runtime
     );
     await engine.start();
-    // Wait for SSE connection
+    await adminService.waitForConnection(15000);
+// Wait for SSE connection
     await new Promise(r => setTimeout(r, 5000));
   });
 

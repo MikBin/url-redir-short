@@ -61,8 +61,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
     engine = new EngineController(adminUrl, analyticsUrl, 3001, runtime);
     await engine.start();
     await adminService.waitForConnection(15000);
-
-    console.log('[T13] Engine started');
+console.log('[T13] Engine started');
   }, 30000);
 
   afterAll(async () => {
