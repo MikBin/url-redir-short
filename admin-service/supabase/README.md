@@ -73,3 +73,16 @@ bun run preview
 ```
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+## Database Migrations
+
+This project uses the Supabase CLI for database migrations. The original `schema.sql` file remains as a reference, but all schema changes must be applied via incremental migrations.
+
+A helper script is provided at `scripts/migration.sh` (run from the project root) to simplify this process:
+
+```bash
+# Create a new migration file
+./scripts/migration.sh new my_migration_name
+```
+
+Please refer to `docs/development/migrations.md` in the project root for detailed information on the migration workflow, rollback strategies, and deployment processes.
