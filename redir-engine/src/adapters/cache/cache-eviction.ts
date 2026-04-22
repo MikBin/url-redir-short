@@ -95,7 +95,16 @@ export class CacheEvictionManager {
     if (this.monitorInterval) return;
 
     this.monitorInterval = setInterval(() => {
-      const heapUsedMB = process.memoryUsage().heapUsed / 1024 / 1024;
+      let heapUsedMB = 0;
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        heapUsedMB = process.memoryUsage().heapUsed / 1024 / 1024;
+      } else {
+        // Fallback for runtimes without process.memoryUsage (e.g. CF Workers)
+        // Cloudflare Workers has strict memory limits enforced externally, and we cannot read memory usage directly.
+        // We will default to 0 to avoid breaking, but memory eviction based on heap will not fire.
+        // Eviction should be triggered by item count or other signals if available.
+        heapUsedMB = 0;
+      }
       this.metrics.currentHeapMB = heapUsedMB;
 
       if (heapUsedMB > this.metrics.peakHeapMB) {

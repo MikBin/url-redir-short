@@ -96,7 +96,7 @@ E2E_TEST_MODE=true
     try {
         for (let i = 0; i < 5; i++) {
             try {
-                await fetch(`http://127.0.0.1:${this.port}/health`);
+                await fetch(`http://127.0.0.1:${this.port}/_health`);
                 break;
             } catch (e) {
                 await new Promise(r => setTimeout(r, 200));

@@ -23,6 +23,7 @@ describe('T02: Basic Redirect', () => {
       runtime
     );
     await engine.start();
+    await adminService.waitForConnection(15000);
   });
 
   afterAll(async () => {
