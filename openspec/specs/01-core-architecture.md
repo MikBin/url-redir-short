@@ -94,3 +94,7 @@ The Universal Redirector System uses a distributed architecture with a centraliz
 - `T03-fast-404.test.ts` — Cuckoo Filter 404 rejection
 - `T12-performance.test.ts` — Performance benchmarks
 - `T13-cache-performance.test.ts` — Cache performance
+
+## Production Gaps
+- No deployment/infrastructure-as-code manifests (Kubernetes, Terraform, etc.) for production environments (→ CHANGE-010)
+- No reverse proxy/TLS configuration for HTTPS termination at the edge (→ CHANGE-006)

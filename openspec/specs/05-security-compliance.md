@@ -78,3 +78,7 @@ Security requirements cover configurable HTTP redirect status codes, HSTS enforc
 ## E2E Test Coverage
 - `T08-privacy.test.ts` — IP anonymization and privacy
 - `T10-hsts.test.ts` — HSTS header enforcement
+
+## Production Gaps
+- Distributed rate limiting needed — current implementation is in-memory only and does not work across multiple engine instances (→ CHANGE-012)
+- RBAC/SSO not yet implemented — no role-based access control or single sign-on beyond Supabase Auth (→ CHANGE-013)
