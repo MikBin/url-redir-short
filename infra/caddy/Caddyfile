@@ -1,0 +1,29 @@
+{
+	email {$TLS_EMAIL}
+}
+
+{$ADMIN_DOMAIN} {
+	reverse_proxy admin:3001 {
+		health_uri /api/health
+		health_interval 10s
+		health_timeout 5s
+	}
+}
+
+{$DOMAIN} {
+	handle_path /admin/* {
+		reverse_proxy admin:3001 {
+			health_uri /api/health
+			health_interval 10s
+			health_timeout 5s
+		}
+	}
+
+	handle {
+		reverse_proxy engine:3002 {
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+		}
+	}
+}
