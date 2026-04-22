@@ -24,7 +24,7 @@ describe('T05: Priority Logic', () => {
     );
     await engine.start();
     await adminService.waitForConnection(15000);
-  });
+});
 
   afterAll(async () => {
     await engine.stop();

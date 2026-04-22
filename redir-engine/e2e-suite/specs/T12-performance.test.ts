@@ -40,8 +40,7 @@ describe('T12: Performance & Load Testing', () => {
     engine = new EngineController(adminUrl, analyticsUrl, 3001, runtime);
     await engine.start();
     await adminService.waitForConnection(15000);
-
-    console.log('[T12] Engine started');
+console.log('[T12] Engine started');
   });
 
   afterAll(async () => {

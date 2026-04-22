@@ -24,7 +24,7 @@ describe('T09: Password Protection', () => {
     );
     await engine.start();
     await adminService.waitForConnection(15000);
-  });
+});
 
   afterAll(async () => {
     await engine.stop();

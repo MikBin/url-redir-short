@@ -24,7 +24,7 @@ describe('T04: Analytics Emission', () => {
     );
     await engine.start();
     await adminService.waitForConnection(15000);
-  });
+});
 
   afterAll(async () => {
     await engine.stop();

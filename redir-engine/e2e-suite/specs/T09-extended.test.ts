@@ -22,7 +22,8 @@ describe('T09-Extended: Password & Query Params', () => {
       3019
     );
     await engine.start();
-  });
+    await adminService.waitForConnection(15000);
+});
 
   afterAll(async () => {
     await engine.stop();

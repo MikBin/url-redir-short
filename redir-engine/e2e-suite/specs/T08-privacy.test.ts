@@ -25,7 +25,7 @@ describe('T08: Privacy (IP Anonymization)', () => {
     );
     await engine.start();
     await adminService.waitForConnection(15000);
-  });
+});
 
   afterAll(async () => {
     await engine.stop();

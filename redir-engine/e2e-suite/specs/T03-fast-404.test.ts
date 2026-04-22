@@ -23,7 +23,8 @@ describe('T03: Fast 404', () => {
       runtime
     );
     await engine.start();
-  });
+    await adminService.waitForConnection(15000);
+});
 
   afterAll(async () => {
     await engine.stop();

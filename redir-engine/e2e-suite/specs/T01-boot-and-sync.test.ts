@@ -34,11 +34,9 @@ describe('T01: Boot & Sync', () => {
     );
     console.log('[T01] Starting engine...');
     await engine.start();
-
     // Explicitly wait for SSE connection to be established at the Admin Service
     console.log('[T01] Waiting for SSE connection...');
     await adminService.waitForConnection(15000);
-
     console.log('[T01] Engine started and connected');
   });
 
