@@ -1,0 +1,32 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: url-redir-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-short.example.com}
+      - ADMIN_DOMAIN=${ADMIN_DOMAIN:-admin.short.example.com}
+      - TLS_EMAIL=${TLS_EMAIL:-admin@example.com}
+      - TLS_MODE=${TLS_MODE:-auto}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - url-redir-net
+    depends_on:
+      - admin
+      - engine
+
+  admin:
+    ports: !reset []
+
+  engine:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:
