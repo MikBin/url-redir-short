@@ -40,7 +40,7 @@ jobs:
 
       - name: Run Unit Tests (Redir Engine)
         working-directory: redir-engine
-        run: npm test
+        run: npm run test
 
       - name: Run Tests (Node Runtime)
         working-directory: redir-engine/e2e-suite
@@ -58,4 +58,4 @@ jobs:
 
       - name: Run Tests (Admin Service)
         working-directory: admin-service/supabase
-        run: npm test
+        run: npm run test
