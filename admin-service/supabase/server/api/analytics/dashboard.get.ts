@@ -66,6 +66,8 @@ export default defineEventHandler(async (event) => {
 
     // Initialize hourly breakdown for last 24h
     const trendStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const trendStartIso = trendStart.toISOString()
+    const nowIso = now.toISOString()
     for (let i = 23; i >= 0; i--) {
       const hourDate = new Date(now.getTime() - i * 60 * 60 * 1000)
       const hourKey = hourDate.toISOString().substring(0, 13) + ':00:00Z'
@@ -91,13 +93,13 @@ export default defineEventHandler(async (event) => {
       browserMap[browser] = (browserMap[browser] || 0) + 1
 
       // Hourly (only if within last 24h)
-      if (event.timestamp) {
-        const eventTime = new Date(event.timestamp)
-        if (eventTime >= trendStart && eventTime <= now) {
-           const hourKey = eventTime.toISOString().substring(0, 13) + ':00:00Z'
-           if (hourlyBreakdown[hourKey] !== undefined) {
-             hourlyBreakdown[hourKey]++
-           }
+      const ts = event.timestamp
+      if (ts) {
+        if (ts >= trendStartIso && ts <= nowIso) {
+          const hourKey = ts.substring(0, 13) + ':00:00Z'
+          if (hourlyBreakdown[hourKey] !== undefined) {
+            hourlyBreakdown[hourKey]++
+          }
         }
       }
     })
