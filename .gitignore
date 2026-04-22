@@ -24,3 +24,6 @@ admin-service/pocketbase/pb_data/data.db-wal
 admin-service/pocketbase/pb_data/logs.db
 admin-service/pocketbase/pb_data/logs.db-shm
 admin-service/pocketbase/pb_data/logs.db-wal
+
+# Secrets
+secrets/*.txt
