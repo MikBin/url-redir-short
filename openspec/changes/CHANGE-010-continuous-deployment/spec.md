@@ -2,8 +2,10 @@
 
 ## Pipeline Architecture
 ```
-Push to main → CI Tests → Build Docker Images → Push to GHCR → Deploy Staging
-Tag vX.Y.Z → CI Tests → Build Docker Images → Push to GHCR → Approval → Deploy Production
+Push to main → CI Tests → Build Docker Images → Push to GHCR → Deploy Admin (VPS Staging)
+                                                              → Deploy Engine (CF Workers Staging)
+Tag vX.Y.Z  → CI Tests → Build Docker Images → Push to GHCR → Approval → Deploy Admin (VPS Prod)
+                                                                        → Deploy Engine (CF Workers Prod)
 ```
 
 ## Docker Image Strategy
@@ -19,15 +21,23 @@ Tag vX.Y.Z → CI Tests → Build Docker Images → Push to GHCR → Approval �
 
 ## Deployment Targets
 
-### Option A: Docker Compose on VPS
-- SSH into target server
-- Pull latest images from GHCR
+### Admin Service + Analytics → VPS (Docker Compose)
+- SSH into target VPS
+- Pull latest admin image from GHCR
 - `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+- Includes: PostgreSQL, Redis/Valkey, Admin Service, Caddy (TLS)
 - Health check validation post-deploy
 
-### Option B: Fly.io / Railway
-- Platform-specific deploy commands
-- Config files (`fly.toml` or `railway.json`)
+### Redirect Engine → Multi-Platform
+The engine is stateless and runtime-agnostic. It deploys to:
+
+| Platform | Method | Config |
+|----------|--------|--------|
+| **VPS** (co-located) | Docker image from GHCR | Same docker-compose as admin |
+| **Cloudflare Workers** | `wrangler deploy` | `redir-engine/runtimes/cf-worker/wrangler.toml` |
+| **AWS Lambda/ECS** | Docker image or Lambda package | AWS-specific workflow |
+
+Each engine instance connects to the Admin Service SSE endpoint for state sync, regardless of where it runs.
 
 ## Workflow Files
 

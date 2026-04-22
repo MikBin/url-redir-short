@@ -18,4 +18,6 @@ Adding CD pipelines with Docker image building, registry push, and automated dep
 - Staging auto-deploy workflow
 - Production deploy workflow with approval
 - Container registry configuration (GHCR)
-- Deployment to target platform (Docker Compose on VPS, or Fly.io/Railway)
+- Admin Service deployment to VPS via Docker Compose + SSH
+- Engine deployment to Cloudflare Workers via wrangler, AWS via ECR/ECS, or VPS via Docker
+- Engine is stateless and runtime-agnostic — can run on any platform

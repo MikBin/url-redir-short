@@ -10,28 +10,39 @@
 - [ ] Output image tags for downstream jobs
 - [ ] Test: verify images are pushed correctly
 
-## Task 2: Staging Deployment Workflow
-**File:** `.github/workflows/deploy-staging.yml`
-- [ ] Trigger after build-images workflow completes
-- [ ] SSH into staging server (using GitHub secrets for SSH key)
-- [ ] Pull latest images from GHCR
-- [ ] Run `docker compose up -d` with production overlay
-- [ ] Wait for health checks to pass
+## Task 2: VPS Deployment Workflow (Admin Service)
+**File:** `.github/workflows/deploy-vps.yml`
+- [ ] Trigger after build-images workflow completes (staging) or on tags (production)
+- [ ] SSH into target VPS (using GitHub secrets for SSH key)
+- [ ] Pull latest admin image from GHCR
+- [ ] Run `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+- [ ] Wait for health checks: `GET /api/health` returns 200
 - [ ] Post deployment status to GitHub
 - [ ] Slack/email notification on failure
+- [ ] Production requires approval from `production` GitHub environment
 
-## Task 3: Production Deployment Workflow
-**File:** `.github/workflows/deploy-production.yml`
-- [ ] Trigger on version tags `v*`
-- [ ] Require approval from `production` GitHub environment
-- [ ] Same deploy steps as staging but targeting production server
-- [ ] Run smoke tests after deployment
-- [ ] Create GitHub release with changelog
+## Task 3: Cloudflare Workers Deployment (Engine)
+**File:** `.github/workflows/deploy-cf-worker.yml`
+- [ ] Trigger after CI tests pass on main (staging) or on tags (production)
+- [ ] Install wrangler CLI
+- [ ] Set `ADMIN_SERVICE_URL` and `SYNC_API_KEY` via `wrangler secret put`
+- [ ] Run `wrangler deploy` from `redir-engine/runtimes/cf-worker/`
+- [ ] Validate health check on deployed worker URL
+- [ ] Support staging vs production environments via wrangler environments
+- [ ] Production requires approval from `production` GitHub environment
 
-## Task 4: Deployment Documentation
+## Task 4: AWS Deployment (Engine — Optional)
+**File:** `.github/workflows/deploy-aws.yml`
+- [ ] Build and push engine Docker image to AWS ECR
+- [ ] Deploy to ECS/Fargate or Lambda
+- [ ] Configure ADMIN_SERVICE_URL pointing to VPS admin
+- [ ] Health check validation
+- [ ] Document AWS-specific secrets required (AWS credentials)
+
+## Task 5: Deployment Documentation
 **File:** `docs/deployment/cd-pipeline.md`
-- [ ] Document pipeline architecture and workflow
-- [ ] Document GitHub secrets required (SSH keys, registry token)
+- [ ] Document pipeline architecture and multi-platform strategy
+- [ ] Document GitHub secrets required per platform (SSH keys, Cloudflare API token, AWS credentials)
 - [ ] Document image tagging strategy
-- [ ] Document rollback procedure step-by-step
+- [ ] Document rollback procedure per platform (VPS, CF Workers, AWS)
 - [ ] Document environment setup (staging, production)

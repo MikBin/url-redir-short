@@ -7,21 +7,26 @@
 - [ ] Tag with commit SHA and `latest`
 - [ ] Tag with version on git tags `v*`
 
-## Phase 2: Staging Deployment
-- [ ] Create `.github/workflows/deploy-staging.yml`
-- [ ] Auto-deploy to staging after successful build
-- [ ] Run health checks post-deployment
-- [ ] Notification on success/failure
+## Phase 2: VPS Deployment (Admin Service + Analytics)
+- [ ] Create `.github/workflows/deploy-vps.yml`
+- [ ] SSH-based deployment to VPS
+- [ ] Pull images from GHCR, run docker compose with production overlay
+- [ ] Health check validation post-deploy
+- [ ] Staging auto-deploy on main, production deploy on tags with approval
 
-## Phase 3: Production Deployment
-- [ ] Create `.github/workflows/deploy-production.yml`
-- [ ] Trigger on version tags `v*`
-- [ ] Require manual approval via GitHub environment protection
-- [ ] Deploy with health check validation
-- [ ] Document rollback procedure
+## Phase 3: Cloudflare Workers Deployment (Engine)
+- [ ] Create `.github/workflows/deploy-cf-worker.yml`
+- [ ] Install wrangler, configure secrets, run `wrangler deploy`
+- [ ] Support staging/production wrangler environments
+- [ ] Health check validation on deployed worker URL
 
-## Phase 4: Documentation
+## Phase 4: AWS Deployment (Engine — Optional)
+- [ ] Create `.github/workflows/deploy-aws.yml`
+- [ ] Push engine image to AWS ECR, deploy to ECS/Fargate
+- [ ] Configure SSE sync back to VPS admin service
+
+## Phase 5: Documentation
 - [ ] Create `docs/deployment/cd-pipeline.md`
-- [ ] Document image tagging strategy
-- [ ] Document rollback procedure
-- [ ] Document environment variable configuration per environment
+- [ ] Document multi-platform deployment strategy
+- [ ] Document rollback procedure per platform
+- [ ] Document environment variable and secrets configuration per platform

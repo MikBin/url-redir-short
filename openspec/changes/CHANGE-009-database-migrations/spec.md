@@ -5,6 +5,9 @@
 - **Location:** `admin-service/supabase/supabase/migrations/`
 - **Naming:** `YYYYMMDDHHMMSS_description.sql` (Supabase default)
 
+## Deployment Assumption
+This is a **fresh deploy** — no existing production database with data to migrate. The baseline migration creates the full schema from scratch.
+
 ## Baseline Migration
 Convert existing `schema.sql` into the first migration:
 ```
