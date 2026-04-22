@@ -1,0 +1,72 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+env:
+  REGISTRY: ghcr.io
+  ADMIN_IMAGE_NAME: MikBin/url-redir-admin
+  ENGINE_IMAGE_NAME: MikBin/url-redir-engine
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Admin Service
+        id: meta-admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.ADMIN_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=main-,format=short,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+
+      - name: Extract metadata (tags, labels) for Engine
+        id: meta-engine
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.ENGINE_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=main-,format=short,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+
+      - name: Build and push Admin Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-service/supabase
+          push: true
+          tags: ${{ steps.meta-admin.outputs.tags }}
+          labels: ${{ steps.meta-admin.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Engine
+        uses: docker/build-push-action@v5
+        with:
+          context: ./redir-engine
+          push: true
+          tags: ${{ steps.meta-engine.outputs.tags }}
+          labels: ${{ steps.meta-engine.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
