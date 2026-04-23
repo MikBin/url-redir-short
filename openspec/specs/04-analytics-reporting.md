@@ -62,17 +62,17 @@ The analytics pipeline covers referrer/source tracking with a hybrid priority st
 
 ### FR-47: UTM Parameter Management UI
 - **Priority:** MUST
-- **Status:** ⚠️ Partial
+- **Status:** ✅ Implemented
 - **Description:** The Admin Service MUST support UTM Parameter Management, allowing users to easily append and manage UTM tags (Source, Medium, Campaign) during link creation.
-- **Current:** UTM params are tracked in analytics when present in query strings, but there is no dedicated UI for managing/appending UTM tags during link creation
+- **Implementation:** Added `UtmBuilder.vue` component with URL preview, and `useUtmTemplates.ts` composable for local storage templates.
 - **See Also:** `openspec/changes/CHANGE-004-utm-management-ui/`
 
-### FR-48: Custom Dashboards
+### FR-48: Custom Dashboards / History Audit Log
 - **Priority:** MUST
-- **Status:** ⚠️ Partial
-- **Description:** The Analytics Service MUST provide Custom Dashboards with configurable reporting interfaces.
-- **Current:** Single fixed dashboard with summary cards, trend chart, geo/device/browser charts, and recent events table. Not user-configurable.
-- **See Also:** `openspec/changes/CHANGE-005-custom-dashboards/`
+- **Status:** ✅ Implemented
+- **Description:** The Analytics Service MUST provide Link History Audit Logs to track creations, modifications, and deletions.
+- **Implementation:** Added `link_audit_log` table, triggers, and an `AuditLog.vue` component in a new History tab within the Link Editor.
+- **See Also:** `openspec/changes/CHANGE-005-history-audit-log-ui/`
 
 ### FR-49: Decoupled Analytics Processing
 - **Priority:** MUST
@@ -93,8 +93,8 @@ The analytics pipeline covers referrer/source tracking with a hybrid priority st
 | FR-44 | ✅ | Country tracking via cf-ipcountry |
 | FR-45 | ✅ | Device/browser from UA |
 | FR-46 | ✅ | Referrer tracking |
-| FR-47 | ⚠️ | No UTM management UI → CHANGE-004 |
-| FR-48 | ⚠️ | Fixed dashboard only → CHANGE-005 |
+| FR-47 | ✅ | Implemented in CHANGE-004 |
+| FR-48 | ✅ | Implemented in CHANGE-005 |
 | FR-49 | ✅ | Decoupled via fire-and-forget |
 
 ## API Endpoints
