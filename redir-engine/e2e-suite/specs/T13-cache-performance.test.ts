@@ -106,6 +106,8 @@ console.log('[T13] Engine started');
         const start = performance.now();
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           const response = await fetch(`http://127.0.0.1:${engine.port}${path}`, {
             redirect: 'manual',
           });
@@ -154,6 +156,8 @@ console.log('[T13] Engine started');
       for (let i = 0; i < paths; i++) {
         const start = performance.now();
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
           phase1Results.push(performance.now() - start);
         } catch (e) {}
@@ -171,6 +175,8 @@ console.log('[T13] Engine started');
         for (let i = 0; i < paths; i++) {
           const start = performance.now();
           try {
+            // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+            await new Promise(r => setTimeout(r, Math.random() * 5));
             await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
             phase2Results.push(performance.now() - start);
           } catch (e) {}
@@ -226,6 +232,8 @@ console.log('[T13] Engine started');
           const start = performance.now();
 
           try {
+            // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+            await new Promise(r => setTimeout(r, Math.random() * 5));
             const response = await fetch(`http://127.0.0.1:${engine.port}/mem${size}${idx}`, {
               redirect: 'manual',
             });
@@ -328,6 +336,8 @@ console.log('[T13] Engine started');
           const start = performance.now();
 
           try {
+            // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+            await new Promise(r => setTimeout(r, Math.random() * 5));
             const response = await fetch(`http://127.0.0.1:${engine.port}/db${pathIdx}`, {
               redirect: 'manual',
             });
@@ -498,6 +508,8 @@ ${requiredCachePerWorker > 100000
           : hotPathCount + Math.floor(Math.random() * (totalPaths - hotPathCount));
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           await fetch(`http://127.0.0.1:${engine.port}/p${idx}`, {
             redirect: 'manual',
           });
@@ -517,6 +529,8 @@ ${requiredCachePerWorker > 100000
         const start = performance.now();
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           const response = await fetch(`http://127.0.0.1:${engine.port}/p${idx}`, {
             redirect: 'manual',
           });
