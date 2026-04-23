@@ -171,11 +171,14 @@ console.log('[T12] Engine started');
           const idx = Math.floor(Math.random() * SCALE_LARGE);
           // Add a tiny random delay to avoid TCP connection burst failures in CI
           await new Promise(r => setTimeout(r, Math.random() * 5));
-          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
-            redirect: 'manual',
-            // @ts-ignore
-            keepalive: true
-          });
+          // We don't await the delay here directly to keep them parallel, we delay inside the promise
+          return new Promise(r => setTimeout(r, Math.random() * 5)).then(() =>
+            fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
+              redirect: 'manual',
+              // @ts-ignore
+              keepalive: true
+            })
+          );
         });
 
         const responses = await Promise.all(promises);
@@ -206,9 +209,11 @@ console.log('[T12] Engine started');
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
-            redirect: 'manual',
-          });
+          return new Promise(r => setTimeout(r, Math.random() * 5)).then(() =>
+            fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
+              redirect: 'manual',
+            })
+          );
         });
 
         const responses = await Promise.all(promises);
@@ -239,9 +244,11 @@ console.log('[T12] Engine started');
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
-          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
-            redirect: 'manual',
-          });
+          return new Promise(r => setTimeout(r, Math.random() * 5)).then(() =>
+            fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
+              redirect: 'manual',
+            })
+          );
         });
 
         const responses = await Promise.all(promises);
@@ -355,12 +362,14 @@ console.log('[T12] Engine started');
         const promises = Array.from({ length: requestsPerBatch }, async () => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
           // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
-          await new Promise(r => setTimeout(r, Math.random() * 5));
-          return fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
-            redirect: 'manual',
-            // @ts-ignore
-            keepalive: true
-          });
+          // We don't await the delay here directly to keep them parallel, we delay inside the promise
+          return new Promise(r => setTimeout(r, Math.random() * 5)).then(() =>
+            fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
+              redirect: 'manual',
+              // @ts-ignore
+              keepalive: true
+            })
+          );
         });
 
         const responses = await Promise.all(promises);
