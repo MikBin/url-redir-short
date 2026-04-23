@@ -70,6 +70,24 @@ console.log('[T12] Engine started');
 
       await new Promise(r => setTimeout(r, SYNC_WAIT_SMALL)); // Wait for sync
 
+      // Add retry polling to ensure at least the last item is synced
+      let synced = false;
+      const lastIdxSmall = SCALE_SMALL - 1;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        try {
+          const res = await fetch(`http://127.0.0.1:${engine.port}/r${lastIdxSmall}`, { redirect: 'manual' });
+          if (res.status === 301) {
+            synced = true;
+            break;
+          }
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      if (!synced) {
+        console.warn(`[T12] Timeout waiting for /r${lastIdxSmall} to sync.`);
+      }
+
       // Measure latency of lookups across the table
       const times: number[] = [];
       for (let i = 0; i < CHECK_ITERATIONS; i++) {
@@ -80,6 +98,9 @@ console.log('[T12] Engine started');
         });
         const end = performance.now();
         times.push(end - start);
+        if (response.status !== 301) {
+             console.error(`Expected 301 for /r${idx}, got ${response.status}`);
+        }
         expect(response.status).toBe(301);
       }
 
@@ -143,6 +164,9 @@ console.log('[T12] Engine started');
         });
         const end = performance.now();
         times.push(end - start);
+        if (response.status !== 301) {
+            console.error(`Expected 301 for /r${idx}, got ${response.status} in SCALE_LARGE test.`);
+        }
         expect(response.status).toBe(301);
       }
 
@@ -186,7 +210,11 @@ console.log('[T12] Engine started');
 
         times.push((end - start) / batchSize); // Average per request in batch
         
-        for (const response of responses) {
+        for (let j = 0; j < responses.length; j++) {
+          const response = responses[j];
+          if (response.status !== 301) {
+            console.error(`Expected 301 in concurrent batch (10), got ${response.status}`);
+          }
           expect(response.status).toBe(301);
         }
       }
@@ -221,7 +249,11 @@ console.log('[T12] Engine started');
 
         times.push((end - start) / batchSize);
         
-        for (const response of responses) {
+        for (let j = 0; j < responses.length; j++) {
+          const response = responses[j];
+          if (response.status !== 301) {
+            console.error(`Expected 301 in concurrent batch (50), got ${response.status}`);
+          }
           expect(response.status).toBe(301);
         }
       }
@@ -256,7 +288,11 @@ console.log('[T12] Engine started');
 
         times.push((end - start) / batchSize);
         
-        for (const response of responses) {
+        for (let j = 0; j < responses.length; j++) {
+          const response = responses[j];
+          if (response.status !== 301) {
+            console.error(`Expected 301 in concurrent batch (100), got ${response.status}`);
+          }
           expect(response.status).toBe(301);
         }
       }
