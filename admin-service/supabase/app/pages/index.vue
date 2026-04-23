@@ -15,11 +15,16 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700">Slug</label>
-            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" required />
+            <div class="flex items-center gap-2 mt-1">
+              <input v-model="newLink.slug" type="text" placeholder="Leave empty to auto-generate" class="w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" />
+              <button @click.prevent="newLink.slug = ''" type="button" class="p-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200" title="Clear to auto-generate">
+                🎲
+              </button>
+            </div>
             <p v-if="slugError" class="text-red-500 text-xs mt-1">{{ slugError }}</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">Destination</label>
+            <label class="block text-sm font-medium text-gray-700">Destination URL <span class="text-red-500">*</span></label>
             <input v-model="newLink.destination" type="url" placeholder="https://..." class="mt-1 w-full border border-gray-300 rounded p-2" required />
           </div>
         </div>
@@ -233,9 +238,29 @@
               <label class="block text-xs font-medium text-gray-700">Background</label>
               <input v-model="qrOptions.bgcolor" type="color" class="w-full h-8 p-0 border rounded cursor-pointer" />
            </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Error Correction</label>
+              <select v-model="qrOptions.errorCorrectionLevel" class="w-full border rounded p-1 text-sm">
+                 <option value="L">L (7%)</option>
+                 <option value="M">M (15%)</option>
+                 <option value="Q">Q (25%)</option>
+                 <option value="H">H (30%)</option>
+              </select>
+           </div>
+           <div>
+              <label class="block text-xs font-medium text-gray-700">Logo Size (10%-30%)</label>
+              <input v-model.number="qrOptions.logoSize" type="range" min="0.1" max="0.3" step="0.05" class="w-full mt-2" />
+           </div>
+           <div class="col-span-2">
+              <label class="block text-xs font-medium text-gray-700">Logo URL (Optional)</label>
+              <input v-model="qrOptions.logoUrl" type="url" placeholder="https://example.com/logo.png" class="w-full border rounded p-1 text-sm" />
+           </div>
         </div>
 
-        <button @click="closeQRModal" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Close</button>
+        <div class="flex gap-2">
+          <a v-if="qrCodeUrl" :href="qrCodeUrl" download="qrcode.png" class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-center text-sm font-medium">Download QR</a>
+          <button @click="closeQRModal" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium">Close</button>
+        </div>
       </div>
     </div>
 
@@ -243,27 +268,32 @@
     <div v-if="showBulkModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
       <div class="bg-white p-6 rounded shadow-lg w-full max-w-lg mx-auto">
         <h3 class="text-xl font-bold mb-4">Bulk Import Links</h3>
-        <p class="text-sm text-gray-600 mb-2">Paste JSON array of links. Example:</p>
-        <pre class="bg-gray-100 p-2 rounded text-xs mb-4 text-gray-700 overflow-x-auto">
-[
-  { "slug": "link1", "destination": "https://example.com/1" },
-  { "slug": "link2", "destination": "https://example.com/2" }
-]
-        </pre>
-        <textarea v-model="bulkInput" rows="10" class="w-full border border-gray-300 rounded p-2 text-sm font-mono mb-4" placeholder="Paste JSON here..."></textarea>
+        <p class="text-sm text-gray-600 mb-2">Upload a CSV/JSON file or paste JSON/CSV below. <span title="CSV Requires 'slug' and 'destination' headers. Optional: 'code', 'expires_at', 'max_clicks', 'password'" class="cursor-help text-indigo-600 underline">Format Info</span></p>
+
+        <div class="mb-4">
+          <input type="file" accept=".csv,.json" @change="handleBulkFileUpload" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+        </div>
+
+        <textarea v-model="bulkInput" rows="10" class="w-full border border-gray-300 rounded p-2 text-sm font-mono mb-4" placeholder="Paste JSON or CSV data here..."></textarea>
 
         <div v-if="bulkStatus" class="mb-4 p-2 rounded" :class="bulkStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
            {{ bulkStatus.message }}
-           <ul v-if="bulkStatus.details" class="list-disc list-inside mt-2 text-xs">
-              <li v-for="(item, i) in bulkStatus.details" :key="i">{{ item }}</li>
+           <ul v-if="bulkStatus.details" class="list-disc list-inside mt-2 text-xs max-h-32 overflow-y-auto">
+              <li v-for="(item, i) in bulkStatus.details" :key="i">
+                  <span v-if="typeof item === 'object'">{{ item.item }}: {{ item.error }}</span>
+                  <span v-else>{{ item }}</span>
+              </li>
            </ul>
         </div>
 
-        <div class="flex justify-end gap-2">
-            <button @click="closeBulkModal" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
-            <button @click="importLinks" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" :disabled="isImporting">
-                {{ isImporting ? 'Importing...' : 'Import' }}
-            </button>
+        <div class="flex justify-between items-center gap-2">
+            <button @click="downloadCsvTemplate" class="text-indigo-600 text-sm hover:underline">Download CSV Template</button>
+            <div class="flex justify-end gap-2">
+              <button @click="closeBulkModal" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
+              <button @click="importLinks" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" :disabled="isImporting">
+                  {{ isImporting ? 'Importing...' : 'Import' }}
+              </button>
+            </div>
         </div>
       </div>
     </div>
@@ -367,7 +397,7 @@ const fetchLinks = async () => {
 // Validation
 const slugPattern = /^[a-zA-Z0-9-_]+$/
 const slugError = computed(() => {
-    if (!newLink.value.slug) return null
+    if (!newLink.value.slug) return null // Optional now
     if (!slugPattern.test(newLink.value.slug)) return 'Slug can only contain letters, numbers, hyphens, and underscores.'
     return null
 })
@@ -376,6 +406,10 @@ const slugError = computed(() => {
 const saveLink = async () => {
   if (slugError.value) {
       alert('Please fix errors before saving.')
+      return
+  }
+  if (!newLink.value.destination) {
+      alert('Destination URL is required.')
       return
   }
 
@@ -410,9 +444,9 @@ const saveLink = async () => {
 const createLink = async () => {
   if (!user.value) return
 
-  const payload = {
-    slug: newLink.value.slug,
+  const payload: any = {
     destination: newLink.value.destination,
+    ...(newLink.value.slug ? { slug: newLink.value.slug } : {}),
     expires_at: newLink.value.expires_at ? new Date(newLink.value.expires_at).toISOString() : null,
     max_clicks: newLink.value.max_clicks,
     password_protection: newLink.value.password_protection,
@@ -422,10 +456,14 @@ const createLink = async () => {
   }
 
   try {
-    await $fetch('/api/links/create', {
+    const response: any = await $fetch('/api/links/create', {
         method: 'POST',
         body: payload
     })
+
+    if (response && response.slug && !newLink.value.slug) {
+         alert(`Link created! Generated slug: ${response.slug}`)
+    }
 
     // Reset form and refresh list
     newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
@@ -568,7 +606,10 @@ const qrOptions = ref({
   width: 200,
   margin: 4,
   color: '#000000',
-  bgcolor: '#ffffff'
+  bgcolor: '#ffffff',
+  errorCorrectionLevel: 'M',
+  logoUrl: '',
+  logoSize: 0.2
 })
 
 const fetchQR = async () => {
@@ -584,7 +625,10 @@ const fetchQR = async () => {
          width: qrOptions.value.width,
          margin: qrOptions.value.margin,
          color: qrOptions.value.color,
-         bgcolor: qrOptions.value.bgcolor
+         bgcolor: qrOptions.value.bgcolor,
+         errorCorrectionLevel: qrOptions.value.errorCorrectionLevel,
+         logoUrl: qrOptions.value.logoUrl,
+         logoSize: qrOptions.value.logoSize
        }
      })
      qrCodeUrl.value = data as string
@@ -597,7 +641,7 @@ const fetchQR = async () => {
 const showQR = async (link: any) => {
   currentQRLink.value = link
   showQRModal.value = true
-  qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff' } // Reset defaults
+  qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff', errorCorrectionLevel: 'M', logoUrl: '', logoSize: 0.2 } // Reset defaults
   await fetchQR()
 }
 
@@ -623,18 +667,64 @@ const bulkInput = ref('')
 const isImporting = ref(false)
 const bulkStatus = ref<any>(null)
 
+const downloadCsvTemplate = () => {
+  const csvContent = "slug,destination,code,max_clicks,password\nexample1,https://example.com,301,100,\nexample2,https://example.org,302,,secret123"
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement("a")
+  const url = URL.createObjectURL(blob)
+  link.setAttribute("href", url)
+  link.setAttribute("download", "template.csv")
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+let bulkFileType = 'json'
+
+const handleBulkFileUpload = (event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+
+  if (file.name.endsWith('.csv')) {
+      bulkFileType = 'csv'
+  } else {
+      bulkFileType = 'json'
+  }
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+      bulkInput.value = e.target?.result as string
+  }
+  reader.readAsText(file)
+}
+
 const importLinks = async () => {
   bulkStatus.value = null
   isImporting.value = true
 
   try {
-     const parsed = JSON.parse(bulkInput.value)
-     if (!Array.isArray(parsed)) throw new Error('Input must be an array')
+     let isCsv = bulkFileType === 'csv' || (!bulkInput.value.trim().startsWith('[') && !bulkInput.value.trim().startsWith('{'))
 
-     const data = await $fetch('/api/bulk', {
+     const options: any = {
          method: 'POST',
-         body: { links: parsed }
-     })
+     }
+
+     if (isCsv) {
+         // Optionally send as multipart form data to test that code path
+         const formData = new FormData()
+         // Create a text file blob out of the textarea
+         const blob = new Blob([bulkInput.value], { type: 'text/csv' })
+         formData.append('file', blob, 'import.csv')
+         options.body = formData
+         // Content-Type will be automatically set to multipart/form-data by fetch
+     } else {
+         const parsed = JSON.parse(bulkInput.value)
+         if (!Array.isArray(parsed)) throw new Error('Input must be an array')
+         options.body = { links: parsed }
+     }
+
+     const data: any = await $fetch('/api/bulk', options)
 
      if (data.success > 0) {
          bulkStatus.value = {

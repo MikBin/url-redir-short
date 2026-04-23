@@ -1,5 +1,6 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { logAudit } from '../../utils/audit'
+import { invalidateQRCache } from '../../utils/qr-cache'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -48,6 +49,11 @@ export default defineEventHandler(async (event) => {
       status: 'success',
       oldValue: oldData
   })
+
+  // Invalidate QR Cache
+  if (oldData && oldData.slug) {
+      await invalidateQRCache(event, oldData.slug)
+  }
 
   return { success: true }
 })

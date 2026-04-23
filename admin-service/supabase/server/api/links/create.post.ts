@@ -2,8 +2,10 @@ import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { z } from 'zod'
 import { logAudit } from '../../utils/audit'
 
+import { generateUniqueAlias } from '../../utils/alias-generator'
+
 const CreateLinkSchema = z.object({
-  slug: z.string().min(1).regex(/^[a-zA-Z0-9-_]+$/),
+  slug: z.string().min(1).max(2048).regex(/^[a-zA-Z0-9-_]+$/).optional(),
   destination: z.string().url(),
   expires_at: z.string().datetime().nullable().optional(),
   max_clicks: z.number().nullable().optional(),
@@ -42,11 +44,25 @@ export default defineEventHandler(async (event) => {
   const payload = validation.data
   const client = await serverSupabaseClient(event)
 
+  // Auto-generate alias if slug is not provided
+  let finalSlug = payload.slug
+  if (!finalSlug) {
+    try {
+      finalSlug = await generateUniqueAlias(async (slug) => {
+        const { data } = await client.from('links').select('id').eq('slug', slug).single()
+        return !!data
+      })
+    } catch (err) {
+      throw createError({ statusCode: 500, statusMessage: 'Failed to generate unique alias' })
+    }
+  }
+
   // Insert
   const { data, error } = await client
     .from('links')
     .insert({
       ...payload,
+      slug: finalSlug,
       owner_id: user.id
     })
     .select()
