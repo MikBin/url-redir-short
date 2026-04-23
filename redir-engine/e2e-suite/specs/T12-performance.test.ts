@@ -289,6 +289,9 @@ console.log('[T12] Engine started');
         times.push(end - start);
 
         if (isValid) {
+          if (response.status !== 301) {
+             console.error(`Expected 301 for ${path}, got ${response.status}`);
+          }
           expect(response.status).toBe(301);
         } else {
           expect(response.status).toBe(404);
