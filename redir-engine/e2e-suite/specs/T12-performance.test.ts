@@ -283,6 +283,15 @@ console.log('[T12] Engine started');
       
       const times: number[] = [];
 
+      // Add a retry loop for sync to ensure the routing table is fully populated for E2E tests, particularly in CI.
+      // E2E test runs have been flaky missing these.
+      await new Promise(r => setTimeout(r, 2000));
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/r${SCALE_LARGE - 1}`, { redirect: 'manual' });
+        if (response.status === 301) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
       // Test mix of hits and misses
       for (let i = 0; i < MIX_ITERATIONS; i++) {
         const idx = Math.floor(Math.random() * SCALE_LARGE);
