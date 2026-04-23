@@ -14,9 +14,9 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 
 ### FR-27: Autogeneration of Aliases
 - **Priority:** MUST
-- **Status:** ⚠️ Partial
+- **Status:** ✅ Implemented
 - **Description:** The system MUST provide an Autogeneration feature to create short, random, collision-resistant aliases.
-- **Implementation:** Types support it but no visible auto-generation logic
+- **Implementation:** Implemented via `alias-generator` utility, updated UI and API endpoint.
 - **See Also:** `openspec/changes/CHANGE-002-auto-alias-generation/`
 
 ### FR-28: Bulk Insert/Update
@@ -31,9 +31,9 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 
 ### FR-29: CSV Bulk Import Format
 - **Priority:** MUST
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** Supported formats for bulk import MUST include JSON and CSV.
-- **Current:** JSON only
+- **Current:** JSON and CSV supported via UI upload and API
 - **See Also:** `openspec/changes/CHANGE-001-csv-bulk-import/`
 
 ### FR-30: Bulk Operations via API and UI
@@ -54,9 +54,9 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 
 ### FR-32: QR Code Advanced Customization
 - **Priority:** MUST
-- **Status:** ⚠️ Partial
+- **Status:** ✅ Implemented
 - **Description:** QR Code generation MUST support Advanced Customization (e.g., custom colors, embedded logos, error correction levels).
-- **Current:** Basic customization (color, background, size, margin); no embedded logos or error correction settings
+- **Current:** Advanced customization implemented via `sharp` for logos and full UI support.
 - **See Also:** `openspec/changes/CHANGE-003-advanced-qr-branding/`
 
 ### FR-33: On-Demand QR Generation API
@@ -67,9 +67,9 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 
 ### FR-34: QR Code Storage/Caching
 - **Priority:** MAY
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** The system MAY support storing generated QR code images for caching purposes.
-- **Current:** On-demand generation only
+- **Current:** Cached in Supabase Storage under the `qr-codes` bucket.
 - **See Also:** `openspec/changes/CHANGE-003-advanced-qr-branding/`
 
 ### FR-35: Time-Based Link Expiration
@@ -124,14 +124,14 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 | Requirement | Status | Notes |
 |---|---|---|
 | FR-26 | ✅ | Custom slug input |
-| FR-27 | ⚠️ | No auto-generation logic → CHANGE-002 |
+| FR-27 | ✅ | Auto-generation logic implemented |
 | FR-28 | ✅ | JSON bulk import |
-| FR-29 | ❌ | CSV format missing → CHANGE-001 |
+| FR-29 | ✅ | CSV format implemented |
 | FR-30 | ✅ | API + UI bulk ops |
 | FR-31 | ✅ | QR code generation |
-| FR-32 | ⚠️ | Basic only, no logos → CHANGE-003 |
+| FR-32 | ✅ | Advanced settings & logos implemented |
 | FR-33 | ✅ | On-demand API |
-| FR-34 | ❌ | No caching → CHANGE-003 |
+| FR-34 | ✅ | Cached in Supabase Storage |
 | FR-35 | ✅ | Time-based expiration |
 | FR-36 | ✅ | Click-based expiration |
 | FR-37 | ✅ | Eventual consistency |

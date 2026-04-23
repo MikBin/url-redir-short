@@ -1,6 +1,7 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { z } from 'zod'
 import { logAudit } from '../../utils/audit'
+import { invalidateQRCache } from '../../utils/qr-cache'
 
 const UpdateLinkSchema = z.object({
   slug: z.string().min(1).regex(/^[a-zA-Z0-9-_]+$/).optional(),
@@ -89,6 +90,12 @@ export default defineEventHandler(async (event) => {
       oldValue: oldData,
       newValue: data
   })
+
+  // Invalidate QR Cache
+  await invalidateQRCache(event, oldData.slug)
+  if (data.slug !== oldData.slug) {
+      await invalidateQRCache(event, data.slug)
+  }
 
   return data
 })

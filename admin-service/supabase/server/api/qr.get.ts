@@ -1,5 +1,6 @@
 import { serverSupabaseUser } from '#supabase/server'
-import { generateQRCode, QRCodeOptions } from '../utils/qr'
+import { QRCodeOptions } from '../utils/qr'
+import { getCachedOrGenerateQRCode } from '../utils/qr-cache'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -37,10 +38,25 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  if (query.errorCorrectionLevel) {
+    options.errorCorrectionLevel = query.errorCorrectionLevel as any
+  }
+
+  if (query.logoUrl) {
+    options.logoUrl = query.logoUrl as string
+  }
+
+  if (query.logoSize) {
+    options.logoSize = parseFloat(query.logoSize as string)
+  }
+
   try {
-    const qrCode = await generateQRCode(text, options)
-    // qrCode is a data URL (data:image/png;base64,...)
-    return qrCode
+    const { dataUrl, cached } = await getCachedOrGenerateQRCode(event, text, options)
+
+    // Add cache header
+    setResponseHeader(event, 'X-Cache', cached ? 'HIT' : 'MISS')
+
+    return dataUrl
   } catch (error) {
     throw createError({
       statusCode: 500,

@@ -1,22 +1,22 @@
 import { describe, it, expect } from 'vitest'
 import { generateQRCode } from '../server/utils/qr'
 
-describe('QR Code Utility', () => {
-  it('should generate a data URL for a given text', async () => {
+describe('qr', () => {
+  it('generates a valid data URL', async () => {
     const text = 'https://example.com'
-    const qrCode = await generateQRCode(text)
+    const dataUrl = await generateQRCode(text)
 
-    expect(qrCode).toContain('data:image/png;base64,')
-    expect(typeof qrCode).toBe('string')
+    expect(dataUrl).toContain('data:image/png;base64,')
   })
 
-  it('should throw an error if text is empty', async () => {
+  it('throws error if text is empty', async () => {
     await expect(generateQRCode('')).rejects.toThrow('Text is required')
   })
 
-  it('should accept options', async () => {
+  it('rejects non-https logo URL', async () => {
     const text = 'https://example.com'
-    const qrCode = await generateQRCode(text, { width: 100, color: { dark: '#000000', light: '#ffffff' } })
-    expect(qrCode).toContain('data:image/png;base64,')
+    const options = { logoUrl: 'http://example.com/logo.png' }
+
+    await expect(generateQRCode(text, options)).rejects.toThrow('Invalid logo URL: must use HTTPS protocol')
   })
 })
