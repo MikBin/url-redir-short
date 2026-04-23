@@ -178,7 +178,11 @@ console.log('[T12] Engine started');
               // @ts-ignore
               keepalive: true
             })
-          );
+          ).catch((e) => {
+            // If EADDRNOTAVAIL happens, catch it so Promise.all doesn't fail everything immediately
+            // But we will return a mock "fake response" that causes `expect(response.status).toBe(301)` to fail and report the error properly
+            return { status: 500, error: e };
+          });
         });
 
         const responses = await Promise.all(promises);
@@ -226,7 +230,7 @@ console.log('[T12] Engine started');
         times.push((end - start) / batchSize);
         
         for (const response of responses) {
-          expect(response.status).toBe(301);
+          expect((response as any).status).toBe(301);
         }
       }
 
