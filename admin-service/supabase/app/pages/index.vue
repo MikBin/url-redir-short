@@ -78,9 +78,18 @@
           </div>
         </div>
 
+        <!-- Tab Navigation for Advanced Settings -->
+        <div class="border-t pt-4 mt-4">
+           <div class="flex space-x-4 mb-4 border-b">
+              <button type="button" @click="activeTab = 'targeting'" :class="['pb-2 text-sm font-medium', activeTab === 'targeting' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700']">Targeting</button>
+              <button type="button" @click="activeTab = 'ab_testing'" :class="['pb-2 text-sm font-medium', activeTab === 'ab_testing' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700']">A/B Testing</button>
+              <button type="button" @click="activeTab = 'utm'" :class="['pb-2 text-sm font-medium', activeTab === 'utm' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700']">UTM Parameters</button>
+              <button v-if="isEditing" type="button" @click="activeTab = 'history'" :class="['pb-2 text-sm font-medium', activeTab === 'history' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700']">History</button>
+           </div>
+        </div>
+
         <!-- Targeting Section -->
-        <div class="border-t pt-4">
-          <h3 class="text-lg font-medium mb-3">Targeting</h3>
+        <div v-show="activeTab === 'targeting'" class="pt-2">
           <div class="flex items-center mb-4">
              <input v-model="newLink.targeting.enabled" id="targeting-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
              <label for="targeting-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable Targeting</label>
@@ -147,8 +156,7 @@
         </div>
 
         <!-- A/B Testing Section -->
-        <div class="border-t pt-4">
-          <h3 class="text-lg font-medium mb-3">A/B Testing</h3>
+        <div v-show="activeTab === 'ab_testing'" class="pt-2">
           <div class="flex items-center mb-4">
              <input v-model="newLink.ab_testing.enabled" id="ab-enabled" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded" />
              <label for="ab-enabled" class="ml-2 block text-sm font-medium text-gray-700">Enable A/B Testing</label>
@@ -169,7 +177,18 @@
           </div>
         </div>
 
-        <div class="flex gap-2">
+        <!-- UTM Builder Section -->
+        <div v-show="activeTab === 'utm'" class="pt-2">
+          <UtmBuilder v-model="newLink.destination" />
+          <p class="text-xs text-gray-500 mt-2">UTM parameters will be appended to the destination URL automatically.</p>
+        </div>
+
+        <!-- History Section -->
+        <div v-if="isEditing" v-show="activeTab === 'history'" class="pt-2">
+          <AuditLog v-if="currentLinkId" :link-id="currentLinkId" />
+        </div>
+
+        <div class="flex gap-2 mt-6">
             <button type="submit" class="bg-green-600 text-white p-2 rounded hover:bg-green-700 flex-1">{{ isEditing ? 'Update' : 'Create' }}</button>
             <button v-if="isEditing" @click="cancelEdit" type="button" class="bg-gray-500 text-white p-2 rounded hover:bg-gray-600">Cancel</button>
         </div>
@@ -311,6 +330,7 @@ interface LinkState {
 const links = ref<any[]>([])
 const isEditing = ref(false)
 const currentLinkId = ref<string | null>(null)
+const activeTab = ref('targeting')
 
 const defaultLinkState: LinkState = {
   slug: '',
@@ -491,6 +511,7 @@ const editLink = (link: any) => {
 
   currentLinkId.value = link.id
   isEditing.value = true
+  activeTab.value = 'targeting'
 
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -514,6 +535,7 @@ const cancelEdit = () => {
   isEditing.value = false
   currentLinkId.value = null
   newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
+  activeTab.value = 'targeting'
 }
 
 const addTargetingRule = () => {
