@@ -8,6 +8,8 @@ export interface ComponentHealth {
 }
 
 export interface Metrics {
+  timestamp: string;
+  uptime: number;
   requests: {
     total: number;
     errors: number;
@@ -67,6 +69,8 @@ export function checkMemoryHealth(): ComponentHealth {
 export function getMetrics(): Metrics {
   const memory = process.memoryUsage();
   return {
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
     requests: {
       total: requestCount,
       errors: errorCount,
