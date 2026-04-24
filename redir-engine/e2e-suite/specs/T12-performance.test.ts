@@ -202,7 +202,11 @@ console.log('[T12] Engine started');
               // @ts-ignore
               keepalive: true
             })
-          );
+          ).catch((e) => {
+            // If EADDRNOTAVAIL happens, catch it so Promise.all doesn't fail everything immediately
+            // But we will return a mock "fake response" that causes `expect(response.status).toBe(301)` to fail and report the error properly
+            return { status: 500, error: e };
+          });
         });
 
         const responses = await Promise.all(promises);
@@ -237,9 +241,13 @@ console.log('[T12] Engine started');
         
         const promises = Array.from({ length: batchSize }, async (_, i) => {
           const idx = Math.floor(Math.random() * SCALE_LARGE);
+          // Add a tiny random delay to avoid TCP connection burst failures in CI
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           return new Promise(r => setTimeout(r, Math.random() * 5)).then(() =>
             fetch(`http://127.0.0.1:${engine.port}/r${idx}`, {
               redirect: 'manual',
+              // @ts-ignore
+              keepalive: true
             })
           );
         });
@@ -249,12 +257,8 @@ console.log('[T12] Engine started');
 
         times.push((end - start) / batchSize);
         
-        for (let j = 0; j < responses.length; j++) {
-          const response = responses[j];
-          if (response.status !== 301) {
-            console.error(`Expected 301 in concurrent batch (50), got ${response.status}`);
-          }
-          expect(response.status).toBe(301);
+        for (const response of responses) {
+          expect((response as any).status).toBe(301);
         }
       }
 
@@ -310,6 +314,15 @@ console.log('[T12] Engine started');
       console.log('[T12] Testing 404 rejection rate');
       
       const times: number[] = [];
+
+      // Add a retry loop for sync to ensure the routing table is fully populated for E2E tests, particularly in CI.
+      // E2E test runs have been flaky missing these.
+      await new Promise(r => setTimeout(r, 2000));
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const response = await fetch(`http://127.0.0.1:${engine.port}/r${SCALE_LARGE - 1}`, { redirect: 'manual' });
+        if (response.status === 301) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
 
       // Test mix of hits and misses
       for (let i = 0; i < MIX_ITERATIONS; i++) {
