@@ -57,6 +57,9 @@ console.log('[T12] Engine started');
       
       // Create redirects
       for (let i = 0; i < SCALE_SMALL; i++) {
+        if (i % 50 === 0 && i > 0) {
+          await new Promise(r => setTimeout(r, 25)); // Yield to avoid backing up SSE
+        }
         adminService.pushUpdate({
           type: 'create',
           data: {
@@ -99,8 +102,8 @@ console.log('[T12] Engine started');
       
       // Create additional redirects
       for (let i = SCALE_SMALL; i < SCALE_LARGE; i++) {
-        if (i % 100 === 0) {
-          await new Promise(r => setTimeout(r, 10)); // Yield to event loop to avoid backing up SSE
+        if (i % 50 === 0) {
+          await new Promise(r => setTimeout(r, 25)); // Yield to event loop to avoid backing up SSE
         }
         adminService.pushUpdate({
           type: 'create',
@@ -116,7 +119,7 @@ console.log('[T12] Engine started');
       // Add retry polling to ensure at least the last item is synced
       let synced = false;
       const lastIdx = SCALE_LARGE - 1;
-      for (let attempt = 0; attempt < 60; attempt++) {
+      for (let attempt = 0; attempt < 120; attempt++) {
         try {
           const res = await fetch(`http://127.0.0.1:${engine.port}/r${lastIdx}`, { redirect: 'manual' });
           if (res.status === 301) {
@@ -124,7 +127,7 @@ console.log('[T12] Engine started');
             break;
           }
         } catch(e) {}
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
       }
 
       if (!synced) {
