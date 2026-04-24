@@ -25,7 +25,8 @@ export class MockAnalyticsService {
     return new Promise<void>((resolve) => {
       this.server = serve({
         fetch: this.app.fetch,
-        port: this.port
+        port: this.port,
+        hostname: '0.0.0.0'
       }, (info) => {
         // @ts-ignore
         this.port = info.port;
