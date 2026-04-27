@@ -6,6 +6,8 @@ export function aggregateLinkClicks(records: { link_id: string; click_count: num
     acc[record.link_id] += record.click_count;
     return acc;
   }, {} as Record<string, number>);
+}
+
 export function processAnalyticsEvents(events: any[], now: Date) {
   const linkCounts: Record<string, number> = {};
   const geoCounts: Record<string, number> = {};
