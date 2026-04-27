@@ -1,3 +1,4 @@
+import { metrics } from '../metrics/prometheus';
 
 export interface EventSourceConstructor {
   new (url: string, eventSourceInitDict?: EventSourceInit): EventSource;
@@ -45,6 +46,7 @@ export class SSEClient {
       this.eventSource = null;
     }
 
+    metrics.sseStatus.set(0); // Disconnected until onopen
     console.log(`[SSE] Connecting to ${this.url}`);
     try {
       // @ts-ignore - The EventSource types might mismatch slightly between dom and node
@@ -58,11 +60,13 @@ export class SSEClient {
     if (this.eventSource) {
         this.eventSource.onopen = () => {
           console.log('[SSE] Connected');
+          metrics.sseStatus.set(1);
           this.retryCount = 0;
         };
 
         this.eventSource.onerror = (err: any) => {
           console.error('[SSE] Error:', err);
+          metrics.sseStatus.set(0);
           if (this.eventSource) {
             this.eventSource.close();
             this.eventSource = null;
@@ -108,6 +112,7 @@ export class SSEClient {
 
   public close() {
     this.isExplicitlyClosed = true;
+    metrics.sseStatus.set(0);
     if (this.retryTimeout) {
       clearTimeout(this.retryTimeout);
       this.retryTimeout = null;

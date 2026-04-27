@@ -1,3 +1,4 @@
+import { metrics } from '../adapters/metrics/prometheus';
 import { RadixTree } from '../core/routing/radix-tree';
 import { CuckooFilter } from '../core/filtering/cuckoo-filter';
 import { RedirectRule, RedirectRuleUpdate } from '../core/config/types';
@@ -41,6 +42,7 @@ export class SyncStateUseCase {
     }
 
     this.evictionManager.recordAccess(rule.path, rule);
+    this.updateMetrics();
   }
 
   public handleUpdate(rule: RedirectRule) {
@@ -55,6 +57,7 @@ export class SyncStateUseCase {
       this.cuckooFilter.add(rule.path);
     }
     this.evictionManager.recordAccess(rule.path, rule);
+    this.updateMetrics();
   }
 
   public handleDelete(rule: RedirectRule) {
@@ -62,6 +65,19 @@ export class SyncStateUseCase {
     this.radixTree.delete(rule.path);
     this.cuckooFilter.remove(rule.path);
     this.evictionManager.recordRemoval(rule.path);
+    this.updateMetrics();
+  }
+
+  private updateMetrics() {
+    metrics.radixTreeSize.set(this.radixTree.size());
+    const cacheInfo = this.evictionManager.getCacheInfo();
+    metrics.cacheEntries.set(cacheInfo.size);
+    
+    const evictionMetrics = this.evictionManager.getMetrics();
+    const total = evictionMetrics.hits + evictionMetrics.misses;
+    if (total > 0) {
+      metrics.cacheHitRatio.set(evictionMetrics.hits / total);
+    }
   }
 
   private normalizeRule(rule: RedirectRule) {

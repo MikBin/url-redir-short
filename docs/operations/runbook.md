@@ -97,3 +97,20 @@ The current out-of-the-box setup is designed for a single VPS. To scale horizont
 1. Check DB logs: `docker compose logs supabase-db`.
 2. Ensure database credentials in `secrets/db_password.txt` match the `.env` settings.
 3. If running out of disk space, PostgreSQL will halt. Check disk usage with `df -h`.
+
+## 6. Backup & Disaster Recovery
+
+Automated backups are performed daily with tiered retention.
+
+- **SOP:** Refer to the [Backup & Disaster Recovery Guide](file:///c:/Users/miche/Documents/projects/url-redir-short/docs/operations/backup-dr.md).
+- **Manual Backup:** Run `bash ./scripts/backup.sh`.
+- **Manual Restore:** Run `bash ./scripts/restore.sh <backup_file_path>`.
+- **Retention:** 30 daily, 4 weekly, and 3 monthly backups are kept.
+
+## 7. Monitoring & Observability
+
+The system uses Prometheus, Loki, and Grafana for monitoring.
+
+- **Setup Guide:** Refer to the [Observability Stack Guide](file:///c:/Users/miche/Documents/projects/url-redir-short/docs/operations/observability.md).
+- **Grafana Dashboard:** [http://localhost:3004](http://localhost:3004) (admin/admin)
+- **Key Metrics:** Monitor `engine_requests_total` and `engine_sse_connection_status` for core redirect health.

@@ -5,6 +5,7 @@ import { config } from '../../../utils/config'
 import { logger } from '../../../utils/logger'
 import { checkRateLimit } from '../../../utils/rate-limit'
 import { useValkey } from '../../../utils/storage'
+import { metrics } from '../../../utils/metrics'
 
 // Enhanced validation schema using Zod
 const AnalyticsPayloadSchema = z.object({
@@ -56,6 +57,7 @@ function createErrorResponse(statusCode: number, message: string, details?: any)
 import type { Database } from '../../../../app/types/database.types'
 
 export default defineEventHandler(async (event) => {
+  metrics.analyticsIngestionTotal.inc()
   const startTime = Date.now()
   const clientIP = event.node.req.headers['x-forwarded-for'] || 
                    event.node.req.headers['x-real-ip'] || 

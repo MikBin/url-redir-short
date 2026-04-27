@@ -1,11 +1,30 @@
 import { Hono } from 'hono';
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { HandleRequestUseCase } from '../../use-cases/handle-request';
+import { metrics } from '../metrics/prometheus';
 
 export const createApp = (handleRequest: HandleRequestUseCase) => {
   const app = new Hono();
 
+  // Metrics middleware
+  app.use('*', async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = (Date.now() - start) / 1000;
+    
+    // Ignore health and metrics endpoints for request stats
+    if (c.req.path !== '/health' && c.req.path !== '/metrics') {
+      metrics.requestsTotal.inc({ status: c.res.status, method: c.req.method });
+      metrics.requestDuration.observe({ status: c.res.status }, duration);
+    }
+  });
+
   app.get('/health', (c) => c.text('OK'));
+  
+  app.get('/metrics', async (c) => {
+    c.header('Content-Type', metrics.getContentType());
+    return c.text(await metrics.getMetrics());
+  });
 
   app.all('*', async (c) => {
     // Allow GET, POST, and HEAD
