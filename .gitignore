@@ -27,3 +27,4 @@ admin-service/pocketbase/pb_data/logs.db-wal
 
 # Secrets
 secrets/*.txt
+.vscode/
