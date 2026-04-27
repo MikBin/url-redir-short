@@ -12,6 +12,7 @@ export class SSEClient {
   private eventSource: EventSource | null = null;
   private url: string;
   private eventSourceClass: EventSourceConstructor;
+  private apiKey?: string;
 
   private onCreate?: (data: any) => void;
   private onUpdate?: (data: any) => void;
@@ -21,9 +22,10 @@ export class SSEClient {
   private retryTimeout: any = null; // Use 'any' to avoid NodeJS.Timeout vs Window timer types issues
   private isExplicitlyClosed = false;
 
-  constructor(url: string, eventSourceClass: EventSourceConstructor) {
+  constructor(url: string, eventSourceClass: EventSourceConstructor, apiKey?: string) {
     this.url = url;
     this.eventSourceClass = eventSourceClass;
+    this.apiKey = apiKey;
   }
 
   public connect(
@@ -46,11 +48,14 @@ export class SSEClient {
       this.eventSource = null;
     }
 
-    metrics.sseStatus.set(0); // Disconnected until onopen
-    console.log(`[SSE] Connecting to ${this.url}`);
+    const urlWithAuth = this.apiKey 
+      ? `${this.url}${this.url.includes('?') ? '&' : '?'}apiKey=${this.apiKey}`
+      : this.url;
+
+    console.log(`[SSE] Connecting to ${urlWithAuth}`);
     try {
       // @ts-ignore - The EventSource types might mismatch slightly between dom and node
-      this.eventSource = new this.eventSourceClass(this.url);
+      this.eventSource = new this.eventSourceClass(urlWithAuth);
     } catch (err) {
       console.error('[SSE] Failed to create EventSource:', err);
       this.scheduleReconnect();
@@ -74,16 +79,23 @@ export class SSEClient {
           this.scheduleReconnect();
         };
 
+        this.eventSource.onmessage = (e: any) => {
+          console.log(`[SSE] Message received: ${e.data}`);
+        };
+
         // Listen to custom events
         this.eventSource.addEventListener('create', (e: any) => {
+          console.log(`[SSE] Custom event "create": ${e.data}`);
           if (this.onCreate) this.onCreate(JSON.parse(e.data));
         });
 
         this.eventSource.addEventListener('update', (e: any) => {
+          console.log(`[SSE] Custom event "update": ${e.data}`);
           if (this.onUpdate) this.onUpdate(JSON.parse(e.data));
         });
 
         this.eventSource.addEventListener('delete', (e: any) => {
+          console.log(`[SSE] Custom event "delete": ${e.data}`);
           if (this.onDelete) this.onDelete(JSON.parse(e.data));
         });
     }

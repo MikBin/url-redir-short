@@ -24,7 +24,7 @@ export class SyncStateUseCase {
 
   public handleCreate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    // console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
 
     // Check if path already exists in Radix Tree to handle replays correctly
     const existing = this.radixTree.find(rule.path);
@@ -47,7 +47,7 @@ export class SyncStateUseCase {
 
   public handleUpdate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    // console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
     // Update is same as insert for Radix
     this.radixTree.insert(rule.path, rule);
     // Cuckoo: Add if not present. If present, it's fine.
@@ -61,7 +61,7 @@ export class SyncStateUseCase {
   }
 
   public handleDelete(rule: RedirectRule) {
-    // console.log(`[Sync] Delete: ${rule.path}`);
+    console.log(`[Sync] Delete: ${rule.path}`);
     this.radixTree.delete(rule.path);
     this.cuckooFilter.remove(rule.path);
     this.evictionManager.recordRemoval(rule.path);

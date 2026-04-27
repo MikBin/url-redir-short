@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import PocketBase from 'pocketbase';
 import { readFileSync } from 'fs';
 
@@ -45,13 +46,18 @@ async function init() {
     for (const collection of orderedCollections) {
       console.log(`\nProcessing collection: ${collection.name}`);
       try {
+        // Delete if exists for a clean slate
+        try {
+          await pb.collections.delete(collection.name);
+          console.log(`🗑️ Deleted existing collection: ${collection.name}`);
+        } catch (e) {}
+
         await pb.collections.create(collection);
         console.log(`✅ Successfully created collection: ${collection.name}`);
       } catch (err) {
-        if (err.status === 400 || err.status === 409) {
-          console.log(`ℹ️ Collection ${collection.name} might already exist or had a validation error. Skipping.`);
-        } else {
-          console.error(`❌ Error creating collection ${collection.name}:`, err.message);
+        console.error(`❌ Error creating collection ${collection.name}:`, err.message);
+        if (err.data) {
+          console.error('Validation errors:', JSON.stringify(err.data, null, 2));
         }
       }
     }

@@ -24,6 +24,10 @@ admin-service/pocketbase/pb_data/data.db-wal
 admin-service/pocketbase/pb_data/logs.db
 admin-service/pocketbase/pb_data/logs.db-shm
 admin-service/pocketbase/pb_data/logs.db-wal
+admin-service/pocketbase/pb_data/auxiliary.db
+admin-service/pocketbase/pb_data/auxiliary.db-shm
+admin-service/pocketbase/pb_data/auxiliary.db-wal
+admin-service/pocketbase/pb_data/types.d.ts
 
 # Secrets
 secrets/*.txt

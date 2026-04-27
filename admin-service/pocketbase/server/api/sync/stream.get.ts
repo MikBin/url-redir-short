@@ -2,54 +2,43 @@ import { syncEvents, SYNC_EVENT_NAME } from '../../utils/broadcaster'
 
 export default defineEventHandler(async (event) => {
   // 1. Authorization
-  const authHeader = getHeader(event, 'authorization')
+  let authHeader = getHeader(event, 'authorization')
+  if (!authHeader) {
+    const query = getQuery(event)
+    if (query.apiKey) {
+      authHeader = `Bearer ${query.apiKey}`
+    }
+  }
 
   // Use runtime configuration or environment variables directly
   const apiKey = process.env.SYNC_API_KEY
+  console.log(`[Sync] Auth check: Received="${authHeader}", Expected="Bearer ${apiKey}"`)
   if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
     setResponseStatus(event, 401)
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorized', received: authHeader, expected: `Bearer ${apiKey ? '***' : 'MISSING'}` }
   }
 
   // 2. SSE Setup
-  setHeader(event, 'Content-Type', 'text/event-stream')
-  setHeader(event, 'Cache-Control', 'no-cache')
-  setHeader(event, 'Connection', 'keep-alive')
-  setResponseStatus(event, 200)
+  const eventStream = createEventStream(event)
 
-  // 3. Create Stream
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder()
+  // 3. Define event listener
+  const listener = (data: any) => {
+    console.log(`[Sync Stream] Sending event: ${data.event} for ${data.data?.id}`);
+    eventStream.push({
+      event: data.event,
+      data: JSON.stringify(data.data)
+    })
+  }
 
-      const send = (msg: any) => {
-        let str = ''
-        if (msg.event) {
-          str += `event: ${msg.event}\n`
-          str += `data: ${JSON.stringify(msg.data)}\n\n`
-        } else {
-          // Default message without explicit event type (e.g. initial connection)
-          str += `data: ${JSON.stringify(msg)}\n\n`
-        }
-        controller.enqueue(encoder.encode(str))
-      }
+  // Send initial connection event
+  eventStream.push({ data: JSON.stringify({ type: 'connected', timestamp: Date.now() }) })
 
-      // Send initial connection event
-      send({ type: 'connected', timestamp: Date.now() })
+  syncEvents.on(SYNC_EVENT_NAME, listener)
 
-      // Listener for DB changes
-      const listener = (data: any) => {
-        send(data)
-      }
-
-      syncEvents.on(SYNC_EVENT_NAME, listener)
-
-      // Cleanup when request closes
-      event.node.req.on('close', () => {
-        syncEvents.off(SYNC_EVENT_NAME, listener)
-      })
-    }
+  // Cleanup when request closes
+  eventStream.onClosed(() => {
+    syncEvents.off(SYNC_EVENT_NAME, listener)
   })
 
-  return stream
+  return eventStream.send()
 })

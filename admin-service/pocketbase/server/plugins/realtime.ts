@@ -2,13 +2,11 @@ import PocketBase from 'pocketbase'
 import { syncEvents, SYNC_EVENT_NAME } from '../utils/broadcaster'
 import { transformLink, type PocketBaseLink } from '../utils/transformer'
 
+import { EventSource } from 'eventsource'
+
 // Node.js < 22 lacks native EventSource, which PocketBase realtime needs
 if (typeof globalThis.EventSource === 'undefined') {
-  import('eventsource').then((mod) => {
-    globalThis.EventSource = (mod.default || mod) as any;
-  }).catch(() => {
-    console.warn('eventsource polyfill not found. PocketBase realtime may fail if Node < 22.');
-  });
+  globalThis.EventSource = EventSource as any;
 }
 
 export default defineNitroPlugin(async (nitroApp) => {
@@ -21,7 +19,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
   if (pbEmail && pbPassword) {
     try {
-      await pb.admins.authWithPassword(pbEmail, pbPassword);
+      await pb.collection('_superusers').authWithPassword(pbEmail, pbPassword);
       console.log('PocketBase realtime plugin authenticated as admin.');
     } catch (err) {
       console.warn('PocketBase realtime plugin admin auth failed:', err);
@@ -32,24 +30,33 @@ export default defineNitroPlugin(async (nitroApp) => {
 
   try {
     pb.collection('links').subscribe('*', function (e) {
-      console.log('PocketBase realtime event received!', e.action, e.record.id);
+      console.log('PocketBase realtime event received!');
+      console.log('Full Event:', JSON.stringify(e, (key, value) => key === 'pb' ? undefined : value, 2));
       
       const eventType = e.action; // 'create', 'update', 'delete'
-      let data = null;
+      (async () => {
+        try {
+          let record = e.record;
+          // If record is partial (missing fields), fetch the full record
+          if (!record.slug) {
+            console.log(`[Realtime] Record is partial, fetching full record for ${record.id}...`);
+            record = await pb.collection('links').getOne(record.id);
+            console.log(`[Realtime] Fetched record:`, JSON.stringify(record, null, 2));
+          }
 
-      try {
-        data = transformLink(e.record as PocketBaseLink);
+          const data = transformLink(record as PocketBaseLink);
 
-        if (eventType === 'create') {
-           syncEvents.emit(SYNC_EVENT_NAME, { event: 'create', data: data });
-        } else if (eventType === 'update') {
-           syncEvents.emit(SYNC_EVENT_NAME, { event: 'update', data: data });
-        } else if (eventType === 'delete') {
-           syncEvents.emit(SYNC_EVENT_NAME, { event: 'delete', data: data });
+          if (eventType === 'create') {
+             syncEvents.emit(SYNC_EVENT_NAME, { event: 'create', data: data });
+          } else if (eventType === 'update') {
+             syncEvents.emit(SYNC_EVENT_NAME, { event: 'update', data: data });
+          } else if (eventType === 'delete') {
+             syncEvents.emit(SYNC_EVENT_NAME, { event: 'delete', data: data });
+          }
+        } catch (err: any) {
+           console.error('Error processing PocketBase event:', err.message);
         }
-      } catch (err) {
-         console.error('Error transforming PocketBase payload:', err);
-      }
+      })();
     });
     console.log('PocketBase realtime plugin successfully subscribed to "links" collection.');
   } catch (err) {
