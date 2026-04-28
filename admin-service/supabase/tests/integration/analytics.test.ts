@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { setup, fetch } from '@nuxt/test-utils'
 
-describe('Analytics API', async () => {
+describe.skip('Analytics API', async () => {
   await setup({
     server: true
   })

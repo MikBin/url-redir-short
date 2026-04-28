@@ -32,7 +32,7 @@ const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analytic
 
 // 4. Initialize SSE Client and connect
 // @ts-ignore - mismatch between eventsource types and our interface
-const sseClient = new SSEClient(config.adminServiceUrl, EventSource);
+const sseClient = new SSEClient(config.adminServiceUrl, EventSource, config.syncApiKey);
 sseClient.connect(
   (data) => syncState.handleCreate(data),
   (data) => syncState.handleUpdate(data),

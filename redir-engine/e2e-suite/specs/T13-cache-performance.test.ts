@@ -106,6 +106,8 @@ console.log('[T13] Engine started');
         const start = performance.now();
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           const response = await fetch(`http://127.0.0.1:${engine.port}${path}`, {
             redirect: 'manual',
           });
@@ -154,6 +156,8 @@ console.log('[T13] Engine started');
       for (let i = 0; i < paths; i++) {
         const start = performance.now();
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
           phase1Results.push(performance.now() - start);
         } catch (e) {}
@@ -171,6 +175,8 @@ console.log('[T13] Engine started');
         for (let i = 0; i < paths; i++) {
           const start = performance.now();
           try {
+            // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+            await new Promise(r => setTimeout(r, Math.random() * 5));
             await fetch(`http://127.0.0.1:${engine.port}/w${i}`, { redirect: 'manual' });
             phase2Results.push(performance.now() - start);
           } catch (e) {}
@@ -226,6 +232,8 @@ console.log('[T13] Engine started');
           const start = performance.now();
 
           try {
+            // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+            await new Promise(r => setTimeout(r, Math.random() * 5));
             const response = await fetch(`http://127.0.0.1:${engine.port}/mem${size}${idx}`, {
               redirect: 'manual',
             });
@@ -313,39 +321,51 @@ console.log('[T13] Engine started');
         let cacheHits = 0;
         let dbMisses = 0;
 
-        for (let i = 0; i < requestsPerScenario; i++) {
-          const isHot = Math.random() < 0.8;
-          let pathIdx: number;
+        // Instead of doing these strictly sequentially inside a for loop, we batch them to hit the engine hard enough
+        // but not too hard to cause EADDRNOTAVAIL
+        const batchSize = 10;
+        for (let i = 0; i < requestsPerScenario; i += batchSize) {
+          const currentBatchSize = Math.min(batchSize, requestsPerScenario - i);
+          const promises = Array.from({ length: currentBatchSize }, async () => {
+            const isHot = Math.random() < 0.8;
+            let pathIdx: number;
 
-          if (isHot) {
-            // Hot paths: from cached items
-            pathIdx = Math.floor(Math.random() * Math.min(hotSetSize, cachedItemCount));
-          } else {
-            // Cold paths: from entire working set (may not exist in cache)
-            pathIdx = Math.floor(Math.random() * scenario.workingSet);
-          }
-
-          const start = performance.now();
-
-          try {
-            const response = await fetch(`http://127.0.0.1:${engine.port}/db${pathIdx}`, {
-              redirect: 'manual',
-            });
-            const elapsed = performance.now() - start;
-
-            if (response.status === 301) {
-              cacheHits++;
-              metricsCollector.recordRequest(`/db${pathIdx}`, true, elapsed);
+            if (isHot) {
+              // Hot paths: from cached items
+              pathIdx = Math.floor(Math.random() * Math.min(hotSetSize, cachedItemCount));
             } else {
-              dbMisses++;
-              metricsCollector.recordRequest(`/db${pathIdx}`, false, elapsed);
+              // Cold paths: from entire working set (may not exist in cache)
+              pathIdx = Math.floor(Math.random() * scenario.workingSet);
             }
-          } catch (e) {
-            dbMisses++;
-          }
 
-          if ((i + 1) % 1000 === 0) {
-            console.log(`    ${i + 1}/${requestsPerScenario} requests`);
+            const start = performance.now();
+
+            try {
+              // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+              await new Promise(r => setTimeout(r, Math.random() * 5));
+              const response = await fetch(`http://127.0.0.1:${engine.port}/db${pathIdx}`, {
+                redirect: 'manual',
+                // @ts-ignore
+                keepalive: true
+              });
+              const elapsed = performance.now() - start;
+
+              if (response.status === 301) {
+                cacheHits++;
+                metricsCollector.recordRequest(`/db${pathIdx}`, true, elapsed);
+              } else {
+                dbMisses++;
+                metricsCollector.recordRequest(`/db${pathIdx}`, false, elapsed);
+              }
+            } catch (e) {
+              dbMisses++;
+            }
+          });
+
+          await Promise.all(promises);
+
+          if ((i + currentBatchSize) % 1000 === 0) {
+            console.log(`    ${i + currentBatchSize}/${requestsPerScenario} requests`);
           }
         }
 
@@ -498,6 +518,8 @@ ${requiredCachePerWorker > 100000
           : hotPathCount + Math.floor(Math.random() * (totalPaths - hotPathCount));
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           await fetch(`http://127.0.0.1:${engine.port}/p${idx}`, {
             redirect: 'manual',
           });
@@ -517,6 +539,8 @@ ${requiredCachePerWorker > 100000
         const start = performance.now();
 
         try {
+          // Add a tiny random delay to avoid TCP connection burst failures in CI (EADDRNOTAVAIL)
+          await new Promise(r => setTimeout(r, Math.random() * 5));
           const response = await fetch(`http://127.0.0.1:${engine.port}/p${idx}`, {
             redirect: 'manual',
           });

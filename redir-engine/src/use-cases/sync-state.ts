@@ -1,3 +1,4 @@
+import { metrics } from '../adapters/metrics/prometheus';
 import { RadixTree } from '../core/routing/radix-tree';
 import { CuckooFilter } from '../core/filtering/cuckoo-filter';
 import { RedirectRule, RedirectRuleUpdate } from '../core/config/types';
@@ -23,7 +24,7 @@ export class SyncStateUseCase {
 
   public handleCreate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    // console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
 
     // Check if path already exists in Radix Tree to handle replays correctly
     const existing = this.radixTree.find(rule.path);
@@ -41,11 +42,12 @@ export class SyncStateUseCase {
     }
 
     this.evictionManager.recordAccess(rule.path, rule);
+    this.updateMetrics();
   }
 
   public handleUpdate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    // console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
     // Update is same as insert for Radix
     this.radixTree.insert(rule.path, rule);
     // Cuckoo: Add if not present. If present, it's fine.
@@ -55,13 +57,27 @@ export class SyncStateUseCase {
       this.cuckooFilter.add(rule.path);
     }
     this.evictionManager.recordAccess(rule.path, rule);
+    this.updateMetrics();
   }
 
   public handleDelete(rule: RedirectRule) {
-    // console.log(`[Sync] Delete: ${rule.path}`);
+    console.log(`[Sync] Delete: ${rule.path}`);
     this.radixTree.delete(rule.path);
     this.cuckooFilter.remove(rule.path);
     this.evictionManager.recordRemoval(rule.path);
+    this.updateMetrics();
+  }
+
+  private updateMetrics() {
+    metrics.radixTreeSize.set(this.radixTree.size());
+    const cacheInfo = this.evictionManager.getCacheInfo();
+    metrics.cacheEntries.set(cacheInfo.size);
+    
+    const evictionMetrics = this.evictionManager.getMetrics();
+    const total = evictionMetrics.hits + evictionMetrics.misses;
+    if (total > 0) {
+      metrics.cacheHitRatio.set(evictionMetrics.hits / total);
+    }
   }
 
   private normalizeRule(rule: RedirectRule) {

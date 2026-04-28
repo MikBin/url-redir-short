@@ -1,3 +1,4 @@
+import { metrics } from '../adapters/metrics/prometheus';
 import { RadixTree } from '../core/routing/radix-tree';
 import { CuckooFilter } from '../core/filtering/cuckoo-filter';
 import { RedirectRule } from '../core/config/types';
@@ -36,8 +37,11 @@ export class HandleRequestUseCase {
   ): Promise<HandleRequestResult> {
     // 1. Check Cuckoo Filter
     if (!this.cuckooFilter.has(path)) {
+      metrics.cuckooLookups.inc({ result: 'miss' });
       return null; // Definitely 404
     }
+
+    metrics.cuckooLookups.inc({ result: 'hit' });
 
     // 2. Check Radix Tree (verify Cuckoo positive)
     const rule = this.radixTree.find(path);

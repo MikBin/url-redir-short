@@ -43,6 +43,7 @@ export class EngineController {
         ADMIN_SERVICE_URL: this.adminUrl,
         ANALYTICS_SERVICE_URL: this.analyticsUrl,
         PORT: this.port.toString(),
+        HOST: '127.0.0.1',
       },
       stdio: 'pipe',
       shell: true
@@ -72,9 +73,9 @@ E2E_TEST_MODE=true
     const args = useNode ? [wranglerPath] : [];
     
     if (useNode) {
-      args.push('dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1');
+      args.push('dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1', '--inspector-port', '0');
     } else {
-      args.push('/c', wranglerPath, 'dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1');
+      args.push('/c', wranglerPath, 'dev', 'index.ts', '--port', this.port.toString(), '--ip', '127.0.0.1', '--host', '127.0.0.1', '--inspector-port', '0');
     }
 
     this.process = spawn(useNode ? 'node' : 'cmd.exe', args, {

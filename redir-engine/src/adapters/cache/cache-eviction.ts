@@ -19,6 +19,8 @@ export interface EvictionMetrics {
   lastEvictionTime: number;
   peakHeapMB: number;
   currentHeapMB: number;
+  hits: number;
+  misses: number;
 }
 
 // Track access times for LRU
@@ -50,6 +52,8 @@ export class CacheEvictionManager {
       lastEvictionTime: 0,
       peakHeapMB: 0,
       currentHeapMB: 0,
+      hits: 0,
+      misses: 0,
     };
   }
 
@@ -60,12 +64,14 @@ export class CacheEvictionManager {
     const now = Date.now();
 
     if (this.cacheMap.has(path)) {
+      this.metrics.hits++;
       const entry = this.cacheMap.get(path)!;
       entry.lastAccessTime = now;
       entry.accessCount++;
       // Move to tail (most recently used)
       this.lruList.moveToTail(entry.node);
     } else {
+      this.metrics.misses++;
       // Add to tail
       const node = this.lruList.push(path);
       this.cacheMap.set(path, {

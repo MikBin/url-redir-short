@@ -1,6 +1,7 @@
 import { H3Event, createError } from 'h3'
 import { checkRateLimit } from '../utils/rate-limit'
 import { fnv1a64 } from '../utils/hash'
+import { metrics } from '../utils/metrics'
 
 interface RateLimitConfig {
   windowMs: number
@@ -71,6 +72,8 @@ export default defineEventHandler(async (event: H3Event) => {
     if (!result.allowed) {
       const retryAfter = result.retryAfter || 60
       event.node.res.setHeader('Retry-After', retryAfter.toString())
+
+      metrics.rateLimitRejections.inc({ endpoint: event.path.split('/').slice(0, 3).join('/') })
 
       throw createError({
         statusCode: 429,

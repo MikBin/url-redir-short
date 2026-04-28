@@ -1,12 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { syncEvents, SYNC_EVENT_NAME } from '../utils/broadcaster'
 import { transformLink, SupabaseLink } from '../utils/transformer'
+import { metrics } from '../utils/metrics'
 
 export default defineNitroPlugin((nitroApp) => {
-  const config = useRuntimeConfig()
-
-  // Use environment variables directly if runtime config is not set up for these specific private keys
-  // or use process.env.
   const supabaseUrl = process.env.SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_KEY
 
@@ -16,6 +13,13 @@ export default defineNitroPlugin((nitroApp) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceKey)
+
+  // Initial count
+  supabase.from('links').select('*', { count: 'exact', head: true }).then(({ count }) => {
+    if (count !== null) {
+      metrics.linksTotal.set(count)
+    }
+  })
 
   // Subscribe to changes
   supabase
@@ -29,6 +33,13 @@ export default defineNitroPlugin((nitroApp) => {
         const eventType = payload.eventType
         let action = ''
         let data = null
+
+        // Update metrics
+        if (eventType === 'INSERT') {
+          metrics.linksTotal.inc()
+        } else if (eventType === 'DELETE') {
+          metrics.linksTotal.dec()
+        }
 
         try {
           if (eventType === 'INSERT') {
@@ -62,7 +73,6 @@ export default defineNitroPlugin((nitroApp) => {
       { event: '*', schema: 'public', table: 'domains' },
       (payload) => {
         console.log('Domain change received but ignored for now:', payload)
-        // syncEvents.emit(SYNC_EVENT_NAME, { type: 'domain', ...payload })
       }
     )
     .subscribe()

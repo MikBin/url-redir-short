@@ -1,4 +1,5 @@
 import { syncEvents, SYNC_EVENT_NAME } from '../../utils/broadcaster'
+import { metrics } from '../../utils/metrics'
 
 export default defineEventHandler(async (event) => {
   // 1. Authorization
@@ -20,6 +21,7 @@ export default defineEventHandler(async (event) => {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder()
+      metrics.sseClients.inc()
 
       const send = (msg: any) => {
         let str = ''
@@ -46,7 +48,7 @@ export default defineEventHandler(async (event) => {
       // Cleanup
       event.node.req.on('close', () => {
         syncEvents.off(SYNC_EVENT_NAME, listener)
-        // controller.close() // Usually not needed if req closed, but good practice if we were closing from server side
+        metrics.sseClients.dec()
       })
     }
   })

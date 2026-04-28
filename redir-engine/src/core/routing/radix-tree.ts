@@ -8,6 +8,7 @@ class Node {
 
 export class RadixTree {
   private root: Node = new Node();
+  private ruleCount: number = 0;
 
   // Basic implementation for static paths
   // /foo/bar -> ["foo", "bar"]
@@ -20,6 +21,10 @@ export class RadixTree {
         node.children.set(part, new Node());
       }
       node = node.children.get(part)!;
+    }
+    
+    if (!node.rule) {
+      this.ruleCount++;
     }
     node.rule = rule;
   }
@@ -42,7 +47,8 @@ export class RadixTree {
       }
 
       node.rule = null;
-
+      this.ruleCount--;
+      
       // Prune empty nodes
       // Go backwards from leaf
       // If node has no children and no rule, remove it from parent
@@ -72,6 +78,10 @@ export class RadixTree {
       node = node.children.get(part)!;
     }
     return node.rule;
+  }
+
+  size(): number {
+    return this.ruleCount;
   }
 
   private *parsePath(path: string): IterableIterator<string> {
