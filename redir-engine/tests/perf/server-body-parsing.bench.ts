@@ -4,6 +4,7 @@ import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
 import { RadixTree } from '../../src/core/routing/radix-tree';
 import { CuckooFilter } from '../../src/core/filtering/cuckoo-filter';
 import { RedirectRule } from '../../src/core/config/types';
+import { InMemoryStore } from '../../src/adapters/store/in-memory-store';
 
 // Mock everything else to isolate server handling
 vi.mock('../../src/core/analytics/collector', () => ({
@@ -24,6 +25,7 @@ describe('Server Body Parsing Performance', () => {
   beforeEach(() => {
     const radixTree = new RadixTree();
     const cuckooFilter = new CuckooFilter();
+    const store = new InMemoryStore(radixTree, cuckooFilter);
 
     // Rule without password
     const noPassRule: RedirectRule = {
@@ -49,7 +51,7 @@ describe('Server Body Parsing Performance', () => {
     radixTree.insert('/pass', passRule);
     cuckooFilter.add('/pass');
 
-    useCase = new HandleRequestUseCase(radixTree, cuckooFilter);
+    useCase = new HandleRequestUseCase(store);
     app = createApp(useCase);
   });
 

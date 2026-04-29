@@ -22,6 +22,7 @@ let createAppFunction: any;
 let SyncStateUseCaseClass: any;
 let HandleRequestUseCaseClass: any;
 let FireAndForgetCollectorClass: any;
+let InMemoryStoreClass: any;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -38,6 +39,7 @@ export default {
         const handleModule = await import('../../src/use-cases/handle-request');
         const analyticsModule = await import('../../src/adapters/analytics/fire-and-forget');
         const fetchEventSourceModule = await import('./fetch-event-source');
+        const inMemoryStoreModule = await import('../../src/adapters/store/in-memory-store');
 
         CuckooFilterClass = cuckooModule.CuckooFilter;
         RadixTreeClass = radixModule.RadixTree;
@@ -47,6 +49,7 @@ export default {
         HandleRequestUseCaseClass = handleModule.HandleRequestUseCase;
         FireAndForgetCollectorClass = analyticsModule.FireAndForgetCollector;
         const FetchEventSourceClass = fetchEventSourceModule.FetchEventSource;
+        InMemoryStoreClass = inMemoryStoreModule.InMemoryStore;
 
       radixTree = new RadixTreeClass();
       cuckooFilter = new CuckooFilterClass();
@@ -56,7 +59,8 @@ export default {
 
       // 2. Initialize Use Cases
       const syncState = new SyncStateUseCaseClass(radixTree, cuckooFilter);
-      const handleRequest = new HandleRequestUseCaseClass(radixTree, cuckooFilter, analyticsCollector);
+      const store = new InMemoryStoreClass(radixTree, cuckooFilter);
+      const handleRequest = new HandleRequestUseCaseClass(store, analyticsCollector);
 
       // 3. Initialize SSE Client and connect
       // Use FetchEventSource instead of global EventSource
@@ -79,7 +83,8 @@ export default {
 
     // Re-create use cases to ensure env vars are fresh if needed
     const analyticsCollector = new FireAndForgetCollectorClass(ANALYTICS_SERVICE_URL);
-    const handleRequest = new HandleRequestUseCaseClass(radixTree, cuckooFilter, analyticsCollector);
+    const store = new InMemoryStoreClass(radixTree, cuckooFilter);
+    const handleRequest = new HandleRequestUseCaseClass(store, analyticsCollector);
     const app = createAppFunction(handleRequest);
 
     return app.fetch(request, env, ctx);

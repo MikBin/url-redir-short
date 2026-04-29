@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
 import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
-import { RadixTree } from '../../src/core/routing/radix-tree';
-import { CuckooFilter } from '../../src/core/filtering/cuckoo-filter';
 import { AnalyticsCollector } from '../../src/core/analytics/collector';
 import { RedirectRule } from '../../src/core/config/types';
+import { IRedirectStore } from '../../src/ports/IRedirectStore';
 
 describe('HandleRequestUseCase', () => {
   let useCase: HandleRequestUseCase;
-  let mockRadixTree: RadixTree;
-  let mockCuckooFilter: CuckooFilter;
+  let mockStore: IRedirectStore;
   let mockAnalyticsCollector: AnalyticsCollector;
 
   const mockRule: RedirectRule = {
@@ -26,51 +24,43 @@ describe('HandleRequestUseCase', () => {
 
   beforeEach(() => {
     // Manually mock dependencies
-    mockRadixTree = {
-      find: vi.fn(),
-      insert: vi.fn(),
-      delete: vi.fn(),
-    } as unknown as RadixTree;
-
-    mockCuckooFilter = {
-      has: vi.fn(),
-      add: vi.fn(),
-      remove: vi.fn(),
-    } as unknown as CuckooFilter;
+    mockStore = {
+      getRedirect: vi.fn(),
+      mightExist: vi.fn(),
+    } as unknown as IRedirectStore;
 
     mockAnalyticsCollector = {
       collect: vi.fn(),
     };
 
     useCase = new HandleRequestUseCase(
-      mockRadixTree,
-      mockCuckooFilter,
+      mockStore,
       mockAnalyticsCollector
     );
   });
 
-  it('should return null if path is not in CuckooFilter', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(false);
+  it('should return null if path is not in store mightExist check', async () => {
+    (mockStore.mightExist as Mock).mockResolvedValue(false);
 
     const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', new URL('http://localhost/unknown'));
 
     expect(result).toBeNull();
-    expect(mockRadixTree.find).not.toHaveBeenCalled();
+    expect(mockStore.getRedirect).not.toHaveBeenCalled();
   });
 
-  it('should return null if path is in CuckooFilter but not in RadixTree (False Positive)', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
-    (mockRadixTree.find as Mock).mockReturnValue(null);
+  it('should return null if path might exist but not found in getRedirect (False Positive)', async () => {
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
+    (mockStore.getRedirect as Mock).mockResolvedValue(null);
 
     const result = await useCase.execute('/unknown', mockHeaders, '127.0.0.1', new URL('http://localhost/unknown'));
 
     expect(result).toBeNull();
-    expect(mockRadixTree.find).toHaveBeenCalledWith('/unknown');
+    expect(mockStore.getRedirect).toHaveBeenCalledWith('/unknown');
   });
 
   it('should return redirect rule if found in both', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
-    (mockRadixTree.find as Mock).mockReturnValue(mockRule);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
+    (mockStore.getRedirect as Mock).mockResolvedValue(mockRule);
 
     const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
@@ -82,9 +72,9 @@ describe('HandleRequestUseCase', () => {
   });
 
   it('should handle expiration by time', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
     const expiredRule = { ...mockRule, expiresAt: Date.now() - 1000 };
-    (mockRadixTree.find as Mock).mockReturnValue(expiredRule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(expiredRule);
 
     const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
@@ -92,9 +82,9 @@ describe('HandleRequestUseCase', () => {
   });
 
   it('should handle expiration by max clicks', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
     const maxedRule = { ...mockRule, maxClicks: 10, clicks: 10 };
-    (mockRadixTree.find as Mock).mockReturnValue(maxedRule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(maxedRule);
 
     const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
 
@@ -102,12 +92,12 @@ describe('HandleRequestUseCase', () => {
   });
 
   it('should apply password protection', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
     const protectedRule = {
       ...mockRule,
       password_protection: { enabled: true, password: 'secret' }
     };
-    (mockRadixTree.find as Mock).mockReturnValue(protectedRule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(protectedRule);
 
     // No password provided
     const result1 = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
@@ -123,7 +113,7 @@ describe('HandleRequestUseCase', () => {
   });
 
   it('should apply targeting (Language)', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
     const targetingRule = {
       ...mockRule,
       targeting: {
@@ -133,7 +123,7 @@ describe('HandleRequestUseCase', () => {
         ]
       }
     };
-    (mockRadixTree.find as Mock).mockReturnValue(targetingRule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(targetingRule);
 
     // Match
     const frHeaders = new Headers({ 'accept-language': 'fr-FR' });
@@ -153,7 +143,7 @@ describe('HandleRequestUseCase', () => {
   });
 
   it('should apply A/B testing', async () => {
-    (mockCuckooFilter.has as Mock).mockReturnValue(true);
+    (mockStore.mightExist as Mock).mockResolvedValue(true);
     const abRule = {
       ...mockRule,
       ab_testing: {
@@ -163,7 +153,7 @@ describe('HandleRequestUseCase', () => {
         ]
       }
     };
-    (mockRadixTree.find as Mock).mockReturnValue(abRule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(abRule);
 
     const result = await useCase.execute('/test', mockHeaders, '127.0.0.1', new URL('http://localhost/test'));
     expect(result?.type).toBe('redirect');
