@@ -69,8 +69,8 @@ When acting as a Jules orchestrator, you delegate tasks to Google Jules (a remot
 8. **Clean up session**: Delete the Jules session with `jules_delete_session`.
 9. **Pull locally**: `git pull origin <branch>` to sync your local repo with the merged changes.
 
-### Sequential Processing
-Sessions must be processed **sequentially**. Do not create a new Jules session while another is still active. Always complete the full workflow (create → monitor → approve if needed → extract PR → merge → delete branch → pull) before starting the next session.
+### Parallel vs Sequential Processing
+Sessions should be processed **sequentially by default**. However, **parallel sessions are permitted** if the tasks are logically independent (e.g., modifying different sub-systems or adding unrelated features) and do not touch the same files. When running in parallel, monitor each session carefully for potential merge conflicts upon completion.
 
 ### Session States
 
@@ -91,4 +91,4 @@ Sessions must be processed **sequentially**. Do not create a new Jules session w
 - Never actively poll — always idle with `jules_wait` (300s blocks) between checks.
 - Never use `jules_get_session` for periodic polling — use `jules_check_jules` only (compact `Q`/`C`/`F`/`N` response).
 - Do not send Jules code snippets; send clear written requirements and let him figure out the implementation.
-- Process sessions sequentially — complete the full workflow before starting the next.
+- Prefer sequential processing — parallelize only for independent, non-conflicting tasks.
