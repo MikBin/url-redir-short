@@ -8,6 +8,7 @@ import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
 import { FireAndForgetCollector } from '../../src/adapters/analytics/fire-and-forget';
 import { EventSource } from 'eventsource';
 import { loadConfig } from '../../src/core/config';
+import { InMemoryStore } from '../../src/adapters/store/in-memory-store';
 
 // Configuration
 const config = loadConfig(process.env);
@@ -15,6 +16,7 @@ const config = loadConfig(process.env);
 // 1. Initialize Core Data Structures
 const radixTree = new RadixTree();
 const cuckooFilter = new CuckooFilter();
+const store = new InMemoryStore(radixTree, cuckooFilter);
 
 // 2. Initialize Analytics
 const analyticsCollector = new FireAndForgetCollector(config.analyticsServiceUrl);
@@ -28,7 +30,7 @@ const evictionConfig = {
   enableMetrics: process.env.CACHE_METRICS !== 'false',
 };
 const syncState = new SyncStateUseCase(radixTree, cuckooFilter, evictionConfig);
-const handleRequest = new HandleRequestUseCase(radixTree, cuckooFilter, analyticsCollector);
+const handleRequest = new HandleRequestUseCase(store, analyticsCollector);
 
 // 4. Initialize SSE Client and connect
 // @ts-ignore - mismatch between eventsource types and our interface

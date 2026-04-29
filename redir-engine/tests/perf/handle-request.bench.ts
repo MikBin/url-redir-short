@@ -4,6 +4,7 @@ import { RadixTree } from '../../src/core/routing/radix-tree';
 import { CuckooFilter } from '../../src/core/filtering/cuckoo-filter';
 import { RedirectRule } from '../../src/core/config/types';
 import { AnalyticsCollector } from '../../src/core/analytics/collector';
+import { InMemoryStore } from '../../src/adapters/store/in-memory-store';
 
 // Mock payload builder to simulate slow operation
 vi.mock('../../src/core/analytics/payload-builder', () => ({
@@ -22,6 +23,7 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
         let useCase: HandleRequestUseCase;
         let radixTree: RadixTree;
         let cuckooFilter: CuckooFilter;
+        let store: InMemoryStore;
 
         const createDeviceTargetingRule = (count: number): RedirectRule => {
             const rules = [];
@@ -57,7 +59,8 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
         beforeEach(() => {
             radixTree = new RadixTree();
             cuckooFilter = new CuckooFilter();
-            useCase = new HandleRequestUseCase(radixTree, cuckooFilter);
+            store = new InMemoryStore(radixTree, cuckooFilter);
+            useCase = new HandleRequestUseCase(store);
         });
 
         it('processes 1000 requests with 50 device targeting rules', async () => {
@@ -84,11 +87,13 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
         let useCase: HandleRequestUseCase;
         let radixTree: RadixTree;
         let cuckooFilter: CuckooFilter;
+        let store: InMemoryStore;
 
         beforeEach(() => {
             radixTree = new RadixTree();
             cuckooFilter = new CuckooFilter();
-            useCase = new HandleRequestUseCase(radixTree, cuckooFilter);
+            store = new InMemoryStore(radixTree, cuckooFilter);
+            useCase = new HandleRequestUseCase(store);
         });
 
         it('processes 10000 requests with country targeting', async () => {
@@ -132,6 +137,7 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
         beforeEach(() => {
             const radixTree = new RadixTree();
             const cuckooFilter = new CuckooFilter();
+            const store = new InMemoryStore(radixTree, cuckooFilter);
 
             // Setup a rule
             const rule: RedirectRule = {
@@ -147,7 +153,7 @@ describe('HandleRequestUseCase - Performance Benchmarks', () => {
                 collect: vi.fn().mockResolvedValue(undefined)
             };
 
-            useCase = new HandleRequestUseCase(radixTree, cuckooFilter, mockCollector);
+            useCase = new HandleRequestUseCase(store, mockCollector);
         });
 
         afterEach(() => {

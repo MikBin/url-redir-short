@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
 import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
-import { RadixTree } from '../../src/core/routing/radix-tree';
-import { CuckooFilter } from '../../src/core/filtering/cuckoo-filter';
 import { RedirectRule } from '../../src/core/config/types';
 import { UAParser } from 'ua-parser-js';
+import { IRedirectStore } from '../../src/ports/IRedirectStore';
 
 // Mock UAParser to spy on constructor calls
 vi.mock('ua-parser-js', () => {
@@ -15,19 +14,15 @@ vi.mock('ua-parser-js', () => {
 
 describe('HandleRequestUseCase - Caching', () => {
   let useCase: HandleRequestUseCase;
-  let mockRadixTree: RadixTree;
-  let mockCuckooFilter: CuckooFilter;
+  let mockStore: IRedirectStore;
 
   beforeEach(() => {
-    mockRadixTree = {
-      find: vi.fn(),
-    } as unknown as RadixTree;
+    mockStore = {
+      getRedirect: vi.fn(),
+      mightExist: vi.fn().mockResolvedValue(true),
+    } as unknown as IRedirectStore;
 
-    mockCuckooFilter = {
-      has: vi.fn().mockReturnValue(true),
-    } as unknown as CuckooFilter;
-
-    useCase = new HandleRequestUseCase(mockRadixTree, mockCuckooFilter);
+    useCase = new HandleRequestUseCase(mockStore);
 
     // Clear mock calls before each test
     (UAParser as unknown as Mock).mockClear();
@@ -48,7 +43,7 @@ describe('HandleRequestUseCase - Caching', () => {
       }
     };
 
-    (mockRadixTree.find as Mock).mockReturnValue(rule);
+    (mockStore.getRedirect as Mock).mockResolvedValue(rule);
 
     // First request: Should instantiate UAParser
     await useCase.execute('/cache-test', new Headers({ 'user-agent': ua }), '127.0.0.1', new URL('http://localhost/'));

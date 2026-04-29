@@ -3,6 +3,7 @@ import { HandleRequestUseCase } from '../../src/use-cases/handle-request';
 import { RadixTree } from '../../src/core/routing/radix-tree';
 import { CuckooFilter } from '../../src/core/filtering/cuckoo-filter';
 import { RedirectRule } from '../../src/core/config/types';
+import { InMemoryStore } from '../../src/adapters/store/in-memory-store';
 
 // Mock payload builder
 vi.mock('../../src/core/analytics/payload-builder', () => ({
@@ -15,6 +16,7 @@ describe('Language Targeting Performance', () => {
   let useCase: HandleRequestUseCase;
   let radixTree: RadixTree;
   let cuckooFilter: CuckooFilter;
+  let store: InMemoryStore;
 
   const createLanguageTargetingRule = (count: number): RedirectRule => {
     const rules = [];
@@ -50,7 +52,8 @@ describe('Language Targeting Performance', () => {
   beforeEach(() => {
     radixTree = new RadixTree();
     cuckooFilter = new CuckooFilter();
-    useCase = new HandleRequestUseCase(radixTree, cuckooFilter);
+    store = new InMemoryStore(radixTree, cuckooFilter);
+    useCase = new HandleRequestUseCase(store);
   });
 
   it('processes requests with heavy language parsing', async () => {

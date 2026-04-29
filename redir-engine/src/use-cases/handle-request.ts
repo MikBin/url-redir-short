@@ -1,11 +1,10 @@
 import { metrics } from '../adapters/metrics/prometheus';
-import { RadixTree } from '../core/routing/radix-tree';
-import { CuckooFilter } from '../core/filtering/cuckoo-filter';
 import { RedirectRule } from '../core/config/types';
 import { AnalyticsCollector } from '../core/analytics/collector';
 import { buildAnalyticsPayload } from '../core/analytics/payload-builder';
 import { LazyDeviceContext } from '../core/context/lazy-device-context';
 import { LazyLanguageContext } from '../core/context/lazy-language-context';
+import { IRedirectStore } from '../ports/IRedirectStore';
 
 // Define the result type for handleRequest
 export type HandleRequestResult =
@@ -14,17 +13,14 @@ export type HandleRequestResult =
   | null;
 
 export class HandleRequestUseCase {
-  private radixTree: RadixTree;
-  private cuckooFilter: CuckooFilter;
+  private store: IRedirectStore;
   private analyticsCollector?: AnalyticsCollector;
 
   constructor(
-    radixTree: RadixTree,
-    cuckooFilter: CuckooFilter,
+    store: IRedirectStore,
     analyticsCollector?: AnalyticsCollector
   ) {
-    this.radixTree = radixTree;
-    this.cuckooFilter = cuckooFilter;
+    this.store = store;
     this.analyticsCollector = analyticsCollector;
   }
 
@@ -35,16 +31,16 @@ export class HandleRequestUseCase {
     originalUrl: URL,
     passwordProvider?: () => Promise<string | undefined> | string | undefined
   ): Promise<HandleRequestResult> {
-    // 1. Check Cuckoo Filter
-    if (!this.cuckooFilter.has(path)) {
+    // 1. Check Store (e.g. Cuckoo Filter)
+    if (!(await this.store.mightExist(path))) {
       metrics.cuckooLookups.inc({ result: 'miss' });
       return null; // Definitely 404
     }
 
     metrics.cuckooLookups.inc({ result: 'hit' });
 
-    // 2. Check Radix Tree (verify Cuckoo positive)
-    const rule = this.radixTree.find(path);
+    // 2. Retrieve Rule from Store (verify positive)
+    const rule = await this.store.getRedirect(path);
 
     if (!rule) {
       return null;
