@@ -16,6 +16,11 @@ const envSchema = z.object({
   // Supabase (handled by Nuxt Supabase module, but good to validate existence if needed manually)
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_KEY: z.string().min(1).optional(),
+
+  // Cloudflare KV (optional — only required when CF Worker engines are in use)
+  CF_ACCOUNT_ID: z.string().optional(),
+  CF_KV_NAMESPACE_ID: z.string().optional(),
+  CF_API_TOKEN: z.string().optional(),
 })
 
 // Parse and validate process.env

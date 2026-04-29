@@ -1,5 +1,7 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { logAudit } from '../../utils/audit'
+import { transformLink, SupabaseLink } from '../../utils/transformer'
+import { deleteRuleFromKV } from '../../utils/cloudflare-kv'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -48,6 +50,10 @@ export default defineEventHandler(async (event) => {
       status: 'success',
       oldValue: oldData
   })
+
+  // Fire-and-forget: remove deleted rule from CF KV
+  const deletedRule = transformLink(oldData as SupabaseLink)
+  deleteRuleFromKV(deletedRule.path).catch(() => {})
 
   return { success: true }
 })

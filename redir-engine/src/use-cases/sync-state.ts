@@ -1,75 +1,53 @@
 import { metrics } from '../adapters/metrics/prometheus';
-import { RadixTree } from '../core/routing/radix-tree';
-import { CuckooFilter } from '../core/filtering/cuckoo-filter';
+import { IRedirectStore } from '../ports/IRedirectStore';
 import { RedirectRule, RedirectRuleUpdate } from '../core/config/types';
 import { CacheEvictionManager, EvictionConfig } from '../adapters/cache/cache-eviction';
 
 export class SyncStateUseCase {
-  private radixTree: RadixTree;
-  private cuckooFilter: CuckooFilter;
+  private store: IRedirectStore;
   private evictionManager: CacheEvictionManager;
 
   constructor(
-    radixTree: RadixTree,
-    cuckooFilter: CuckooFilter,
+    store: IRedirectStore,
     evictionConfig?: Partial<EvictionConfig>
   ) {
-    this.radixTree = radixTree;
-    this.cuckooFilter = cuckooFilter;
+    this.store = store;
     this.evictionManager = new CacheEvictionManager(evictionConfig);
     
     // Start memory monitoring
     this.evictionManager.startMonitoring();
   }
 
-  public handleCreate(rule: RedirectRule) {
+  public async handleCreate(rule: RedirectRule) {
     this.normalizeRule(rule);
     console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
 
-    // Check if path already exists in Radix Tree to handle replays correctly
-    const existing = this.radixTree.find(rule.path);
-    this.radixTree.insert(rule.path, rule);
-
-    if (!existing) {
-      // New path: must add to Cuckoo Filter (unconditionally, to handle collisions)
-      this.cuckooFilter.add(rule.path);
-    } else {
-      // Path existed: likely a replay.
-      // Ensure it's in Cuckoo Filter (just in case) but avoid duplicate add if present
-      if (!this.cuckooFilter.has(rule.path)) {
-        this.cuckooFilter.add(rule.path);
-      }
-    }
+    await this.store.addRedirect(rule);
 
     this.evictionManager.recordAccess(rule.path, rule);
     this.updateMetrics();
   }
 
-  public handleUpdate(rule: RedirectRule) {
+  public async handleUpdate(rule: RedirectRule) {
     this.normalizeRule(rule);
     console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
-    // Update is same as insert for Radix
-    this.radixTree.insert(rule.path, rule);
-    // Cuckoo: Add if not present. If present, it's fine.
-    // Note: Cuckoo filter generally doesn't support "update" in the sense of changing value associated with key (it only stores keys).
-    // So ensuring it is in the filter is enough.
-    if (!this.cuckooFilter.has(rule.path)) {
-      this.cuckooFilter.add(rule.path);
-    }
+    
+    await this.store.addRedirect(rule);
+
     this.evictionManager.recordAccess(rule.path, rule);
     this.updateMetrics();
   }
 
-  public handleDelete(rule: RedirectRule) {
+  public async handleDelete(rule: RedirectRule) {
     console.log(`[Sync] Delete: ${rule.path}`);
-    this.radixTree.delete(rule.path);
-    this.cuckooFilter.remove(rule.path);
+    await this.store.removeRedirect(rule.path);
     this.evictionManager.recordRemoval(rule.path);
     this.updateMetrics();
   }
 
   private updateMetrics() {
-    metrics.radixTreeSize.set(this.radixTree.size());
+    // Note: RadixTree size metric is skipped if store doesn't expose it
+    // We could add size() to IRedirectStore if needed.
     const cacheInfo = this.evictionManager.getCacheInfo();
     metrics.cacheEntries.set(cacheInfo.size);
     

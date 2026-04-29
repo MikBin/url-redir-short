@@ -22,10 +22,10 @@
 
 ## Task 5: Runtime Wiring
 **Files:** `redir-engine/runtimes/node/index.ts`, `redir-engine/runtimes/cf-worker/index.ts`
-- [ ] Node: Wire `InMemoryStore` + `SSESyncAdapter`. Bind sync updates to store updates.
-- [ ] CF Worker: Wire `CloudflareKVStore` + `NoOpSyncAdapter`.
+- [x] Node: Wire `InMemoryStore` + `SSESyncAdapter`. Bind sync updates to store updates.
+- [x] CF Worker: Wire `CloudflareKVStore` + `NoOpSyncAdapter`.
 
 ## Task 6: Admin Service KV Publisher
 **Files:** `admin-service/supabase/server/utils/cloudflare-kv.ts`, event hooks
-- [ ] Implement CF KV API client for Admin Service.
-- [ ] Update link creation/mutation handlers to push to KV if the associated domain is configured for CF Workers.
+- [x] Implement CF KV API client for Admin Service.
+- [x] Update link creation/mutation handlers to push to KV if the associated domain is configured for CF Workers.

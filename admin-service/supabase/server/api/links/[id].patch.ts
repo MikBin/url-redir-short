@@ -1,6 +1,8 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { z } from 'zod'
 import { logAudit } from '../../utils/audit'
+import { transformLink } from '../../utils/transformer'
+import { publishRuleToKV } from '../../utils/cloudflare-kv'
 
 const UpdateLinkSchema = z.object({
   slug: z.string().min(1).regex(/^[a-zA-Z0-9-_]+$/).optional(),
@@ -89,6 +91,9 @@ export default defineEventHandler(async (event) => {
       oldValue: oldData,
       newValue: data
   })
+
+  // Fire-and-forget: push updated rule to CF KV for edge Worker consumption
+  publishRuleToKV(transformLink(data)).catch(() => {})
 
   return data
 })
