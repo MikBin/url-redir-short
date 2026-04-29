@@ -7,18 +7,18 @@
 
 ## Task 2: Core Refactor
 **File:** `redir-engine/src/core/router.ts` (or equivalent)
-- [ ] Modify constructor/init to accept `IRedirectStore`.
-- [ ] Update request handling to `await store.getRedirect(...)` instead of directly accessing the RadixTree.
+- [x] Modify constructor/init to accept `IRedirectStore`.
+- [x] Update request handling to `await store.getRedirect(...)` instead of directly accessing the RadixTree.
 
 ## Task 3: Storage Adapters
 **Files:** `redir-engine/src/adapters/storage/InMemoryStore.ts`, `CloudflareKVStore.ts`
-- [ ] Implement `InMemoryStore` wrapping `RadixTree` and `CuckooFilter`. Add methods for the sync client to update it.
-- [ ] Implement `CloudflareKVStore` utilizing the CF KV API.
+- [x] Implement `InMemoryStore` wrapping `RadixTree` and `CuckooFilter`. Add methods for the sync client to update it.
+- [x] Implement `CloudflareKVStore` utilizing the CF KV API.
 
 ## Task 4: Sync Adapters
 **Files:** `redir-engine/src/adapters/sync/SSESyncAdapter.ts`, `NoOpSyncAdapter.ts`
-- [ ] Extract `SSEClient` logic into `SSESyncAdapter` implementing `ISyncManager`.
-- [ ] Implement a dummy `NoOpSyncAdapter` that does nothing for CF workers.
+- [x] Extract `SSEClient` logic into `SSESyncAdapter` implementing `ISyncManager`.
+- [x] Implement a dummy `NoOpSyncAdapter` that does nothing for CF workers.
 
 ## Task 5: Runtime Wiring
 **Files:** `redir-engine/runtimes/node/index.ts`, `redir-engine/runtimes/cf-worker/index.ts`

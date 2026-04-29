@@ -24,4 +24,15 @@ export class CloudflareKVStore implements IRedirectStore {
     // Cloudflare KV might Exist logic - return true as we fallback to fetching if true.
     return true;
   }
+
+  async addRedirect(rule: RedirectRule): Promise<void> {
+    // For CF Workers, the Admin service typically updates KV directly.
+    // We implement this to satisfy the interface.
+    const key = rule.path; 
+    await this.env.REDIRECTS_KV.put(key, JSON.stringify(rule));
+  }
+
+  async removeRedirect(path: string): Promise<void> {
+    await this.env.REDIRECTS_KV.delete(path);
+  }
 }

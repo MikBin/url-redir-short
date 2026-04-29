@@ -16,4 +16,14 @@ export class InMemoryStore implements IRedirectStore {
   async mightExist(slug: string, domainId?: string): Promise<boolean> {
     return this.cuckooFilter.has(slug);
   }
+
+  async addRedirect(rule: RedirectRule): Promise<void> {
+    this.radixTree.insert(rule.path, rule);
+    this.cuckooFilter.add(rule.path);
+  }
+
+  async removeRedirect(path: string): Promise<void> {
+    this.radixTree.delete(path);
+    this.cuckooFilter.remove(path);
+  }
 }

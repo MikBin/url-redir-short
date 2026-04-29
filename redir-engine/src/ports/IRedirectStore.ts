@@ -12,4 +12,14 @@ export interface IRedirectStore {
    * Implementations for Cloudflare KV might always return true or check a local bloom filter.
    */
   mightExist(slug: string, domainId?: string): Promise<boolean>;
+
+  /**
+   * Adds or updates a redirect rule.
+   */
+  addRedirect(rule: RedirectRule): Promise<void>;
+
+  /**
+   * Removes a redirect rule by path.
+   */
+  removeRedirect(path: string): Promise<void>;
 }
