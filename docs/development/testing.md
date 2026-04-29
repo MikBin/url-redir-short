@@ -55,18 +55,47 @@ npm test -- specs/T01-basic.test.ts
 
 Because the Redirect Engine is designed for high throughput at the edge, performance tests are strictly maintained to catch performance regressions.
 
-These tests are located in `redir-engine/tests/perf/`.
+### Unit Benchmarks
+
+Located in `redir-engine/tests/perf/`.
 
 ```bash
 cd redir-engine
-npm run test:perf
+npm run test:perf        # run benchmarks
+npm run test:perf:watch  # watch mode
 ```
 
 Benchmarks cover:
-- Radix tree routing speed.
-- Cuckoo filter insertion and existence checks.
-- LRU Cache eviction latency.
-- Payload builder allocation speed.
+- **Cuckoo Filter** (`tests/perf/cuckoo-filter.bench.ts`): insert, lookup (hit/miss), delete, mixed workload, memory fill factor
+- **Radix Tree** (`tests/perf/radix-tree.bench.ts`): shallow/deep insert, lookup, delete, mixed workload, real-world URL patterns
+
+### E2E Load Tests
+
+Located in `redir-engine/e2e-suite/specs/T12-performance.test.ts`.
+
+```bash
+cd redir-engine/e2e-suite
+npm run test:performance
+```
+
+Covers: routing table scaling (1K/10K), concurrent requests (10/50/100), 404 rejection efficiency, hot-path 80/20 traffic, sustained 50 RPS.
+
+### Established Performance Baselines
+
+These baselines were established on hardware as of January 2026 and serve as the regression benchmark:
+
+| Metric | Result | Target |
+|--------|--------|--------|
+| Cuckoo Filter inserts (1K–100K) | 9,750–29,447 ops/sec | — |
+| Cuckoo Filter lookups | 64,254–90,318 ops/sec | — |
+| Cuckoo Filter memory (10K items) | ~3 MB | — |
+| Radix Tree inserts (deep→shallow) | 112K–733K ops/sec | — |
+| Radix Tree lookups | 1.5M–7.3M ops/sec | — |
+| HTTP redirect avg (1K routes) | < 100ms | < 10ms p99 |
+| HTTP redirect avg (10K routes) | < 150ms | < 10ms p99 |
+| Concurrent (50 req) avg | < 300ms | — |
+| Concurrent (100 req) avg | < 500ms | — |
+| Sustained 50 RPS avg | < 200ms | — |
 
 ## Continuous Integration (CI)
 

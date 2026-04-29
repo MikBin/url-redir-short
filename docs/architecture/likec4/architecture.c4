@@ -1,0 +1,289 @@
+specification {
+  element system
+  element container
+  element component
+  element database
+  element queue
+}
+
+model {
+
+  // ─── Actors ───────────────────────────────────────────────────────────────
+
+  adminUser = person "Admin User" {
+    description: "Manages redirect links, domains, and views analytics"
+  }
+
+  endUser = person "End User" {
+    description: "Clicks on shortened URLs and gets redirected"
+  }
+
+  // ─── System ───────────────────────────────────────────────────────────────
+
+  system = system "Universal Redirector System" {
+    description: "High-performance distributed URL redirection platform"
+
+    // ── Admin Service ───────────────────────────────────────────────────────
+
+    adminService = container "Admin Service" {
+      technology: "Nuxt 4 / Nitro / Supabase"
+      description: "Control plane: management UI, REST API, sync hub, analytics ingestion"
+
+      uiClient = component "Vue 3 Dashboard" {
+        technology: "Vue 3 / Nuxt pages"
+        description: "Browser-side SPA: link management, analytics charts, domain settings"
+      }
+
+      nitroApiRoutes = component "Nitro API Routes" {
+        technology: "server/api/ (Nitro)"
+        description: "REST endpoints: link CRUD, sync stream, analytics collect, QR, bulk"
+      }
+
+      realtimePlugin = component "Realtime Plugin" {
+        technology: "server/plugins/realtime.ts"
+        description: "Subscribes to Supabase Realtime; emits events to broadcaster on INSERT/UPDATE/DELETE"
+      }
+
+      broadcaster = component "SSE Broadcaster" {
+        technology: "EventEmitter + H3 SSE"
+        description: "Fans out DB change events to all connected engine SSE clients"
+      }
+
+      kvPublisher = component "CF KV Publisher" {
+        technology: "server/utils/cloudflare-kv.ts"
+        description: "Pushes redirect rule changes to Cloudflare KV via REST API (fire-and-forget)"
+      }
+
+      transformer = component "Transformer" {
+        technology: "server/utils/transformer.ts"
+        description: "Converts Supabase snake_case DB rows to camelCase RedirectRule for engines"
+      }
+
+      analyticsIngestion = component "Analytics Ingestion" {
+        technology: "server/api/analytics/"
+        description: "Receives raw click events from engines; aggregates into DB"
+      }
+
+      uiClient -> nitroApiRoutes: "API calls (CRUD)"
+      nitroApiRoutes -> transformer: "Transform before sync"
+      transformer -> broadcaster: "Push transformed rule"
+      transformer -> kvPublisher: "Push to CF KV on mutate"
+      realtimePlugin -> broadcaster: "Relay DB events"
+      nitroApiRoutes -> analyticsIngestion: "Internal analytics pipeline"
+    }
+
+    // ── Redirect Engine (shared logical container) ──────────────────────────
+
+    redirectorEngineNode = container "Redirect Engine (VPS / Node.js)" {
+      technology: "Hono + Node.js"
+      description: "Persistent edge node: InMemoryStore + SSESyncAdapter (Hexagonal Architecture)"
+
+      // Ports
+      iRedirectStore = component "IRedirectStore (port)" {
+        description: "Abstract interface: getRedirect, addRedirect, removeRedirect"
+      }
+
+      iSyncManager = component "ISyncManager (port)" {
+        description: "Abstract interface: start, stop, onUpdate"
+      }
+
+      // Adapters — Store
+      inMemoryStore = component "InMemoryStore" {
+        technology: "adapters/store/in-memory-store.ts"
+        description: "Implements IRedirectStore using RadixTree + CuckooFilter in-process"
+      }
+
+      // Adapters — Sync
+      sseSyncAdapter = component "SSESyncAdapter" {
+        technology: "adapters/sync/SSESyncAdapter.ts"
+        description: "Implements ISyncManager; wraps SSEClient, drives IRedirectStore on events"
+      }
+
+      // Core domain
+      radixTree = component "Radix Tree" {
+        technology: "src/core/routing/radix-tree.ts"
+        description: "O(k) path segment routing cache"
+      }
+
+      cuckooFilter = component "Cuckoo Filter" {
+        technology: "src/core/filtering/cuckoo-filter.ts"
+        description: "O(1) probabilistic 404 gatekeeper — supports deletions"
+      }
+
+      // Use Cases
+      handleRequest = component "HandleRequestUseCase" {
+        technology: "src/use-cases/handle-request.ts"
+        description: "Orchestrates: CuckooFilter → IRedirectStore → targeting pipeline → response"
+      }
+
+      syncState = component "SyncStateUseCase" {
+        technology: "src/use-cases/sync-state.ts"
+        description: "Delegates create/update/delete events from ISyncManager to IRedirectStore"
+      }
+
+      // Routing pipeline
+      targetingPipeline = component "Targeting Pipeline" {
+        description: "A/B split, Geo (cf-ipcountry), Language (Accept-Language), Device (UA), Password gate, HSTS"
+      }
+
+      analyticsCollector = component "FireAndForgetCollector" {
+        technology: "adapters/analytics/"
+        description: "Async HTTP POST — never blocks redirect hot path"
+      }
+
+      httpAdapter = component "HTTP Adapter" {
+        technology: "adapters/http/server.ts (Hono)"
+        description: "Routes all incoming requests to HandleRequestUseCase"
+      }
+
+      // Wiring
+      httpAdapter -> handleRequest: "Delegates request"
+      handleRequest -> iRedirectStore: "Lookup via port"
+      handleRequest -> targetingPipeline: "Apply routing logic"
+      handleRequest -> analyticsCollector: "Fire-and-forget analytics"
+      iRedirectStore -> inMemoryStore: "Implemented by"
+      inMemoryStore -> radixTree: "Uses"
+      inMemoryStore -> cuckooFilter: "Uses"
+      iSyncManager -> sseSyncAdapter: "Implemented by"
+      sseSyncAdapter -> syncState: "Drives handleCreate/Update/Delete"
+      syncState -> iRedirectStore: "Mutates store via port"
+    }
+
+    redirectorEngineWorker = container "Redirect Engine (Cloudflare Workers)" {
+      technology: "Hono + CF Workers"
+      description: "Ephemeral edge node: CloudflareKVStore + NoOpSyncAdapter (Hexagonal Architecture)"
+
+      // Adapters — Store
+      kvStore = component "CloudflareKVStore" {
+        technology: "adapters/storage/CloudflareKVStore.ts"
+        description: "Implements IRedirectStore; reads from Cloudflare KV namespace per request"
+      }
+
+      // Adapters — Sync
+      noOpSync = component "NoOpSyncAdapter" {
+        technology: "adapters/sync/NoOpSyncAdapter.ts"
+        description: "Implements ISyncManager as no-op — CF Workers receive state via KV, not SSE"
+      }
+
+      cfHandleRequest = component "HandleRequestUseCase" {
+        technology: "src/use-cases/handle-request.ts (same)"
+        description: "Same use case, different store adapter injected at runtime"
+      }
+
+      cfTargetingPipeline = component "Targeting Pipeline" {
+        description: "Same A/B, Geo, Language, Device, Password, HSTS pipeline"
+      }
+
+      cfAnalyticsCollector = component "FireAndForgetCollector" {
+        description: "Async HTTP POST to Admin analytics endpoint"
+      }
+
+      cfHandleRequest -> kvStore: "Lookup via IRedirectStore port"
+      cfHandleRequest -> cfTargetingPipeline: "Apply routing logic"
+      cfHandleRequest -> cfAnalyticsCollector: "Fire-and-forget"
+    }
+
+    // ── External infrastructure ─────────────────────────────────────────────
+
+    supabase = container "Supabase" {
+      technology: "PostgreSQL + GoTrue + Realtime"
+      description: "Database, auth, and realtime change events"
+
+      linksTable = component "links" {
+        description: "Redirect rules (slug, destination, targeting, ab_testing, hsts, expiry)"
+      }
+      domainsTable = component "domains" {
+        description: "Custom domain configurations"
+      }
+      analyticsTable = component "analytics_events" {
+        description: "Raw click event logs for aggregation"
+      }
+      usersTable = component "auth.users" {
+        description: "User profiles managed by Supabase Auth (GoTrue)"
+      }
+      rlsPolicies = component "RLS Policies" {
+        technology: "PostgreSQL Row Level Security"
+        description: "Enforces per-owner data isolation — only owner_id can mutate their rows"
+      }
+      realtimeEvents = component "Realtime" {
+        technology: "Supabase Realtime (WebSocket)"
+        description: "Broadcasts INSERT/UPDATE/DELETE events to subscribers"
+      }
+    }
+
+    cfKV = container "Cloudflare KV" {
+      technology: "Cloudflare Workers KV"
+      description: "Globally-distributed key-value store. Keyed by redirect path. Populated by Admin Service on each mutation."
+    }
+
+    // ── System-level relationships ──────────────────────────────────────────
+
+    adminUser -> adminService.uiClient: "Manages links & domains"
+
+    adminService.nitroApiRoutes -> supabase.linksTable: "CRUD (Supabase JS)"
+    adminService.nitroApiRoutes -> supabase.analyticsTable: "Inserts events"
+    supabase.realtimeEvents -> adminService.realtimePlugin: "DB change events (WebSocket)"
+
+    adminService.broadcaster -> redirectorEngineNode.sseSyncAdapter: "SSE stream (persistent)"
+    adminService.kvPublisher -> cfKV: "PUT / DELETE on link mutate"
+
+    endUser -> redirectorEngineNode.httpAdapter: "HTTP/S request"
+    redirectorEngineNode.analyticsCollector -> adminService.analyticsIngestion: "POST /api/analytics/collect"
+
+    endUser -> redirectorEngineWorker.cfHandleRequest: "HTTP/S request (CF edge)"
+    redirectorEngineWorker.kvStore -> cfKV: "KV.get(path) per request"
+    redirectorEngineWorker.cfAnalyticsCollector -> adminService.analyticsIngestion: "POST /api/analytics/collect"
+  }
+
+  // ─── Deployment ────────────────────────────────────────────────────────────
+
+  deployment = system "Deployment Environments" {
+    description: "How the system is deployed"
+
+    vpsNode = container "VPS / Docker (Node.js)" {
+      technology: "Docker Compose / Linux"
+      description: "Admin Service + Redirect Engine (Node) running as persistent Docker containers"
+    }
+
+    cfWorkerDeploy = container "Cloudflare Workers" {
+      technology: "Cloudflare global edge network"
+      description: "Redirect Engine deployed as CF Worker per domain. Admin Service stays on VPS."
+    }
+
+    vpsNode -> system.adminService: "Hosts"
+    vpsNode -> system.redirectorEngineNode: "Hosts"
+    cfWorkerDeploy -> system.redirectorEngineWorker: "Hosts"
+  }
+}
+
+// ─── Views ─────────────────────────────────────────────────────────────────
+
+views {
+
+  view index {
+    title: "Universal Redirector — System Context"
+    include adminUser, endUser, system
+    include system.adminService, system.supabase, system.cfKV
+    include system.redirectorEngineNode, system.redirectorEngineWorker
+  }
+
+  view adminServiceComponents of system.adminService {
+    title: "Admin Service — Component View"
+    include *
+  }
+
+  view engineNodeComponents of system.redirectorEngineNode {
+    title: "Redirect Engine (Node.js) — Hexagonal Architecture"
+    include *
+  }
+
+  view engineWorkerComponents of system.redirectorEngineWorker {
+    title: "Redirect Engine (CF Worker) — Hexagonal Architecture"
+    include *
+  }
+
+  view deploymentView of deployment {
+    title: "Deployment View"
+    include *
+  }
+}
