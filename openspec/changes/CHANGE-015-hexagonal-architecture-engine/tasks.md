@@ -2,8 +2,8 @@
 
 ## Task 1: Engine Ports
 **Files:** `redir-engine/src/ports/IRedirectStore.ts`, `ISyncManager.ts`
-- [ ] Create `IRedirectStore` interface with `getRedirect` and `mightExist` methods.
-- [ ] Create `ISyncManager` interface with `start`, `stop`, and `onUpdate` methods.
+- [x] Create `IRedirectStore` interface with `getRedirect` and `mightExist` methods.
+- [x] Create `ISyncManager` interface with `start`, `stop`, and `onUpdate` methods.
 
 ## Task 2: Core Refactor
 **File:** `redir-engine/src/core/router.ts` (or equivalent)
