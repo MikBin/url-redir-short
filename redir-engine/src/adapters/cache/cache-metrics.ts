@@ -101,7 +101,7 @@ export class CacheMetricsCollector {
       misses,
       hitRatio,
       cacheSize: this.cacheSize,
-      heapUsedMB: process.memoryUsage().heapUsed / 1024 / 1024,
+      heapUsedMB: (typeof process !== 'undefined' && process.memoryUsage) ? process.memoryUsage().heapUsed / 1024 / 1024 : 0,
       avgCachedLatency,
       avgUncachedLatency,
       avgLatencyImprovement,

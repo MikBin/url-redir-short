@@ -16,7 +16,18 @@ export class PrometheusExporter {
   constructor() {
     this.registry = new Registry();
     
-    collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+    // Only collect default metrics if cpuUsage and memoryUsage are implemented.
+    // Cloudflare Workers unenv does not support process.cpuUsage.
+    // Try to catch unenv throwing Not Implemented errors.
+    try {
+      if (typeof process !== 'undefined') {
+        // Just calling process.cpuUsage() will throw if unenv hasn't implemented it.
+        if (process.cpuUsage) process.cpuUsage();
+        collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+      }
+    } catch (e) {
+      // Ignored: Not in a full Node environment
+    }
 
     this.requestsTotal = new Counter({
       name: 'engine_requests_total',
@@ -73,8 +84,10 @@ export class PrometheusExporter {
 
   public async getMetrics(): Promise<string> {
     // Update memory gauge before returning
-    const usage = process.memoryUsage();
-    this.memoryHeap.set(usage.heapUsed / 1024 / 1024);
+    if (typeof process !== 'undefined' && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      this.memoryHeap.set(usage.heapUsed / 1024 / 1024);
+    }
     
     return await this.registry.metrics();
   }
