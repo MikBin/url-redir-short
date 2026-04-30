@@ -38,9 +38,9 @@ Non-functional requirements define the performance, scalability, and efficiency 
 
 ### NFR-04: TLS/HTTPS Termination
 - **Priority:** MUST
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** All production traffic MUST be served over HTTPS with TLS termination at the edge (reverse proxy or load balancer).
-- **Implementation:** No reverse proxy configuration exists yet.
+- **Implementation:** Caddy reverse proxy with automatic Let's Encrypt TLS in `infra/caddy/Caddyfile`. HTTP/2 and OCSP stapling enabled. See CHANGE-006.
 
 ### NFR-05: Structured Observability Stack
 - **Priority:** MUST
@@ -50,21 +50,21 @@ Non-functional requirements define the performance, scalability, and efficiency 
 
 ### NFR-06: Secrets Management
 - **Priority:** MUST
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** Production deployments MUST NOT contain hardcoded secrets. All sensitive configuration MUST be injected via environment variables from a secrets manager or vault.
-- **Implementation:** Development docker-compose.yml contains hardcoded keys.
+- **Implementation:** `loadSecret()` utility reads from Docker secrets (`/run/secrets/<name>`) with env-var fallback. Startup validation plugin fails fast on missing secrets. See CHANGE-008.
 
 ### NFR-07: Database Migration Tooling
 - **Priority:** MUST
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** Schema changes MUST be managed via versioned, reversible migrations rather than raw SQL files.
-- **Implementation:** Only raw `schema.sql` exists; no migration tool integrated.
+- **Implementation:** Supabase CLI migration framework initialized in `admin-service/supabase/supabase/`. Baseline migration `20250125000000_baseline.sql` created from `schema.sql`. CI validates migrations on every push. See CHANGE-009.
 
 ### NFR-08: Continuous Deployment Pipeline
 - **Priority:** MUST
-- **Status:** ❌ Not Implemented
+- **Status:** ✅ Implemented
 - **Description:** The system MUST have automated deployment pipelines (CI/CD) that build, test, and deploy to staging/production environments.
-- **Implementation:** CI pipeline runs tests only; no CD or deployment automation.
+- **Implementation:** GitHub Actions workflows: `build-push.yml` (Docker images → GHCR), `deploy-staging.yml`, `deploy-production.yml` (SSH deploy + health check). See CHANGE-010.
 
 ### NFR-09: Backup and Disaster Recovery
 - **Priority:** MUST
@@ -85,11 +85,11 @@ Non-functional requirements define the performance, scalability, and efficiency 
 | NFR-01 | ✅ | Sub-50ms processing pipeline |
 | NFR-02 | ✅ | Stateless engines with SSE fan-out |
 | NFR-03 | ✅ | Cuckoo Filter + LRU cache + Radix Tree |
-| NFR-04 | ❌ | TLS/HTTPS termination → CHANGE-006 |
+| NFR-04 | ✅ | Caddy reverse proxy + auto-TLS (CHANGE-006) |
 | NFR-05 | ❌ | Observability stack → CHANGE-007 |
-| NFR-06 | ❌ | Secrets management → CHANGE-008 |
-| NFR-07 | ❌ | Database migration tooling → CHANGE-009 |
-| NFR-08 | ❌ | Continuous deployment pipeline → CHANGE-010 |
+| NFR-06 | ✅ | Docker secrets + startup validation (CHANGE-008) |
+| NFR-07 | ✅ | Supabase CLI migrations (CHANGE-009) |
+| NFR-08 | ✅ | GitHub Actions CI/CD pipelines (CHANGE-010) |
 | NFR-09 | ❌ | Backup and disaster recovery → CHANGE-011 |
 | NFR-10 | ❌ | Distributed rate limiting → CHANGE-012 |
 
