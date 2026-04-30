@@ -74,7 +74,6 @@
 
                   </div>
                   <div class="whitespace-nowrap text-right text-sm text-gray-500">
-                    <div v-if="entry.actorId" class="mb-1 text-xs text-gray-400">By: {{ entry.actorId }}</div>
                     <time :datetime="entry.createdAt">{{ formatDate(entry.createdAt) }}</time>
                   </div>
                 </div>
@@ -140,7 +139,7 @@ const getActionColor = (action: string) => {
 }
 
 const formatDate = (isoString: string) => {
-  const date = new Date(isoString.replace(' ', 'T'))
+  const date = new Date(isoString)
   return date.toLocaleString()
 }
 
