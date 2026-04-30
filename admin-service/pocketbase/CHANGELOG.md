@@ -1,7 +1,112 @@
+## v0.26.1
+
+- Removed the wrapping of `io.EOF` error when reading files since currently `io.ReadAll` doesn't check for wrapped errors ([#6600](https://github.com/pocketbase/pocketbase/issues/6600)).
+
+
+## v0.26.0
+
+- ⚠️ Replaced `aws-sdk-go-v2` and `gocloud.dev/blob` with custom lighter implementation ([#6562](https://github.com/pocketbase/pocketbase/discussions/6562)).
+    As a side-effect of the dependency removal, the binary size has been reduced with ~10MB and builds ~30% faster.
+    _Although the change is expected to be backward-compatible, I'd recommend to test first locally the new version with your S3 provider (if you use S3 for files storage and backups)._
+
+- ⚠️ Prioritized the user submitted non-empty `createData.email` (_it will be unverified_) when creating the PocketBase user during the first OAuth2 auth.
+
+- Load the request info context during password/OAuth2/OTP authentication ([#6402](https://github.com/pocketbase/pocketbase/issues/6402)).
+    This could be useful in case you want to target the auth method as part of the MFA and Auth API rules.
+    For example, to disable MFA for the OAuth2 auth could be expressed as `@request.context != "oauth2"` MFA rule.
+
+- Added `store.Store.SetFunc(key, func(old T) new T)` to set/update a store value with the return result of the callback in a concurrent safe manner.
+
+- Added `subscription.Message.WriteSSE(w, id)` for writing an SSE formatted message into the provided writer interface (_used mostly to assist with the unit testing_).
+
+- Added `$os.stat(file)` JSVM helper ([#6407](https://github.com/pocketbase/pocketbase/discussions/6407)).
+
+- Added log warning for `async` marked JSVM handlers and resolve when possible the returned `Promise` as fallback ([#6476](https://github.com/pocketbase/pocketbase/issues/6476)).
+
+- Allowed calling `cronAdd`, `cronRemove` from inside other JSVM handlers ([#6481](https://github.com/pocketbase/pocketbase/discussions/6481)).
+
+- Bumped the default request read and write timeouts to 5mins (_old 3mins_) to accommodate slower internet connections and larger file uploads/downloads.
+    _If you want to change them you can modify the `OnServe` hook's `ServeEvent.ReadTimeout/WriteTimeout` fields as shown in [#6550](https://github.com/pocketbase/pocketbase/discussions/6550#discussioncomment-12364515)._
+
+- Normalized the `@request.auth.*` and `@request.body.*` back relations resolver to always return `null` when the relation field is pointing to a different collection ([#6590](https://github.com/pocketbase/pocketbase/discussions/6590#discussioncomment-12496581)).
+
+- Other minor improvements (_fixed query dev log nested parameters output, reintroduced `DynamicModel` object/array props reflect types caching, updated Go and npm deps, etc._)
+
+
+## v0.25.9
+
+- Fixed `DynamicModel` object/array props reflect type caching ([#6563](https://github.com/pocketbase/pocketbase/discussions/6563)).
+
+
+## v0.25.8
+
+- Added a default leeway of 5 minutes for the Apple/OIDC `id_token` timestamp claims check to account for clock-skew ([#6529](https://github.com/pocketbase/pocketbase/issues/6529)).
+    It can be further customized if needed with the `PB_ID_TOKEN_LEEWAY` env variable (_the value must be in seconds, e.g. "PB_ID_TOKEN_LEEWAY=60" for 1 minute_).
+
+
+## v0.25.7
+
+- Fixed `@request.body.jsonObjOrArr.*` values extraction ([#6493](https://github.com/pocketbase/pocketbase/discussions/6493)).
+
+
+## v0.25.6
+
+- Restore the missing `meta.isNew` field of the OAuth2 success response ([#6490](https://github.com/pocketbase/pocketbase/issues/6490)).
+
+- Updated npm dependencies.
+
+
+## v0.25.5
+
+- Set the current working directory as a default goja script path when executing inline JS strings to allow `require(m)` traversing parent `node_modules` directories.
+
+- Updated `modernc.org/sqlite` and `modernc.org/libc` dependencies.
+
+
+## v0.25.4
+
+- Downgraded `aws-sdk-go-v2` to the version before the default data integrity checks because there have been reports for non-AWS S3 providers in addition to Backblaze (IDrive, R2) that no longer or partially work with the latest AWS SDK changes.
+
+    While we try to enforce `when_required` by default, it is not enough to disable the new AWS SDK integrity checks entirely and some providers will require additional manual adjustments to make them compatible with the latest AWS SDK (e.g. removing the `x-aws-checksum-*` headers, unsetting the checksums calculation or reinstantiating the old MD5 checksums for some of the required operations, etc.) which as a result leads to a configuration mess that I'm not sure it would be a good idea to introduce.
+
+    This unfornuatelly is not a PocketBase or Go specific issue and the official AWS SDKs for other languages are in the same situation (even the latest aws-cli).
+
+    For those of you that extend PocketBase with Go: if your S3 vendor doesn't support the [AWS Data integrity checks](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html) and you are updating with `go get -u`, then make sure that the `aws-sdk-go-v2` dependencies in your `go.mod` are the same as in the repo:
+    ```
+    // go.mod
+    github.com/aws/aws-sdk-go-v2 v1.36.1
+    github.com/aws/aws-sdk-go-v2/config v1.28.10
+    github.com/aws/aws-sdk-go-v2/credentials v1.17.51
+    github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.48
+    github.com/aws/aws-sdk-go-v2/service/s3 v1.72.2
+
+    // after that run
+    go clean -modcache && go mod tidy
+    ```
+    _The versions pinning is temporary until the non-AWS S3 vendors patch their implementation or until I manage to find time to remove/replace the `aws-sdk-go-v2` dependency (I'll consider prioritizing it for the v0.26 or v0.27 release)._
+
+
+## v0.25.3
+
+- Added a temporary exception for Backblaze S3 endpoints to exclude the new `aws-sdk-go-v2` checksum headers ([#6440](https://github.com/pocketbase/pocketbase/discussions/6440)).
+
+
+## v0.25.2
+
+- Fixed realtime delete event not being fired for `RecordProxy`-ies and added basic realtime record resolve automated tests ([#6433](https://github.com/pocketbase/pocketbase/issues/6433)).
+
+
+## v0.25.1
+
+- Fixed the batch API Preview success sample response.
+
+- Bumped GitHub action min Go version to 1.23.6 as it comes with a [minor security fix](https://github.com/golang/go/issues?q=milestone%3AGo1.23.6+label%3ACherryPickApproved) for the ppc64le build.
+
+
 ## v0.25.0
 
 - ⚠️ Upgraded Google OAuth2 auth, token and userinfo endpoints to their latest versions.
-    _For users that don't do anything custom with the Google OAuth2 data or the OAuthe auth URL, this should be a non-breaking change. The exceptions that I could find are:_
+    _For users that don't do anything custom with the Google OAuth2 data or the OAuth2 auth URL, this should be a non-breaking change. The exceptions that I could find are:_
     - `/v3/userinfo` auth response changes:
         ```
         meta.rawUser.id             => meta.rawUser.sub
@@ -15,7 +120,7 @@
 - Added support for case-insensitive password auth based on the related UNIQUE index field collation ([#6337](https://github.com/pocketbase/pocketbase/discussions/6337)).
 
 - Enforced `when_required` for the new AWS SDK request and response checksum validations to allow other non-AWS vendors to catch up with new AWS SDK changes (see [#6313](https://github.com/pocketbase/pocketbase/discussions/6313) and [aws/aws-sdk-go-v2#2960](https://github.com/aws/aws-sdk-go-v2/discussions/2960)).
-    _You can set the environment variables `AWS_REQUEST_CHECKSUM_CALCULATION` and `AWS_RESPONSE_CHECKSUM_VALIDATION` to `when_supported` if your S3 vendor supports the new [new default integrity protections](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html)._
+    _You can set the environment variables `AWS_REQUEST_CHECKSUM_CALCULATION` and `AWS_RESPONSE_CHECKSUM_VALIDATION` to `when_supported` if your S3 vendor supports the [new default integrity protections](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html)._
 
 - Soft-deprecated `Record.GetUploadedFiles` in favor of `Record.GetUnsavedFiles` to minimize the ambiguities what the method do ([#6269](https://github.com/pocketbase/pocketbase/discussions/6269)).
 

@@ -20,9 +20,14 @@ export class SyncStateUseCase {
 
   public async handleCreate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    console.log(`[Sync] Create: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Create: ${rule.path} -> ${rule.destination} (Active: ${rule.isActive})`);
 
-    await this.store.addRedirect(rule);
+    if (rule.isActive === false) {
+      // If created as inactive, don't add to radix tree
+      await this.store.removeRedirect(rule.path);
+    } else {
+      await this.store.addRedirect(rule);
+    }
 
     this.evictionManager.recordAccess(rule.path, rule);
     this.updateMetrics();
@@ -30,9 +35,14 @@ export class SyncStateUseCase {
 
   public async handleUpdate(rule: RedirectRule) {
     this.normalizeRule(rule);
-    console.log(`[Sync] Update: ${rule.path} -> ${rule.destination}`);
+    console.log(`[Sync] Update: ${rule.path} -> ${rule.destination} (Active: ${rule.isActive})`);
     
-    await this.store.addRedirect(rule);
+    if (rule.isActive === false) {
+      // If updated to inactive, remove from radix tree
+      await this.store.removeRedirect(rule.path);
+    } else {
+      await this.store.addRedirect(rule);
+    }
 
     this.evictionManager.recordAccess(rule.path, rule);
     this.updateMetrics();

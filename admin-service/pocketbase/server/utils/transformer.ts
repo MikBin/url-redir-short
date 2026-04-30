@@ -38,9 +38,8 @@ export interface RedirectRule {
     password: string;
   };
 
-  // Expiration Logic
-  expiresAt?: number;
-  maxClicks?: number;
+  // Status
+  isActive?: boolean;
 }
 
 export interface PocketBaseLink {
@@ -108,6 +107,8 @@ export function transformLink(link: PocketBaseLink): RedirectRule {
   if (link.max_clicks !== undefined && link.max_clicks !== null) {
     rule.maxClicks = link.max_clicks;
   }
+
+  rule.isActive = link.is_active !== false; // Default to true
 
   return rule;
 }

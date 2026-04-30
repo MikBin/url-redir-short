@@ -37,3 +37,4 @@ domain-screenshots/
 .vscode/
 backups/
 **/backups/
+admin-service/pocketbase/pocketbase

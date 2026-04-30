@@ -41,6 +41,8 @@ export interface RedirectRule {
   expiresAt?: number;
   maxClicks?: number;
   clicks?: number;
+  // Status
+  isActive?: boolean;
 }
 
 export type RedirectRuleUpdate = {

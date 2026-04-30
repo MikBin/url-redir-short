@@ -7,7 +7,7 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "test": "vitest",
-    "pb:start": "pocketbase serve",
+    "pb:start": "./pocketbase serve",
     "pb:init": "node pb_init.js",
     "pb:seed": "node pb_seed.js",
     "generate": "nuxt generate",
