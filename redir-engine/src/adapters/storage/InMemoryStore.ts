@@ -21,7 +21,18 @@ export class InMemoryStore implements IRedirectStore {
     return this.cuckooFilter.has(slug);
   }
 
-  // Utility methods to manage the store internally
+  // Implementation of IRedirectStore methods
+  async addRedirect(rule: RedirectRule): Promise<void> {
+    this.radixTree.insert(rule.path, rule);
+    this.cuckooFilter.add(rule.path);
+  }
+
+  async removeRedirect(slug: string): Promise<void> {
+    this.radixTree.delete(slug);
+    this.cuckooFilter.remove(slug);
+  }
+
+  // Keeping internal sync variants for backward compatibility just in case tests or other internals use them
   insert(rule: RedirectRule): void {
     this.radixTree.insert(rule.path, rule);
     this.cuckooFilter.add(rule.path);
