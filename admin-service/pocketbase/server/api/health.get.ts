@@ -6,8 +6,8 @@ export default defineEventHandler(async (event) => {
 
   if (healthStatus.status === 'unhealthy') {
     setResponseStatus(event, 503);
-  } else {
-    setResponseStatus(event, 200);
+  } else if (healthStatus.status === 'degraded') {
+    setResponseStatus(event, 200); // Matches what Supabase does (implicitly by not 503ing)
   }
 
   setHeader(event, 'Cache-Control', 'public, max-age=10');
