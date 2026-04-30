@@ -5,6 +5,7 @@ export interface ComponentHealth {
   status: 'healthy' | 'degraded' | 'unhealthy';
   message?: string;
   latencyMs?: number;
+  details?: Record<string, unknown>;
 }
 
 export interface Metrics {
@@ -13,10 +14,12 @@ export interface Metrics {
   requests: {
     total: number;
     errors: number;
+    avgDuration: number;
   };
   memory: {
     heapUsed: number;
     heapTotal: number;
+    external: number;
     rss: number;
   };
 }
@@ -32,8 +35,13 @@ export interface HealthStatus {
   };
 }
 
-let requestCount = 0;
-let errorCount = 0;
+// In-memory metrics store
+const metricsStore = {
+  requestCount: 0,
+  errorCount: 0,
+  totalDuration: 0,
+  startTime: Date.now()
+};
 
 export async function checkDatabaseHealth(event: H3Event): Promise<ComponentHealth> {
   const start = performance.now();
@@ -54,39 +62,59 @@ export async function checkDatabaseHealth(event: H3Event): Promise<ComponentHeal
 }
 
 export function checkMemoryHealth(): ComponentHealth {
-  const memory = process.memoryUsage();
-  const heapFraction = memory.heapUsed / memory.heapTotal;
+  const memoryUsage = process.memoryUsage();
+  const heapUsedMB = memoryUsage.heapUsed / 1024 / 1024;
+  const heapTotalMB = memoryUsage.heapTotal / 1024 / 1024;
+  const heapPercentage = (heapUsedMB / heapTotalMB) * 100;
 
-  if (heapFraction > 0.9) {
-    return { status: 'unhealthy', message: 'High memory usage' };
+  let status: ComponentHealth['status'] = 'healthy';
+  let message: string | undefined;
+
+  if (heapPercentage > 90) {
+    status = 'unhealthy';
+    message = 'Critical memory usage';
+  } else if (heapPercentage > 75) {
+    status = 'degraded';
+    message = 'High memory usage';
   }
-  if (heapFraction > 0.75) {
-    return { status: 'degraded', message: 'Elevated memory usage' };
-  }
-  return { status: 'healthy' };
+
+  return {
+    status,
+    message,
+    details: {
+      heapUsedMB: Math.round(heapUsedMB * 100) / 100,
+      heapTotalMB: Math.round(heapTotalMB * 100) / 100,
+      heapPercentage: Math.round(heapPercentage * 100) / 100
+    }
+  };
 }
 
 export function getMetrics(): Metrics {
-  const memory = process.memoryUsage();
+  const memoryUsage = process.memoryUsage();
   return {
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    uptime: Math.floor((Date.now() - metricsStore.startTime) / 1000),
     requests: {
-      total: requestCount,
-      errors: errorCount,
+      total: metricsStore.requestCount,
+      errors: metricsStore.errorCount,
+      avgDuration: metricsStore.requestCount > 0
+        ? Math.round(metricsStore.totalDuration / metricsStore.requestCount)
+        : 0
     },
     memory: {
-      heapUsed: memory.heapUsed,
-      heapTotal: memory.heapTotal,
-      rss: memory.rss,
+      heapUsed: memoryUsage.heapUsed,
+      heapTotal: memoryUsage.heapTotal,
+      external: memoryUsage.external,
+      rss: memoryUsage.rss,
     },
   };
 }
 
 export function recordRequest(duration: number, isError: boolean = false): void {
-  requestCount++;
+  metricsStore.requestCount++;
+  metricsStore.totalDuration += duration;
   if (isError) {
-    errorCount++;
+    metricsStore.errorCount++;
   }
 }
 
@@ -96,22 +124,25 @@ export async function getHealthStatus(event: H3Event): Promise<HealthStatus> {
     Promise.resolve(checkMemoryHealth()),
   ]);
 
-  let status: HealthStatus['status'] = 'healthy';
+  const checks = { database, memory };
 
-  if (database.status === 'unhealthy' || memory.status === 'unhealthy') {
-    status = 'unhealthy';
-  } else if (database.status === 'degraded' || memory.status === 'degraded') {
-    status = 'degraded';
+  // Determine overall status
+  let overallStatus: HealthStatus['status'] = 'healthy';
+  for (const check of Object.values(checks)) {
+    if (check.status === 'unhealthy') {
+      overallStatus = 'unhealthy';
+      break;
+    }
+    if (check.status === 'degraded') {
+      overallStatus = 'degraded';
+    }
   }
 
   return {
-    status,
+    status: overallStatus,
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    uptime: Math.floor((Date.now() - metricsStore.startTime) / 1000),
     version: process.env.APP_VERSION || '1.0.0',
-    checks: {
-      database,
-      memory,
-    },
+    checks
   };
 }
