@@ -3,9 +3,10 @@ import { serverPocketBase, serverPocketBaseUser } from '../../utils/pocketbase';
 import { broadcaster } from '../../utils/broadcaster';
 import { createRequestLogger, handleError } from '../../utils/error-handler';
 import { logAudit } from '../../utils/audit';
+import { generateUniqueAlias } from '../../utils/alias-generator';
 
 const CreateLinkSchema = z.object({
-  slug: z.string().min(1).regex(/^[a-zA-Z0-9-_]+$/),
+  slug: z.string().regex(/^[a-zA-Z0-9-_]+$/).optional().or(z.literal('')),
   destination: z.string().url(),
   expires_at: z.string().datetime().nullable().optional(),
   max_clicks: z.number().nullable().optional(),
@@ -46,6 +47,17 @@ export default defineEventHandler(async (event) => {
 
     const payload = validation.data;
     const pb = await serverPocketBase(event);
+
+    if (!payload.slug) {
+      payload.slug = await generateUniqueAlias(async (slug: string) => {
+        try {
+          await pb.collection('links').getFirstListItem(`slug="${slug}"`);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
 
     let data;
     try {

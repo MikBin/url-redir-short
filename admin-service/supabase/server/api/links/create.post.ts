@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { logAudit } from '../../utils/audit'
 import { transformLink } from '../../utils/transformer'
 import { publishRuleToKV } from '../../utils/cloudflare-kv'
-import { generateUniqueAlias } from '../../utils/alias-generator'
+import { generateUniqueAlias } from '@shared/utils/alias-generator'
 
 const CreateLinkSchema = z.object({
   slug: z.string().min(1).max(2048).regex(/^[a-zA-Z0-9-_]+$/).optional(),

@@ -15,7 +15,10 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700">Slug</label>
-            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" required />
+            <div class="flex items-center gap-2 mt-1">
+              <input v-model="newLink.slug" type="text" :placeholder="isEditing ? 'e.g. twitter' : 'auto-generated'" class="flex-1 border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" />
+              <button v-if="!isEditing" @click="generateSlug" type="button" class="bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded text-sm border">Generate</button>
+            </div>
             <p v-if="slugError" class="text-red-500 text-xs mt-1">{{ slugError }}</p>
           </div>
           <div>
@@ -375,6 +378,15 @@ const slugError = computed(() => {
     if (!slugPattern.test(newLink.value.slug)) return 'Slug can only contain letters, numbers, hyphens, and underscores.'
     return null
 })
+
+const generateSlug = () => {
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let result = ''
+    for (let i = 0; i < 7; i++) {
+        result += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    newLink.value.slug = result
+}
 
 // Save Link (Create or Update)
 const saveLink = async () => {
