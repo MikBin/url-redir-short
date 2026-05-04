@@ -56,7 +56,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER audit_links_trigger
-BEFORE DELETE OR AFTER INSERT OR UPDATE ON public.links
+AFTER INSERT OR UPDATE OR DELETE ON public.links
 FOR EACH ROW EXECUTE FUNCTION public.audit_link_changes();
 
 -- ==============================================================================
