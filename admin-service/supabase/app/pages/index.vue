@@ -11,11 +11,28 @@
     <!-- Create/Edit Link Form -->
     <div class="bg-white p-6 rounded shadow mb-8">
       <h2 class="text-xl font-semibold mb-4">{{ isEditing ? 'Edit Link' : 'Create New Link' }}</h2>
+
+      <!-- Success Notification -->
+      <div v-if="successMessage" class="mb-4 p-4 bg-green-50 border border-green-200 rounded flex items-center justify-between">
+        <div class="text-green-700">
+           {{ successMessage }} <span v-if="createdLinkUrl" class="font-bold ml-1">{{ createdLinkUrl }}</span>
+        </div>
+        <button v-if="createdLinkUrl" @click="copyToClipboard(createdLinkUrl)" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors">
+          Copy
+        </button>
+      </div>
       <form @submit.prevent="saveLink" class="space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700">Slug</label>
-            <input v-model="newLink.slug" type="text" placeholder="e.g. twitter" class="mt-1 w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" required />
+            <div class="flex items-center gap-2 mt-1">
+              <input v-model="newLink.slug" type="text" placeholder="Leave empty to auto-generate" class="w-full border rounded p-2" :class="slugError ? 'border-red-500' : 'border-gray-300'" />
+              <button type="button" @click="generateRandomSlug" class="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 transition-colors" title="Generate random slug">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" />
+                </svg>
+              </button>
+            </div>
             <p v-if="slugError" class="text-red-500 text-xs mt-1">{{ slugError }}</p>
           </div>
           <div>
@@ -292,6 +309,16 @@
 <script setup lang="ts">
 import { checkTarget, type TargetingRule, type PreviewContext } from '../utils/targeting'
 
+// Local random alias generator for UI
+const generateRandomSlug = () => {
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  for (let i = 0; i < 7; i++) {
+    result += charset.charAt(Math.floor(Math.random() * charset.length))
+  }
+  newLink.value.slug = result
+}
+
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
@@ -328,6 +355,8 @@ interface LinkState {
 }
 
 const links = ref<any[]>([])
+const successMessage = ref<string | null>(null)
+const createdLinkUrl = ref<string | null>(null)
 const isEditing = ref(false)
 const currentLinkId = ref<string | null>(null)
 const activeTab = ref('targeting')
@@ -387,13 +416,18 @@ const fetchLinks = async () => {
 // Validation
 const slugPattern = /^[a-zA-Z0-9-_]+$/
 const slugError = computed(() => {
-    if (!newLink.value.slug) return null
+    if (!newLink.value.slug) {
+        return isEditing.value ? 'Slug is required when editing a link.' : null
+    }
     if (!slugPattern.test(newLink.value.slug)) return 'Slug can only contain letters, numbers, hyphens, and underscores.'
     return null
 })
 
 // Save Link (Create or Update)
 const saveLink = async () => {
+  successMessage.value = null
+  createdLinkUrl.value = null
+
   if (slugError.value) {
       alert('Please fix errors before saving.')
       return
@@ -442,16 +476,28 @@ const createLink = async () => {
   }
 
   try {
-    await $fetch('/api/links/create', {
+    const data: any = await $fetch('/api/links/create', {
         method: 'POST',
         body: payload
     })
+
+    successMessage.value = 'Link created successfully! '
+    createdLinkUrl.value = window.location.origin + '/' + data.slug
 
     // Reset form and refresh list
     newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
     fetchLinks()
   } catch (error: any) {
     alert('Error creating link: ' + (error.data?.statusMessage || error.message))
+  }
+}
+
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('Copied to clipboard!')
+  } catch (err) {
+    console.error('Failed to copy', err)
   }
 }
 
