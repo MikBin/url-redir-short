@@ -3,9 +3,10 @@ import { z } from 'zod'
 import { logAudit } from '../../utils/audit'
 import { transformLink } from '../../utils/transformer'
 import { publishRuleToKV } from '../../utils/cloudflare-kv'
+import { generateUniqueAlias } from '../../utils/alias-generator'
 
 const CreateLinkSchema = z.object({
-  slug: z.string().min(1).regex(/^[a-zA-Z0-9-_]+$/),
+  slug: z.string().min(1).max(2048).regex(/^[a-zA-Z0-9-_]+$/).optional(),
   destination: z.string().url(),
   expires_at: z.string().datetime().nullable().optional(),
   max_clicks: z.number().nullable().optional(),
@@ -43,6 +44,13 @@ export default defineEventHandler(async (event) => {
 
   const payload = validation.data
   const client = await serverSupabaseClient(event)
+
+  if (!payload.slug) {
+    payload.slug = await generateUniqueAlias(async (slug: string) => {
+      const { data } = await client.from('links').select('id').eq('slug', slug).maybeSingle()
+      return !!data
+    })
+  }
 
   // Insert
   const { data, error } = await client
