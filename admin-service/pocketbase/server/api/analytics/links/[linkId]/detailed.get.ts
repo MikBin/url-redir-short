@@ -46,16 +46,16 @@ export function aggregateEvents(events: any[]) {
 
   const mapToArray = (map: Map<string, number>, keyName: string) => {
     return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
       .map(([key, count]) => ({ [keyName]: key, count }))
-      .sort((a, b) => b.count - a.count)
   }
 
   return {
     totalClicks,
     uniqueVisitors: uniqueSessionIds.size,
     timeSeries: Array.from(timeSeriesMap.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date)),
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({ date, count })),
     countries: mapToArray(countriesMap, 'country'),
     cities: mapToArray(citiesMap, 'city'),
     devices: mapToArray(devicesMap, 'device'),
