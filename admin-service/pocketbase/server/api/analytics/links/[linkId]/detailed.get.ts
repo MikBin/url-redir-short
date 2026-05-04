@@ -45,7 +45,7 @@ export function aggregateEvents(events: any[]) {
   }
 
   const mapToArray = (map: Map<string, number>, keyName: string) => {
-    return Array.from(map.entries())
+    return Array.from(map)
       .sort((a, b) => b[1] - a[1])
       .map(([key, count]) => ({ [keyName]: key, count }))
   }
@@ -53,7 +53,7 @@ export function aggregateEvents(events: any[]) {
   return {
     totalClicks,
     uniqueVisitors: uniqueSessionIds.size,
-    timeSeries: Array.from(timeSeriesMap.entries())
+    timeSeries: Array.from(timeSeriesMap)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, count]) => ({ date, count })),
     countries: mapToArray(countriesMap, 'country'),
