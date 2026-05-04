@@ -14,9 +14,7 @@ export default defineEventHandler(async (event) => {
 
     // We can rely on PocketBase's listRule "@request.auth.id = owner_id"
     // to automatically filter records based on the authenticated user.
-    const result = await pb.collection('links').getFullList({
-      sort: '-created',
-    });
+    const result = await pb.collection('links').getFullList();
 
     return result;
   } catch (err) {
