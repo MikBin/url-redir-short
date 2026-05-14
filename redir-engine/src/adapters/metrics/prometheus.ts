@@ -16,7 +16,13 @@ export class PrometheusExporter {
   constructor() {
     this.registry = new Registry();
     
-    collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+    // Cloudflare Workers environment might not fully support process default metrics
+    try {
+      collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+    } catch (e) {
+      // Ignore process cpuUsage errors in CF Workers environment where 'process' is polyfilled by unenv
+      console.warn("Could not collect default metrics. In Cloudflare Workers environment, this is expected.");
+    }
 
     this.requestsTotal = new Counter({
       name: 'engine_requests_total',
