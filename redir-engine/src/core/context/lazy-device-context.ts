@@ -2,7 +2,8 @@ import { UAParser } from 'ua-parser-js';
 import { LRUCache } from '../utils/lru-cache';
 
 // Shared LRU cache for parsed User Agent results
-const uaCache = new LRUCache<string, { device: any; os: any }>(1000);
+// Reduced size to prevent CF worker miniflare OOM issues during heavy vitest loads
+const uaCache = new LRUCache<string, { device: any; os: any }>(200);
 
 export class LazyDeviceContext {
   private ua: string;

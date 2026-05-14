@@ -16,7 +16,25 @@ export class PrometheusExporter {
   constructor() {
     this.registry = new Registry();
     
-    collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+    // Only collect default metrics if memoryUsage/cpuUsage is available.
+    // In unenv environments like Cloudflare Workers, these might not be implemented
+    // or properly stubbed. We can try/catch as a fallback, but some stubs
+    // actually throw Error("Not implemented") inside the metric collection.
+    try {
+      if (typeof process !== 'undefined') {
+          // Additional check: Does calling it throw?
+          // The unenv stub might exist as a function but throw when called.
+          try {
+             process.memoryUsage();
+             process.cpuUsage();
+             collectDefaultMetrics({ register: this.registry, prefix: 'engine_' });
+          } catch(e) {
+             // Stub throws, ignore
+          }
+      }
+    } catch (e) {
+      // Fallback
+    }
 
     this.requestsTotal = new Counter({
       name: 'engine_requests_total',
@@ -72,9 +90,15 @@ export class PrometheusExporter {
   }
 
   public async getMetrics(): Promise<string> {
-    // Update memory gauge before returning
-    const usage = process.memoryUsage();
-    this.memoryHeap.set(usage.heapUsed / 1024 / 1024);
+    // Update memory gauge before returning if memoryUsage is available
+    if (typeof process !== 'undefined') {
+        try {
+            const usage = process.memoryUsage();
+            this.memoryHeap.set(usage.heapUsed / 1024 / 1024);
+        } catch (e) {
+            // Ignore
+        }
+    }
     
     return await this.registry.metrics();
   }
