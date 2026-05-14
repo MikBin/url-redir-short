@@ -2,10 +2,16 @@ import { IRedirectStore } from '../../ports/IRedirectStore';
 import { RedirectRule } from '../../core/config/types';
 
 export class CloudflareKVStore implements IRedirectStore {
-  constructor(private env: { REDIRECTS_KV: KVNamespace }) {}
+  constructor(private env: { REDIRECTS_KV?: KVNamespace }) {}
 
   async getRedirect(slug: string, domainId?: string): Promise<RedirectRule | null> {
     const key = domainId ? `${domainId}:${slug}` : slug;
+
+    if (!this.env.REDIRECTS_KV) {
+        console.warn('REDIRECTS_KV binding is missing from environment');
+        return null;
+    }
+
     const value = await this.env.REDIRECTS_KV.get(key);
 
     if (!value) {
@@ -28,11 +34,19 @@ export class CloudflareKVStore implements IRedirectStore {
   async addRedirect(rule: RedirectRule): Promise<void> {
     // For CF Workers, the Admin service typically updates KV directly.
     // We implement this to satisfy the interface.
+    if (!this.env.REDIRECTS_KV) {
+        console.warn('REDIRECTS_KV binding is missing from environment');
+        return;
+    }
     const key = rule.path; 
     await this.env.REDIRECTS_KV.put(key, JSON.stringify(rule));
   }
 
   async removeRedirect(path: string): Promise<void> {
+    if (!this.env.REDIRECTS_KV) {
+        console.warn('REDIRECTS_KV binding is missing from environment');
+        return;
+    }
     await this.env.REDIRECTS_KV.delete(path);
   }
 }

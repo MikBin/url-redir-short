@@ -62,6 +62,21 @@ export default {
     // Create Hono app
     const app = createAppFunction(handleRequest);
 
+    // E2E test hack for CF Worker:
+    // Expose an endpoint to inject KV data for tests since Admin service mock doesn't write to CF's KV
+    if (env.E2E_TEST_MODE === 'true' && request.method === 'POST') {
+        const url = new URL(request.url);
+        if (url.pathname === '/_test/inject') {
+            const body = await request.json() as any;
+            if (body.type === 'create' || body.type === 'update') {
+                await env.REDIRECTS_KV.put(body.data.path, JSON.stringify(body.data));
+            } else if (body.type === 'delete') {
+                await env.REDIRECTS_KV.delete(body.data.path);
+            }
+            return new Response('OK');
+        }
+    }
+
     return app.fetch(request, env, ctx);
   }
 };
