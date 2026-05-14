@@ -2,11 +2,11 @@ import { UAParser } from 'ua-parser-js';
 import { LRUCache } from '../utils/lru-cache';
 
 // Shared LRU cache for parsed User Agent results
-const uaCache = new LRUCache<string, { device: any; os: any }>(1000);
+const uaCache = new LRUCache<string, { device: UAParser.IDevice; os: UAParser.IOS }>(1000);
 
 export class LazyDeviceContext {
   private ua: string;
-  private data?: { device: any; os: any };
+  private data?: { device: UAParser.IDevice; os: UAParser.IOS };
 
   constructor(ua: string) {
     this.ua = ua;
