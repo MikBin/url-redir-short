@@ -45,7 +45,7 @@ function sanitizeInput(input: string): string {
 }
 
 // Error response helper
-function createErrorResponse(statusCode: number, message: string, details?: any) {
+function createErrorResponse(statusCode: number, message: string, details?: unknown) {
   logger.error(message, { statusCode, details })
   return createError({
     statusCode,
@@ -202,7 +202,7 @@ export default defineEventHandler(async (event) => {
             p_count: 1
           })
           if (error) logger.error('Failed to increment aggregate:', { error })
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error('Failed to increment aggregate (exception):', { error: e })
         }
       }

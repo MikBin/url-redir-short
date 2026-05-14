@@ -48,10 +48,10 @@ export interface SupabaseLink {
   slug: string;
   destination: string;
   is_active?: boolean;
-  targeting?: any;
-  ab_testing?: any;
-  hsts?: any;
-  password_protection?: any;
+  targeting?: RedirectRule['targeting'];
+  ab_testing?: RedirectRule['ab_testing'];
+  hsts?: RedirectRule['hsts'];
+  password_protection?: RedirectRule['password_protection'];
   expires_at?: string | null;
   max_clicks?: number | null;
   created_at?: string;

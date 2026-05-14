@@ -55,8 +55,8 @@
 </template>
 
 <script setup lang="ts">
-const health = ref<any>(null)
-const metrics = ref<any>(null)
+const health = ref<Record<string, unknown> | null>(null)
+const metrics = ref<Record<string, unknown> | null>(null)
 const error = ref<string | null>(null)
 
 const refresh = async () => {
@@ -68,9 +68,10 @@ const refresh = async () => {
     ])
     health.value = h
     metrics.value = m
-  } catch (e: any) {
-    console.error('Failed to fetch status', e)
-    error.value = e.message || 'Failed to load system status. The API endpoints might be unavailable.'
+  } catch (e: unknown) {
+    const err = e as Error;
+    console.error('Failed to fetch status', err)
+    error.value = err.message || 'Failed to load system status. The API endpoints might be unavailable.'
   }
 }
 

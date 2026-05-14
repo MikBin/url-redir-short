@@ -21,11 +21,20 @@ const UpdateLinkSchema = z.object({
   }).optional(),
   targeting: z.object({
     enabled: z.boolean(),
-    rules: z.array(z.any())
+    rules: z.array(z.object({
+      id: z.string(),
+      target: z.enum(['language', 'device', 'country']),
+      value: z.string(),
+      destination: z.string().url()
+    }))
   }).optional(),
   ab_testing: z.object({
     enabled: z.boolean(),
-    variations: z.array(z.any())
+    variations: z.array(z.object({
+      id: z.string(),
+      destination: z.string().url(),
+      weight: z.number().min(0).max(100)
+    }))
   }).optional(),
   updated_at: z.string().datetime().optional()
 })

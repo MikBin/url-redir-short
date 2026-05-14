@@ -48,7 +48,7 @@ export function createLogger(defaultContext?: LogContext) {
     // Existing logger always adds context field if I recall, wait.
     // Existing logger: `context: { ...defaultContext, ...context }`
 
-    const logObject: any = {
+    const logObject: Record<string, unknown> = {
       context: mergedContext
     }
 
@@ -62,7 +62,7 @@ export function createLogger(defaultContext?: LogContext) {
 
     // Call pino method
     // pino types might complain if level is not exactly one of the strings, but it is.
-    (child as any)[level](logObject, message)
+    (child as unknown as Record<LogLevel, (obj: Record<string, unknown>, msg: string) => void>)[level](logObject, message)
   }
 
   return {

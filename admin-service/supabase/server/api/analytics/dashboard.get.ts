@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
       hourlyBreakdown[hourKey] = 0
     }
 
-    rawEvents.forEach((event: any) => {
+    rawEvents.forEach((event: Record<string, unknown>) => {
       // Top Links
       const path = event.path || 'unknown'
       linkClicks[path] = (linkClicks[path] || 0) + 1

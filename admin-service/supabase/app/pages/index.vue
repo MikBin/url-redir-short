@@ -354,7 +354,7 @@ interface LinkState {
   }
 }
 
-const links = ref<any[]>([])
+const links = ref<Record<string, unknown>[]>([])
 const successMessage = ref<string | null>(null)
 const createdLinkUrl = ref<string | null>(null)
 const isEditing = ref(false)
@@ -476,7 +476,7 @@ const createLink = async () => {
   }
 
   try {
-    const data: any = await $fetch('/api/links/create', {
+    const data: Record<string, unknown> = await $fetch('/api/links/create', {
         method: 'POST',
         body: payload
     })
@@ -487,8 +487,9 @@ const createLink = async () => {
     // Reset form and refresh list
     newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
     fetchLinks()
-  } catch (error: any) {
-    alert('Error creating link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }, message?: string };
+    alert('Error creating link: ' + (err.data?.statusMessage || err.message))
   }
 }
 
@@ -524,8 +525,9 @@ const updateLink = async () => {
 
     cancelEdit()
     fetchLinks()
-  } catch (error: any) {
-    alert('Error updating link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }, message?: string };
+    alert('Error updating link: ' + (err.data?.statusMessage || err.message))
   }
 }
 
@@ -539,7 +541,7 @@ const formatDateForInput = (isoString: string | null) => {
 }
 
 // Edit Link
-const editLink = (link: any) => {
+const editLink = (link: Record<string, unknown>) => {
   newLink.value = {
     slug: link.slug,
     destination: link.destination,
@@ -572,8 +574,9 @@ const deleteLink = async (id: string) => {
     })
 
     fetchLinks()
-  } catch (error: any) {
-    alert('Error deleting link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }, message?: string };
+    alert('Error deleting link: ' + (err.data?.statusMessage || err.message))
   }
 }
 
@@ -631,7 +634,7 @@ const previewResult = computed(() => {
 // QR Code Logic
 const showQRModal = ref(false)
 const qrCodeUrl = ref<string | null>(null)
-const currentQRLink = ref<any>(null)
+const currentQRLink = ref<Record<string, unknown> | null>(null)
 const qrOptions = ref({
   width: 200,
   margin: 4,
@@ -662,14 +665,14 @@ const fetchQR = async () => {
   }
 }
 
-const showQR = async (link: any) => {
+const showQR = async (link: Record<string, unknown>) => {
   currentQRLink.value = link
   showQRModal.value = true
   qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff' } // Reset defaults
   await fetchQR()
 }
 
-let debounceTimer: any = null
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 watch(qrOptions, () => {
     if (showQRModal.value) {
         if (debounceTimer) clearTimeout(debounceTimer)
@@ -689,7 +692,7 @@ const closeQRModal = () => {
 const showBulkModal = ref(false)
 const bulkInput = ref('')
 const isImporting = ref(false)
-const bulkStatus = ref<any>(null)
+const bulkStatus = ref<{ type: string, message: string, details?: string[] } | null>(null)
 
 const importLinks = async () => {
   bulkStatus.value = null
@@ -717,11 +720,12 @@ const importLinks = async () => {
          bulkStatus.value = {
              type: 'error',
              message: `Import failed. 0 links imported. Failed: ${data.failed}.`,
-             details: data.invalid_items?.map((i: any) => `Invalid item: ${JSON.stringify(i)}`)
+             details: data.invalid_items?.map((i: unknown) => `Invalid item: ${JSON.stringify(i)}`)
          }
      }
-  } catch (e: any) {
-     bulkStatus.value = { type: 'error', message: 'Error: ' + e.message }
+  } catch (e: unknown) {
+     const err = e as Error;
+     bulkStatus.value = { type: 'error', message: 'Error: ' + err.message }
   } finally {
      isImporting.value = false
   }

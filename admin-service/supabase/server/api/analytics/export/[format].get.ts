@@ -88,7 +88,7 @@ export default defineEventHandler(async (event) => {
   }
 })
 
-function convertToCSV(data: any[]): string {
+function convertToCSV(data: Record<string, unknown>[]): string {
   if (data.length === 0) {
     return 'No data available'
   }

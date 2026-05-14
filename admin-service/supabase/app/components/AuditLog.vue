@@ -116,7 +116,7 @@ const page = ref(1)
 const perPage = ref(10)
 const currentFilter = ref<string | null>(null)
 
-const { data, pending, error, refresh } = await useFetch<any>(() => `/api/links/${props.linkId}/history`, {
+const { data, pending, error, refresh } = await useFetch<Record<string, unknown>[]>(() => `/api/links/${props.linkId}/history`, {
   query: {
     page,
     perPage,
@@ -143,7 +143,7 @@ const formatDate = (isoString: string) => {
   return date.toLocaleString()
 }
 
-const formatValue = (val: any) => {
+const formatValue = (val: unknown) => {
   if (val === null || val === undefined) return 'null'
   if (typeof val === 'object') return JSON.stringify(val)
   return String(val)

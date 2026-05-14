@@ -63,8 +63,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
+  interface HistoryEntryRow {
+    id: string;
+    action: string;
+    actor_id: string;
+    changes: unknown;
+    created_at: string;
+  }
+
   // Formatting response
-  const entries = data.map((entry: any) => ({
+  const entries = data.map((entry: HistoryEntryRow) => ({
       id: entry.id,
       action: entry.action,
       actorId: entry.actor_id,

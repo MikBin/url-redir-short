@@ -84,9 +84,10 @@ export default defineEventHandler(async (event: H3Event) => {
         }
       })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // If it's the 429 error we just threw, rethrow it
-    if (error.statusCode === 429) {
+    const err = error as { statusCode?: number }
+    if (err.statusCode === 429) {
       throw error
     }
     

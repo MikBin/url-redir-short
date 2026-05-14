@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateAlias, generateUniqueAlias } from '../server/utils/alias-generator';
+import { generateAlias, generateUniqueAlias } from '@shared/utils/alias-generator';
 
 describe('Alias Generator Utility', () => {
   describe('generateAlias', () => {

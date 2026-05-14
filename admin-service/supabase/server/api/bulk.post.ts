@@ -65,7 +65,8 @@ export default defineEventHandler(async (event) => {
         // Actually upsert with ignoreDuplicates: true returns null for ignored rows in some versions,
         // or just returns the rows that were inserted/updated.
     }
-  } catch (e: any) {
-      throw createError({ statusCode: 400, statusMessage: e.message })
+  } catch (e: unknown) {
+      const err = e as Error
+      throw createError({ statusCode: 400, statusMessage: err.message })
   }
 })

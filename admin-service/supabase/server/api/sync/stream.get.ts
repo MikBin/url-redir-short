@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
       const encoder = new TextEncoder()
       metrics.sseClients.inc()
 
-      const send = (msg: any) => {
+      const send = (msg: Record<string, unknown>) => {
         let str = ''
         if (msg.event) {
           str += `event: ${msg.event}\n`
@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
       send({ type: 'connected', timestamp: Date.now() })
 
       // Listener
-      const listener = (data: any) => {
+      const listener = (data: Record<string, unknown>) => {
         send(data)
       }
 

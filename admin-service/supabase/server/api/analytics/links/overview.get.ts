@@ -23,8 +23,13 @@ export default defineEventHandler(async (event) => {
 
   const clicksByLink: Record<string, number> = {}
 
+  interface ClickDataRow {
+    link_id: string | null
+    total_clicks: string | number | null
+  }
+
   if (data) {
-    for (const row of data as any[]) {
+    for (const row of data as ClickDataRow[]) {
       if (row.link_id) {
         // Ensure it's a number as bigint sums might come back as strings from PostgREST
         clicksByLink[row.link_id] = Number(row.total_clicks) || 0

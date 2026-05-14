@@ -9,11 +9,11 @@ export interface AuditLogParams {
     type: 'link' | 'domain' | 'user'
     id: string
   }
-  oldValue?: any
-  newValue?: any
+  oldValue?: unknown
+  newValue?: unknown
   status: 'success' | 'failure'
   error?: string
-  metadata?: any
+  metadata?: unknown
 }
 
 export const logAudit = (params: AuditLogParams) => {
