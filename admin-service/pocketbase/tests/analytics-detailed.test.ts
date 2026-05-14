@@ -99,7 +99,7 @@ describe('aggregateEvents', () => {
       { country: null, browser: null, timestamp: '2023-10-01T14:00:00Z' }
     ]
 
-    const result = aggregateEvents(events as any)
+    const result = aggregateEvents(events as unknown[])
 
     expect(result.countries).toEqual([
       { country: 'US', count: 1 }

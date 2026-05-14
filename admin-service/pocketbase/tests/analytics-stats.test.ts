@@ -10,8 +10,8 @@ vi.mock('../server/utils/pocketbase', () => {
 // Mock h3 to provide defineEventHandler and createError
 vi.mock('h3', () => {
   return {
-    defineEventHandler: (handler: any) => handler,
-    createError: (err: any) => err,
+    defineEventHandler: (handler: Parameters<typeof import('h3').defineEventHandler>[0]) => handler,
+    createError: (err: unknown) => err,
   };
 });
 
@@ -19,8 +19,8 @@ import { serverPocketBase } from '../server/utils/pocketbase';
 import statsGetHandler from '../server/api/analytics/stats.get';
 
 describe('GET /api/analytics/stats', () => {
-  let mockEvent: any;
-  let mockPb: any;
+  let mockEvent: Partial<H3Event>;
+  let mockPb: { collection: ReturnType<typeof vi.fn>; getList: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,23 +34,24 @@ describe('GET /api/analytics/stats', () => {
   });
 
   it('should return 401 if user is not authenticated', async () => {
-    mockEvent.context.user = null;
+    mockEvent.context!.user = null;
 
     try {
-      await (statsGetHandler as any)(mockEvent);
+      await (statsGetHandler as ReturnType<typeof import('h3').defineEventHandler>)(mockEvent as H3Event);
       expect.fail('Should have thrown');
-    } catch (err: any) {
-      expect(err.statusCode).toBe(401);
-      expect(err.statusMessage).toBe('Unauthorized');
+    } catch (err: unknown) {
+      const error = err as { statusCode: number; statusMessage: string };
+      expect(error.statusCode).toBe(401);
+      expect(error.statusMessage).toBe('Unauthorized');
     }
   });
 
   it('should return events and total clicks on success', async () => {
-    mockEvent.context.user = { id: 'user123' };
-    vi.mocked(serverPocketBase).mockResolvedValueOnce(mockPb);
+    mockEvent.context!.user = { id: 'user123' };
+    vi.mocked(serverPocketBase).mockResolvedValueOnce(mockPb as unknown as import('pocketbase').default);
 
     const mockEvents = [{ id: 'evt1' }, { id: 'evt2' }];
-    mockPb.getList.mockImplementation((page: number, perPage: number, options?: any) => {
+    mockPb.getList.mockImplementation((page: number, perPage: number, options?: unknown) => {
       if (perPage === 100) {
         return Promise.resolve({ items: mockEvents, totalItems: 2 });
       } else if (perPage === 1) {
@@ -59,7 +60,7 @@ describe('GET /api/analytics/stats', () => {
       return Promise.resolve({ items: [], totalItems: 0 });
     });
 
-    const result = await (statsGetHandler as any)(mockEvent as H3Event);
+    const result = await (statsGetHandler as ReturnType<typeof import('h3').defineEventHandler>)(mockEvent as H3Event);
 
     expect(result).toEqual({
       events: mockEvents,
@@ -72,17 +73,18 @@ describe('GET /api/analytics/stats', () => {
   });
 
   it('should return 500 on database error', async () => {
-    mockEvent.context.user = { id: 'user123' };
-    vi.mocked(serverPocketBase).mockResolvedValueOnce(mockPb);
+    mockEvent.context!.user = { id: 'user123' };
+    vi.mocked(serverPocketBase).mockResolvedValueOnce(mockPb as unknown as import('pocketbase').default);
 
     mockPb.getList.mockRejectedValueOnce(new Error('DB Error'));
 
     try {
-      await (statsGetHandler as any)(mockEvent as H3Event);
+      await (statsGetHandler as ReturnType<typeof import('h3').defineEventHandler>)(mockEvent as H3Event);
       expect.fail('Should have thrown');
-    } catch (err: any) {
-      expect(err.statusCode).toBe(500);
-      expect(err.statusMessage).toBe('Database error');
+    } catch (err: unknown) {
+      const error = err as { statusCode: number; statusMessage: string };
+      expect(error.statusCode).toBe(500);
+      expect(error.statusMessage).toBe('Database error');
     }
   });
 });

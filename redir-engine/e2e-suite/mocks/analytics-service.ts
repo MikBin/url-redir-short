@@ -3,9 +3,9 @@ import { serve } from '@hono/node-server';
 
 export class MockAnalyticsService {
   private app: Hono;
-  private server: any;
+  private server: ReturnType<typeof serve> | undefined;
   public readonly port: number;
-  private collectedEvents: any[] = [];
+  private collectedEvents: unknown[] = [];
 
   constructor(port: number = 0) {
     this.port = port;

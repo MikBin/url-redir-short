@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 
 export class BetterMockAdminService extends EventEmitter {
   private app: Hono;
-  private server: any;
+  private server: ReturnType<typeof serve> | undefined;
   public readonly port: number;
   private running: boolean = false;
   private connectionCount: number = 0;
@@ -22,7 +22,7 @@ export class BetterMockAdminService extends EventEmitter {
       return streamSSE(c, async (stream) => {
         this.connectionCount++;
 
-        const listener = async (payload: any) => {
+        const listener = async (payload: { type: string; data: unknown }) => {
           if (!this.running) return;
           try {
             await stream.writeSSE({
@@ -92,7 +92,7 @@ export class BetterMockAdminService extends EventEmitter {
     }
   }
 
-  public pushUpdate(data: any) {
+  public pushUpdate(data: { type: string; data: unknown }) {
     this.emit('push', data);
   }
 

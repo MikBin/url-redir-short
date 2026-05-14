@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'vitest'
 import { createLogger, generateCorrelationId } from '../server/utils/logger'
 
 describe('Logger Utility', () => {
-  let consoleLogSpy: any
-  let consoleErrorSpy: any
+  let consoleLogSpy: MockInstance
+  let consoleErrorSpy: MockInstance
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
