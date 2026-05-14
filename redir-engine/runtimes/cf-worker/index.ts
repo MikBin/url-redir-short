@@ -1,6 +1,12 @@
 import { Buffer } from 'node:buffer';
 globalThis.Buffer = Buffer;
 
+import type { createApp } from '../../src/adapters/http/server';
+import type { HandleRequestUseCase } from '../../src/use-cases/handle-request';
+import type { FireAndForgetCollector } from '../../src/adapters/analytics/fire-and-forget';
+import type { CloudflareKVStore } from '../../src/adapters/storage/CloudflareKVStore';
+import type { NoOpSyncAdapter } from '../../src/adapters/sync/NoOpSyncAdapter';
+
 // Cloudflare Workers - Env Interface
 interface Env {
   ADMIN_SERVICE_URL: string;
@@ -13,11 +19,11 @@ interface Env {
 let initialized = false;
 
 // Dynamic imports to ensure Buffer is polyfilled before modules load
-let createAppFunction: any;
-let HandleRequestUseCaseClass: any;
-let FireAndForgetCollectorClass: any;
-let CloudflareKVStoreClass: any;
-let NoOpSyncAdapterClass: any;
+let createAppFunction: typeof createApp;
+let HandleRequestUseCaseClass: typeof HandleRequestUseCase;
+let FireAndForgetCollectorClass: typeof FireAndForgetCollector;
+let CloudflareKVStoreClass: typeof CloudflareKVStore;
+let NoOpSyncAdapterClass: typeof NoOpSyncAdapter;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

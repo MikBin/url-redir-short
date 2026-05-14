@@ -1,10 +1,14 @@
 import { createParser } from 'eventsource-parser';
 
+export interface SSEMessageEvent {
+  data: string;
+}
+
 export class FetchEventSource {
   private controller: AbortController;
   public onopen: (() => void) | null = null;
-  public onerror: ((err: any) => void) | null = null;
-  private listeners: Map<string, ((e: any) => void)[]> = new Map();
+  public onerror: ((err: unknown) => void) | null = null;
+  private listeners: Map<string, ((e: SSEMessageEvent) => void)[]> = new Map();
 
   public promise: Promise<void>;
 
@@ -40,7 +44,7 @@ export class FetchEventSource {
           const listeners = this.listeners.get(event.event || 'message');
           if (listeners) {
             // Mimic Event interface
-            const e = { data: event.data };
+            const e: SSEMessageEvent = { data: event.data };
             listeners.forEach(fn => fn(e));
           }
         }
@@ -55,8 +59,8 @@ export class FetchEventSource {
         if (done) break;
         parser.feed(decoder.decode(value, { stream: true }));
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       if (this.onerror) {
         this.onerror(err);
       }
@@ -67,7 +71,7 @@ export class FetchEventSource {
     this.controller.abort();
   }
 
-  public addEventListener(type: string, listener: (e: any) => void) {
+  public addEventListener(type: string, listener: (e: SSEMessageEvent) => void) {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, []);
     }
