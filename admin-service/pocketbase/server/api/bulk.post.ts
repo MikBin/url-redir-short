@@ -38,23 +38,32 @@ export default defineEventHandler(async (event) => {
     const pb = await serverPocketBase(event);
     let successCount = 0;
 
-    for (const link of valid) {
-      try {
-        await pb.collection('links').create({
+    try {
+      // Use PocketBase Batch API to optimize N+1 queries into a single request
+      const batch = pb.createBatch();
+      for (const link of valid) {
+        batch.collection('links').create({
           slug: link.slug,
           destination: link.destination,
           owner_id: user.id,
         });
-        successCount++;
-      } catch (err: any) {
-        // Log individual failures? Or just accumulate?
-        // We'll increment failed for ones that didn't create correctly
-        // but not fail the whole request immediately.
-        // Wait, standard batch behavior is to return how many succeeded.
-        // The problem description says "creates a record in the links collection... in a loop or batch"
-        // Let's just track how many failed and push to invalid or similar.
-        // For now, let's log the error and increment invalid
-        invalid.push({ ...link, error: err.message });
+      }
+      await batch.send();
+      successCount = valid.length;
+    } catch (batchErr: any) {
+      // Fallback to individual inserts if batch fails (e.g. unique constraint violation)
+      // This preserves the original partial success behavior.
+      for (const link of valid) {
+        try {
+          await pb.collection('links').create({
+            slug: link.slug,
+            destination: link.destination,
+            owner_id: user.id,
+          });
+          successCount++;
+        } catch (err: any) {
+          invalid.push({ ...link, error: err.message });
+        }
       }
     }
 
