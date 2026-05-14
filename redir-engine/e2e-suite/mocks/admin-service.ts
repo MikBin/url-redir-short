@@ -90,6 +90,16 @@ export class BetterMockAdminService extends EventEmitter {
 
   public async stop() {
     this.running = false;
+
+    if (process.env.TEST_RUNTIME === 'cf-worker') {
+        const ports = [3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010, 3011, 3012, 3013];
+        for (const p of ports) {
+            fetch(`http://127.0.0.1:${p}/_test/clear`, {
+                method: 'POST',
+            }).catch(err => {});
+        }
+    }
+
     if (this.server) {
       this.server.close();
     }

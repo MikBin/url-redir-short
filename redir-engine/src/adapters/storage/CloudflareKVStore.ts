@@ -8,7 +8,6 @@ export class CloudflareKVStore implements IRedirectStore {
     const key = domainId ? `${domainId}:${slug}` : slug;
 
     if (!this.env.REDIRECTS_KV) {
-        console.warn('REDIRECTS_KV binding is missing from environment');
         return null;
     }
 
@@ -35,7 +34,6 @@ export class CloudflareKVStore implements IRedirectStore {
     // For CF Workers, the Admin service typically updates KV directly.
     // We implement this to satisfy the interface.
     if (!this.env.REDIRECTS_KV) {
-        console.warn('REDIRECTS_KV binding is missing from environment');
         return;
     }
     const key = rule.path; 
@@ -44,7 +42,6 @@ export class CloudflareKVStore implements IRedirectStore {
 
   async removeRedirect(path: string): Promise<void> {
     if (!this.env.REDIRECTS_KV) {
-        console.warn('REDIRECTS_KV binding is missing from environment');
         return;
     }
     await this.env.REDIRECTS_KV.delete(path);
