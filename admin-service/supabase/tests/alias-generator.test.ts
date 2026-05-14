@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+// Nuxt uses auto imports or #imports. Since it is shared it might be #imports or alias-generator directly.
+// Let's import from `#imports` or `../shared/utils/alias-generator`
 import { generateAlias, generateUniqueAlias } from '../../shared/utils/alias-generator';
 
 describe('Alias Generator Utility', () => {
