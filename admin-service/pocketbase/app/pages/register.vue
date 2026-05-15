@@ -67,8 +67,8 @@ const handleRegister = async () => {
       }
     })
     router.push('/')
-  } catch (err: any) {
-    errorMsg.value = err.data?.statusMessage || 'Registration failed'
+  } catch (err: unknown) {
+    errorMsg.value = (err as { data?: { statusMessage?: string } }).data?.statusMessage || 'Registration failed'
   } finally {
     loading.value = false
   }

@@ -106,6 +106,21 @@
 </template>
 
 <script setup lang="ts">
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  actorId: string;
+  changes: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface AuditLogResponse {
+  entries: AuditEntry[];
+  total: number;
+  page: number;
+  perPage: number;
+}
 import { ref, computed, watch } from 'vue'
 
 const props = defineProps<{
@@ -116,7 +131,7 @@ const page = ref(1)
 const perPage = ref(10)
 const currentFilter = ref<string | null>(null)
 
-const { data, pending, error, refresh } = await useFetch<any>(() => `/api/links/${props.linkId}/history`, {
+const { data, pending, error, refresh } = await useFetch<AuditLogResponse>(() => `/api/links/${props.linkId}/history`, {
   query: {
     page,
     perPage,
@@ -143,7 +158,7 @@ const formatDate = (isoString: string) => {
   return date.toLocaleString()
 }
 
-const formatValue = (val: any) => {
+const formatValue = (val: unknown) => {
   if (val === null || val === undefined) return 'null'
   if (typeof val === 'object') return JSON.stringify(val)
   return String(val)

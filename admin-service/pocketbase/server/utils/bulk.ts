@@ -1,16 +1,16 @@
 export interface BulkLinkImport {
   slug: string;
   destination: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-export function validateBulkLinks(links: any[]): { valid: BulkLinkImport[], invalid: any[] } {
+export function validateBulkLinks(links: unknown[]): { valid: BulkLinkImport[], invalid: unknown[] } {
   if (!Array.isArray(links)) {
     throw new Error('Input must be an array of links');
   }
 
   const valid: BulkLinkImport[] = [];
-  const invalid: any[] = [];
+  const invalid: unknown[] = [];
 
   for (const item of links) {
     if (!item || typeof item !== 'object') {

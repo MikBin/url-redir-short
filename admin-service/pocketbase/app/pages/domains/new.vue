@@ -76,8 +76,8 @@ const handleCreate = async () => {
 
     // Redirect back to domains list on success
     router.push('/domains')
-  } catch (err: any) {
-    errorMsg.value = err.data?.statusMessage || err.message || 'Failed to create domain'
+  } catch (err: unknown) {
+    errorMsg.value = ((err as { data?: { statusMessage?: string } }).data?.statusMessage || (err as Error).message) || 'Failed to create domain'
   } finally {
     loading.value = false
   }

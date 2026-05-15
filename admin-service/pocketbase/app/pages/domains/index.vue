@@ -73,6 +73,13 @@
 </template>
 
 <script setup lang="ts">
+
+interface Domain {
+  id?: string;
+  name: string;
+  is_active: boolean;
+  [key: string]: unknown;
+}
 import { ref, computed } from 'vue'
 
 const searchQuery = ref('')
@@ -84,7 +91,7 @@ const { data: domains, pending, error, refresh } = await useFetch('/api/domains'
 const filteredDomains = computed(() => {
   if (!domains.value) return []
   const query = searchQuery.value.toLowerCase()
-  return (domains.value as any[]).filter(d => d.name.toLowerCase().includes(query))
+  return (domains.value as Domain[]).filter(d => d.name.toLowerCase().includes(query))
 })
 
 const deleteDomain = async (id: string) => {
@@ -98,8 +105,8 @@ const deleteDomain = async (id: string) => {
     })
     // Refresh the list after successful deletion
     refresh()
-  } catch (err: any) {
-    alert('Failed to delete domain: ' + (err.data?.statusMessage || err.message))
+  } catch (err: unknown) {
+    alert('Failed to delete domain: ' + (((err as { data?: { statusMessage?: string } }).data?.statusMessage || (err as Error).message)))
   }
 }
 </script>

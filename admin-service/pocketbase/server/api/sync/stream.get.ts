@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const eventStream = createEventStream(event)
 
   // 3. Define event listener
-  const listener = (data: any) => {
+  const listener = (data: { event: string; data?: { id?: string; [key: string]: unknown } }) => {
     console.log(`[Sync Stream] Sending event: ${data.event} for ${data.data?.id}`);
     eventStream.push({
       event: data.event,

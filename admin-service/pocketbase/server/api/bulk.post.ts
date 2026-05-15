@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
       }
       await batch.send();
       successCount = valid.length;
-    } catch (batchErr: any) {
+    } catch (batchErr: unknown) {
       // Fallback to individual inserts if batch fails (e.g. unique constraint violation)
       // This preserves the original partial success behavior.
       for (const link of valid) {
@@ -61,8 +61,8 @@ export default defineEventHandler(async (event) => {
             owner_id: user.id,
           });
           successCount++;
-        } catch (err: any) {
-          invalid.push({ ...link, error: err.message });
+        } catch (err: unknown) {
+          invalid.push({ ...link, error: (err instanceof Error ? err.message : String(err)) });
         }
       }
     }
@@ -83,17 +83,17 @@ export default defineEventHandler(async (event) => {
       failed: failedCount,
       invalid_items: invalid,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     logAudit({
       actor: { id: user.id },
       action: 'bulk_import',
       resource: { type: 'link', id: 'bulk' },
       status: 'failure',
-      error: err.message,
+      error: (err instanceof Error ? err.message : String(err)),
     });
     throw createError({
       statusCode: 400,
-      statusMessage: err.message,
+      statusMessage: (err instanceof Error ? err.message : String(err)),
     });
   }
 });

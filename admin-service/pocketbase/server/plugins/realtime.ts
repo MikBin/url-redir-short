@@ -53,8 +53,8 @@ export default defineNitroPlugin(async (nitroApp) => {
           } else if (eventType === 'delete') {
              syncEvents.emit(SYNC_EVENT_NAME, { event: 'delete', data: data });
           }
-        } catch (err: any) {
-           console.error('Error processing PocketBase event:', err.message);
+        } catch (err: unknown) {
+           console.error('Error processing PocketBase event:', (err instanceof Error ? err.message : String(err)));
         }
       })();
     });
