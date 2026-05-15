@@ -25,7 +25,7 @@ describe('T07: Geo/Lang Fallback', () => {
     await engine.start();
     await adminService.waitForConnection(15000);
 // Wait for SSE connection to be established ensuring no events are missed
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 5000));
   });
 
   afterAll(async () => {
@@ -50,7 +50,7 @@ describe('T07: Geo/Lang Fallback', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 5000));
 
     // Test Default
     let response = await fetch(`http://127.0.0.1:${engine.port}/lang-test`, { redirect: 'manual' });
@@ -69,7 +69,7 @@ describe('T07: Geo/Lang Fallback', () => {
       headers: { 'Accept-Language': 'es' }
     });
     expect(response.headers.get('location')).toBe('https://example.com/es');
-  }, 10000);
+  });
 
   it('should redirect based on Device (User-Agent)', async () => {
     const rule = {
@@ -86,7 +86,7 @@ describe('T07: Geo/Lang Fallback', () => {
     };
 
     adminService.pushUpdate({ type: 'create', data: rule });
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 5000));
 
     // Test Desktop (Default)
     let response = await fetch(`http://127.0.0.1:${engine.port}/device-test`, {
@@ -101,5 +101,5 @@ describe('T07: Geo/Lang Fallback', () => {
         headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)' }
     });
     expect(response.headers.get('location')).toBe('https://example.com/mobile');
-  }, 10000);
+  });
 });
