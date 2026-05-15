@@ -94,11 +94,11 @@ export default {
     const analyticsCollector = new FireAndForgetCollectorClass(ANALYTICS_SERVICE_URL);
 
     // Initialize Storage with KV
-    let store: { getRedirect(path: string): Promise<unknown> } = new CloudflareKVStoreClass(env);
+    let store: import('../../src/ports/IRedirectStore').IRedirectStore = new CloudflareKVStoreClass(env);
 
     if (env.E2E_TEST_MODE === 'true' && memStoreRef) {
         // Use in-memory store instead of KV for tests to guarantee local cache behavior in tests like T13
-        store = memStoreRef as { getRedirect(path: string): Promise<unknown> };
+        store = memStoreRef as import('../../src/ports/IRedirectStore').IRedirectStore;
     }
 
     // Initialize Use Case
