@@ -2,10 +2,14 @@ import { defineVitestConfig } from '@nuxt/test-utils/config'
 
 export default defineVitestConfig({
   test: {
-    environment: 'happy-dom',
     globals: true,
     include: ['tests/**/*.test.ts'],
     setupFiles: ['./tests/setup/env.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['server/api/**/*.ts'],
+      exclude: ['tests/**', 'server/api/health.get.ts', 'server/api/metrics.get.ts', '**/node_modules/**']
+    },
     env: {
       SUPABASE_URL: 'https://dummy.supabase.co',
       SUPABASE_KEY: 'dummy-supabase-key',
