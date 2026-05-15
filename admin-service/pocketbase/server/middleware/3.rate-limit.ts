@@ -12,7 +12,7 @@ const rateLimits: Record<string, { limit: number; windowSeconds: number }> = {
   'default': { limit: 60, windowSeconds: 60 }
 }
 
-function getClientIp(event: any): string {
+function getClientIp(event: import("h3").H3Event): string {
   const xForwardedFor = event.node.req.headers['x-forwarded-for']
   if (xForwardedFor) {
     if (typeof xForwardedFor === 'string') {
@@ -54,8 +54,8 @@ export default defineEventHandler((event) => {
       setResponseStatus(event, 429)
       throw createError({ statusCode: 429, statusMessage: 'Too Many Requests' })
     }
-  } catch (err: any) {
-    if (err.statusCode === 429) {
+  } catch (err: unknown) {
+    if ((err as { statusCode?: number }).statusCode === 429) {
       throw err
     }
     console.error('Rate limit middleware error:', err)

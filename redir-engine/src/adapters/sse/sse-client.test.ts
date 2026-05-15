@@ -1,11 +1,11 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SSEClient } from './sse-client';
+import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import { SSEClient, EventSourceConstructor } from './sse-client';
 
 describe('SSEClient', () => {
-  let mockEventSource: any;
-  let MockEventSourceClass: any;
-  let constructorSpy: any;
+  let mockEventSource: Partial<EventSource>;
+  let MockEventSourceClass: unknown;
+  let constructorSpy: Mock;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -31,7 +31,7 @@ describe('SSEClient', () => {
         // But for these tests, returning the same object is probably fine as long as we reset it
         return mockEventSource;
       }
-    } as any;
+    } as unknown as EventSourceConstructor;
 
     // Add mock properties to the class constructor to simulate vi.fn() if needed,
     // but we use constructorSpy for tracking.
@@ -42,13 +42,13 @@ describe('SSEClient', () => {
   });
 
   it('should connect to the given URL', () => {
-    const client = new SSEClient('http://test.com', MockEventSourceClass);
+    const client = new SSEClient('http://test.com', MockEventSourceClass as EventSourceConstructor);
     client.connect(vi.fn(), vi.fn(), vi.fn());
     expect(constructorSpy).toHaveBeenCalledWith('http://test.com');
   });
 
   it('should set up event listeners', () => {
-    const client = new SSEClient('http://test.com', MockEventSourceClass);
+    const client = new SSEClient('http://test.com', MockEventSourceClass as EventSourceConstructor);
     client.connect(vi.fn(), vi.fn(), vi.fn());
 
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith('create', expect.any(Function));
@@ -57,12 +57,14 @@ describe('SSEClient', () => {
   });
 
   it('should reconnect with exponential backoff on error', async () => {
-    const client = new SSEClient('http://test.com', MockEventSourceClass);
+    const client = new SSEClient('http://test.com', MockEventSourceClass as EventSourceConstructor);
     client.connect(vi.fn(), vi.fn(), vi.fn());
 
     // Simulate error
     expect(mockEventSource.onerror).toBeDefined();
-    mockEventSource.onerror(new Error('Connection failed'));
+    if (mockEventSource.onerror) {
+      mockEventSource.onerror.call(mockEventSource as EventSource, new Event('error'));
+    }
 
     // Should have closed the failing connection
     expect(mockEventSource.close).toHaveBeenCalled();
@@ -78,7 +80,9 @@ describe('SSEClient', () => {
     // Simulate another error on the second connection
     // Since we return same mock object, on error is overwritten by SSEClient on new connection.
     // So calling mockEventSource.onerror works.
-    mockEventSource.onerror(new Error('Connection failed again'));
+    if (mockEventSource.onerror) {
+      mockEventSource.onerror.call(mockEventSource as EventSource, new Event('error'));
+    }
 
     // Second retry: should be exponential (e.g. 2000ms)
     vi.advanceTimersByTime(1500);
@@ -89,19 +93,25 @@ describe('SSEClient', () => {
   });
 
   it('should reset retry count on successful connection', () => {
-    const client = new SSEClient('http://test.com', MockEventSourceClass);
+    const client = new SSEClient('http://test.com', MockEventSourceClass as EventSourceConstructor);
     client.connect(vi.fn(), vi.fn(), vi.fn());
 
     // Simulate error
-    mockEventSource.onerror(new Error('Fail 1'));
+    if (mockEventSource.onerror) {
+      mockEventSource.onerror.call(mockEventSource as EventSource, new Event('error'));
+    }
     vi.advanceTimersByTime(1000); // Wait for first reconnect
     expect(constructorSpy).toHaveBeenCalledTimes(2);
 
     // Simulate success on second connection
-    if (mockEventSource.onopen) mockEventSource.onopen();
+    if (mockEventSource.onopen) {
+      mockEventSource.onopen.call(mockEventSource as EventSource, new Event('open'));
+    }
 
     // Simulate error on second connection later
-    if (mockEventSource.onerror) mockEventSource.onerror(new Error('Fail 2'));
+    if (mockEventSource.onerror) {
+      mockEventSource.onerror.call(mockEventSource as EventSource, new Event('error'));
+    }
 
     // Should reset to initial delay (1000ms) instead of exponential (2000ms)
     vi.advanceTimersByTime(1000);
@@ -109,14 +119,16 @@ describe('SSEClient', () => {
   });
 
   it('should not reconnect if manually closed', () => {
-    const client = new SSEClient('http://test.com', MockEventSourceClass);
+    const client = new SSEClient('http://test.com', MockEventSourceClass as EventSourceConstructor);
     client.connect(vi.fn(), vi.fn(), vi.fn());
 
     client.close();
     expect(mockEventSource.close).toHaveBeenCalled();
 
     // Simulate error event firing after close
-    if (mockEventSource.onerror) mockEventSource.onerror(new Error('Fail'));
+    if (mockEventSource.onerror) {
+      mockEventSource.onerror.call(mockEventSource as EventSource, new Event('error'));
+    }
 
     vi.advanceTimersByTime(10000);
     // Should not have reconnected (still called 1 time for initial connect)

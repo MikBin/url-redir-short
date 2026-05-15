@@ -72,16 +72,51 @@ export function parseBody<T extends z.ZodType>(
   return schema.parse(body)
 }
 
+export const targetingRuleSchema = z.object({
+  id: z.string(),
+  target: z.enum(['language', 'device', 'country']),
+  value: z.string(),
+  destination: z.string().url()
+})
+
+export const targetingSchema = z.object({
+  enabled: z.boolean(),
+  rules: z.array(targetingRuleSchema)
+})
+
+export const abTestingVariationSchema = z.object({
+  id: z.string(),
+  destination: z.string().url(),
+  weight: z.number().min(0).max(100) // Assuming 0-100 or ratio
+})
+
+export const abTestingSchema = z.object({
+  enabled: z.boolean(),
+  variations: z.array(abTestingVariationSchema)
+})
+
+export const hstsSchema = z.object({
+  enabled: z.boolean(),
+  maxAge: z.number().optional(),
+  includeSubDomains: z.boolean().optional(),
+  preload: z.boolean().optional()
+})
+
+export const passwordProtectionSchema = z.object({
+  enabled: z.boolean(),
+  password: z.string()
+})
+
 // Link creation/update schema
 export const linkSchema = z.object({
   slug: schemas.slug,
   destination: schemas.url,
   domainId: schemas.uuid.optional(),
   isActive: z.boolean().optional().default(true),
-  targeting: z.any().optional(),
-  abTesting: z.any().optional(),
-  hsts: z.any().optional(),
-  passwordProtection: z.any().optional(),
+  targeting: targetingSchema.optional(),
+  abTesting: abTestingSchema.optional(),
+  hsts: hstsSchema.optional(),
+  passwordProtection: passwordProtectionSchema.optional(),
   expiresAt: z.string().datetime().optional().nullable(),
   maxClicks: z.number().int().min(1).optional().nullable()
 })

@@ -3,7 +3,16 @@ import { createRequestLogger, handleError } from '../../../../utils/error-handle
 import { serverPocketBase } from '../../../../utils/pocketbase'
 import { analyticsQuerySchema } from '../../../../utils/sanitizer'
 
-export function aggregateEvents(events: any[]) {
+export function aggregateEvents(events: Array<{
+  session_id?: string;
+  timestamp?: string;
+  country?: string;
+  city?: string;
+  device_type?: string;
+  browser?: string;
+  os?: string;
+  referrer?: string;
+}>) {
   const totalClicks = events.length
   const uniqueSessionIds = new Set()
 
@@ -81,8 +90,8 @@ export default defineEventHandler(async (event) => {
     let query
     try {
       query = analyticsQuerySchema.parse(getQuery(event))
-    } catch (e: any) {
-      throw createError({ statusCode: 400, message: 'Invalid query parameters: ' + e.message })
+    } catch (e: unknown) {
+      throw createError({ statusCode: 400, message: 'Invalid query parameters: ' + (e instanceof Error ? e.message : String(e)) })
     }
 
     const pb = await serverPocketBase(event)
@@ -90,7 +99,7 @@ export default defineEventHandler(async (event) => {
     let link
     try {
       link = await pb.collection('links').getOne(linkId)
-    } catch (e: any) {
+    } catch (e: unknown) {
       throw createError({ statusCode: 404, message: 'Link not found' })
     }
 

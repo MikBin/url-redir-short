@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
       token: pb.authStore.token,
       user: authData.record,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.info(`Audit Log: Auth Event - Login failed for email: ${email}`);
     throw createError({
       statusCode: 401,

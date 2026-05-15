@@ -1,4 +1,5 @@
 import { metrics } from '../metrics/prometheus';
+import { RedirectRule } from '../../core/config/types';
 
 export interface EventSourceConstructor {
   new (url: string, eventSourceInitDict?: EventSourceInit): EventSource;
@@ -14,12 +15,12 @@ export class SSEClient {
   private eventSourceClass: EventSourceConstructor;
   private apiKey?: string;
 
-  private onCreate?: (data: any) => void;
-  private onUpdate?: (data: any) => void;
-  private onDelete?: (data: any) => void;
+  private onCreate?: (data: RedirectRule) => void;
+  private onUpdate?: (data: RedirectRule) => void;
+  private onDelete?: (data: RedirectRule) => void;
 
   private retryCount = 0;
-  private retryTimeout: any = null; // Use 'any' to avoid NodeJS.Timeout vs Window timer types issues
+  private retryTimeout: ReturnType<typeof setTimeout> | null = null;
   private isExplicitlyClosed = false;
 
   constructor(url: string, eventSourceClass: EventSourceConstructor, apiKey?: string) {
@@ -29,9 +30,9 @@ export class SSEClient {
   }
 
   public connect(
-    onCreate?: (data: any) => void,
-    onUpdate?: (data: any) => void,
-    onDelete?: (data: any) => void
+    onCreate?: (data: RedirectRule) => void,
+    onUpdate?: (data: RedirectRule) => void,
+    onDelete?: (data: RedirectRule) => void
   ) {
     if (this.isExplicitlyClosed) {
       console.warn('[SSE] Cannot connect: Client is explicitly closed.');
@@ -69,7 +70,7 @@ export class SSEClient {
           this.retryCount = 0;
         };
 
-        this.eventSource.onerror = (err: any) => {
+        this.eventSource.onerror = (err: Event) => {
           console.error('[SSE] Error:', err);
           metrics.sseStatus.set(0);
           if (this.eventSource) {
@@ -79,22 +80,22 @@ export class SSEClient {
           this.scheduleReconnect();
         };
 
-        this.eventSource.onmessage = (e: any) => {
+        this.eventSource.onmessage = (e: MessageEvent) => {
           console.log(`[SSE] Message received: ${e.data}`);
         };
 
         // Listen to custom events
-        this.eventSource.addEventListener('create', (e: any) => {
+        this.eventSource.addEventListener('create', (e: MessageEvent) => {
           console.log(`[SSE] Custom event "create": ${e.data}`);
           if (this.onCreate) this.onCreate(JSON.parse(e.data));
         });
 
-        this.eventSource.addEventListener('update', (e: any) => {
+        this.eventSource.addEventListener('update', (e: MessageEvent) => {
           console.log(`[SSE] Custom event "update": ${e.data}`);
           if (this.onUpdate) this.onUpdate(JSON.parse(e.data));
         });
 
-        this.eventSource.addEventListener('delete', (e: any) => {
+        this.eventSource.addEventListener('delete', (e: MessageEvent) => {
           console.log(`[SSE] Custom event "delete": ${e.data}`);
           if (this.onDelete) this.onDelete(JSON.parse(e.data));
         });

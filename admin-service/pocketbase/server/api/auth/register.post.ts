@@ -46,11 +46,11 @@ export default defineEventHandler(async (event) => {
       token: pb.authStore.token,
       user: authData.record,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Registration failed for email: ${email}`, error);
     throw createError({
       statusCode: 400,
-      statusMessage: error.message || 'Registration failed',
+      statusMessage: (error instanceof Error ? error.message : String(error)) || 'Registration failed',
     });
   }
 });

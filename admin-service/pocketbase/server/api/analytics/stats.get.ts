@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
       events: eventsResult.items,
       totalClicks: totalClicksResult.totalItems,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     throw createError({ statusCode: 500, statusMessage: 'Database error' });
   }
 });

@@ -97,6 +97,18 @@
 </template>
 
 <script setup lang="ts">
+
+interface HealthStatus {
+  status: string;
+  version: string;
+  uptime: number;
+  checks: Record<string, unknown>;
+}
+
+interface SystemMetrics {
+  requests: { total: number; errors: number; avgDuration: number };
+  memory: { heapUsed: number; heapTotal: number; rss: number };
+}
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -108,8 +120,8 @@ if (!pbAuth.value) {
   router.push('/login')
 }
 
-const health = ref<any>(null)
-const metrics = ref<any>(null)
+const health = ref<HealthStatus | null>(null)
+const metrics = ref<SystemMetrics | null>(null)
 const loading = ref(false)
 const error = ref('')
 
@@ -123,9 +135,9 @@ const refresh = async () => {
     ])
     health.value = healthRes
     metrics.value = metricsRes
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error fetching system status:', err)
-    error.value = err.message || 'Failed to load system status'
+    error.value = (err instanceof Error ? err.message : String(err)) || 'Failed to load system status'
   } finally {
     loading.value = false
   }

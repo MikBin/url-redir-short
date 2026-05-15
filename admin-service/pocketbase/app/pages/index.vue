@@ -338,7 +338,7 @@ interface LinkState {
   }
 }
 
-const links = ref<any[]>([])
+const links = ref<LinkState[]>([])
 const isEditing = ref(false)
 const currentLinkId = ref<string | null>(null)
 const activeTab = ref('targeting')
@@ -446,8 +446,8 @@ const createLink = async () => {
     // Reset form and refresh list
     newLink.value = JSON.parse(JSON.stringify(defaultLinkState))
     fetchLinks()
-  } catch (error: any) {
-    alert('Error creating link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    alert('Error creating link: ' + (((error as { data?: { statusMessage?: string } }).data?.statusMessage || (error as Error).message)))
   }
 }
 
@@ -474,8 +474,8 @@ const updateLink = async () => {
 
     cancelEdit()
     fetchLinks()
-  } catch (error: any) {
-    alert('Error updating link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    alert('Error updating link: ' + (((error as { data?: { statusMessage?: string } }).data?.statusMessage || (error as Error).message)))
   }
 }
 
@@ -544,7 +544,7 @@ const formatDateForInput = (isoString: string | null) => {
 // Fetch Links
 const fetchLinks = async () => {
   try {
-    const data = await $fetch<any[]>('/api/links')
+    const data = await $fetch<LinkState[]>('/api/links')
     links.value = data || []
 
     // Fetch metrics
@@ -565,7 +565,7 @@ const fetchLinks = async () => {
 // QR Code Logic
 const showQRModal = ref(false)
 const qrCodeUrl = ref<string | null>(null)
-const currentQRLink = ref<any>(null)
+const currentQRLink = ref<LinkState | null>(null)
 const qrOptions = ref({
   width: 200,
   margin: 4,
@@ -596,14 +596,14 @@ const fetchQR = async () => {
   }
 }
 
-const showQR = async (link: any) => {
+const showQR = async (link: LinkState) => {
   currentQRLink.value = link
   showQRModal.value = true
   qrOptions.value = { width: 200, margin: 4, color: '#000000', bgcolor: '#ffffff' } // Reset defaults
   await fetchQR()
 }
 
-let debounceTimer: any = null
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 watch(qrOptions, () => {
     if (showQRModal.value) {
         if (debounceTimer) clearTimeout(debounceTimer)
@@ -622,7 +622,7 @@ const closeQRModal = () => {
 // Bulk Import Logic
 const bulkInput = ref('')
 const isImporting = ref(false)
-const bulkStatus = ref<any>(null)
+const bulkStatus = ref<{ success?: number; failed?: number; invalid_items?: Array<Record<string, unknown>> } | null>(null)
 
 const importLinks = async () => {
   bulkStatus.value = null
@@ -650,10 +650,10 @@ const importLinks = async () => {
          bulkStatus.value = {
              type: 'error',
              message: `Import failed. 0 links imported. Failed: ${data.failed}.`,
-             details: data.invalid_items?.map((i: any) => `Invalid item: ${JSON.stringify(i)}`)
+             details: data.invalid_items?.map((i: Record<string, unknown>) => `Invalid item: ${JSON.stringify(i)}`)
          }
      }
-  } catch (e: any) {
+  } catch (e: unknown) {
      bulkStatus.value = { type: 'error', message: 'Error: ' + e.message }
   } finally {
      isImporting.value = false
@@ -665,7 +665,7 @@ const closeBulkModal = () => {
   bulkInput.value = ''
   bulkStatus.value = null
 }
-const editLink = (link: any) => {
+const editLink = (link: LinkState) => {
   newLink.value = {
     slug: link.slug,
     destination: link.destination,
@@ -696,8 +696,8 @@ const deleteLink = async (id: string) => {
     })
 
     fetchLinks()
-  } catch (error: any) {
-    alert('Error deleting link: ' + (error.data?.statusMessage || error.message))
+  } catch (error: unknown) {
+    alert('Error deleting link: ' + (((error as { data?: { statusMessage?: string } }).data?.statusMessage || (error as Error).message)))
   }
 }
 

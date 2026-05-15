@@ -1,3 +1,4 @@
+
 import { describe, it, expect, vi } from 'vitest';
 import { InMemoryStore } from './InMemoryStore';
 import { CloudflareKVStore } from './CloudflareKVStore';
@@ -52,8 +53,8 @@ describe('CloudflareKVStore', () => {
       get: vi.fn().mockResolvedValue(JSON.stringify(rule))
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as any });
+
+    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as unknown as KVNamespace });
 
     const retrieved = await store.getRedirect('/test');
     expect(retrieved).toEqual(rule);
@@ -66,8 +67,8 @@ describe('CloudflareKVStore', () => {
       get: vi.fn().mockResolvedValue(JSON.stringify(rule))
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as any });
+
+    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as unknown as KVNamespace });
 
     const retrieved = await store.getRedirect('/test', 'domain1');
     expect(retrieved).toEqual(rule);
@@ -79,8 +80,8 @@ describe('CloudflareKVStore', () => {
       get: vi.fn().mockResolvedValue(null)
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as any });
+
+    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as unknown as KVNamespace });
 
     const retrieved = await store.getRedirect('/missing');
     expect(retrieved).toBeNull();
@@ -91,8 +92,8 @@ describe('CloudflareKVStore', () => {
       get: vi.fn().mockResolvedValue('invalid-json')
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as any });
+
+    const store = new CloudflareKVStore({ REDIRECTS_KV: mockKv as unknown as KVNamespace });
 
     // Mock console.error to avoid noise in test output
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -104,8 +105,8 @@ describe('CloudflareKVStore', () => {
   });
 
   it('should always return true for mightExist', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const store = new CloudflareKVStore({ REDIRECTS_KV: {} as any });
+
+    const store = new CloudflareKVStore({ REDIRECTS_KV: {} as unknown as KVNamespace });
 
     expect(await store.mightExist('/test')).toBe(true);
     expect(await store.mightExist('/missing')).toBe(true);
