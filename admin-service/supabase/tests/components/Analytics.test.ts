@@ -1,20 +1,28 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, defineComponent } from 'vue'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 
+// Mock vue-chartjs to avoid canvas context errors
+vi.mock('vue-chartjs', () => ({
+  Bar: defineComponent({ template: '<div>Bar Chart</div>' }),
+  Line: defineComponent({ template: '<div>Line Chart</div>' }),
+  Doughnut: defineComponent({ template: '<div>Doughnut Chart</div>' })
+}))
+
 // Mock chart.js to avoid canvas errors in happy-dom
 vi.mock('chart.js', () => ({
   Chart: { register: vi.fn() },
-  Title: {},
-  Tooltip: {},
-  Legend: {},
-  BarElement: {},
-  CategoryScale: {},
-  LinearScale: {},
-  PointElement: {},
-  LineElement: {},
-  ArcElement: {}
+  Title: vi.fn(),
+  Tooltip: vi.fn(),
+  Legend: vi.fn(),
+  BarElement: vi.fn(),
+  CategoryScale: vi.fn(),
+  LinearScale: vi.fn(),
+  PointElement: vi.fn(),
+  LineElement: vi.fn(),
+  ArcElement: vi.fn()
 }))
 
 const mockStatsData = {
@@ -76,9 +84,6 @@ describe('Analytics.vue', () => {
 
     await flushPromises()
     await wrapper.vm.$nextTick()
-
-    // Debug output if fails
-    // console.log(wrapper.html())
 
     expect(wrapper.text()).toContain('Analytics')
     expect(wrapper.text()).toContain('Total Clicks')
