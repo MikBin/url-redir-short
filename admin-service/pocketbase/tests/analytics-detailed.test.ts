@@ -1,5 +1,193 @@
-import { describe, it, expect } from 'vitest'
-import { aggregateEvents } from '../server/api/analytics/links/[linkId]/detailed.get'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import handler, { aggregateEvents } from '../server/api/analytics/links/[linkId]/detailed.get'
+
+// Mock dependencies
+vi.mock('../server/utils/error-handler', () => ({
+  createRequestLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+  })),
+  handleError: vi.fn((event, error) => {
+    return error
+  })
+}))
+
+vi.mock('../server/utils/pocketbase', () => ({
+  serverPocketBase: vi.fn()
+}))
+
+vi.mock('h3', async () => {
+  const actual = await vi.importActual('h3')
+  return {
+    ...actual,
+    getRouterParam: vi.fn(),
+    getQuery: vi.fn(),
+    setHeader: vi.fn(),
+    createError: vi.fn((opts) => {
+      const err = new Error(opts.message)
+      Object.assign(err, opts)
+      return err
+    }),
+    defineEventHandler: (fn: Parameters<typeof import('h3').defineEventHandler>[0]) => fn
+  }
+})
+
+describe('Detailed Handler', () => {
+  let mockEvent: Partial<import('h3').H3Event>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockEvent = {
+      context: {
+        user: { id: 'user_123' }
+      }
+    }
+  })
+
+  it('requires authentication', async () => {
+    const unauthEvent = { context: {} } // no user
+    const error = await handler(unauthEvent as unknown as import('h3').H3Event)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as { statusCode: number }).statusCode).toBe(401)
+    expect((error as Error).message).toBe('Unauthorized')
+  })
+
+  it('requires linkId', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('   ')
+
+    const error = await handler(mockEvent as import('h3').H3Event)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as { statusCode: number }).statusCode).toBe(400)
+    expect((error as Error).message).toBe('Missing linkId')
+  })
+
+  it('validates query parameters', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('link_123')
+    vi.mocked(h3.getQuery).mockReturnValue({ from: 'invalid-date' })
+
+    const error = await handler(mockEvent as import('h3').H3Event)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as { statusCode: number }).statusCode).toBe(400)
+    expect((error as Error).message).toContain('Invalid query parameters:')
+  })
+
+  it('returns 404 when link not found', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('link_123')
+    vi.mocked(h3.getQuery).mockReturnValue({})
+
+    const { serverPocketBase } = await import('../server/utils/pocketbase')
+    const pbMock = {
+      collection: vi.fn().mockReturnValue({
+        getOne: vi.fn().mockRejectedValue(new Error('Not found'))
+      })
+    }
+    vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
+
+    const error = await handler(mockEvent as import('h3').H3Event)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as { statusCode: number }).statusCode).toBe(404)
+    expect((error as Error).message).toBe('Link not found')
+  })
+
+  it('returns 500 on unexpected database errors', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('link_123')
+    vi.mocked(h3.getQuery).mockReturnValue({})
+
+    const { serverPocketBase } = await import('../server/utils/pocketbase')
+    const pbMock = {
+      collection: vi.fn().mockReturnValue({
+        getOne: vi.fn().mockResolvedValue({ id: 'link_123', slug: 'my-link', destination: 'https://example.com' }),
+        getFullList: vi.fn().mockRejectedValue(new Error('Database connection failed'))
+      })
+    }
+    vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
+
+    const error = await handler(mockEvent as import('h3').H3Event)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe('Database connection failed')
+  })
+
+  it('returns aggregated analytics successfully', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('link_123')
+    vi.mocked(h3.getQuery).mockReturnValue({
+      from: '2023-10-01T00:00:00.000Z',
+      to: '2023-10-05T00:00:00.000Z'
+    })
+
+    const { serverPocketBase } = await import('../server/utils/pocketbase')
+    const pbMock = {
+      collection: vi.fn((name) => {
+        if (name === 'links') {
+          return {
+            getOne: vi.fn().mockResolvedValue({ id: 'link_123', slug: 'my-link', destination: 'https://example.com' })
+          }
+        }
+        if (name === 'analytics_events') {
+          return {
+            getFullList: vi.fn().mockResolvedValue([
+              { session_id: 's1', country: 'US', timestamp: '2023-10-02T12:00:00Z' }
+            ])
+          }
+        }
+        return {}
+      })
+    }
+    vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
+
+    const result = await handler(mockEvent as import('h3').H3Event)
+
+    expect(result).not.toBeInstanceOf(Error)
+    const res = result as Record<string, unknown>
+    expect((res.link as any).id).toBe('link_123')
+    expect((res.summary as any).totalClicks).toBe(1)
+    expect((res.geographic as any).countries).toEqual([{ country: 'US', count: 1 }])
+
+    expect(vi.mocked(h3.setHeader)).toHaveBeenCalledWith(mockEvent, 'Cache-Control', 'private, max-age=60')
+  })
+
+  it('handles empty query parameters by applying default date range', async () => {
+    const h3 = await import('h3')
+    vi.mocked(h3.getRouterParam).mockReturnValue('link_123')
+    vi.mocked(h3.getQuery).mockReturnValue({})
+
+    const { serverPocketBase } = await import('../server/utils/pocketbase')
+    const getFullListMock = vi.fn().mockResolvedValue([])
+    const pbMock = {
+      collection: vi.fn((name) => {
+        if (name === 'links') {
+          return {
+            getOne: vi.fn().mockResolvedValue({ id: 'link_123', slug: 'my-link', destination: 'https://example.com' })
+          }
+        }
+        if (name === 'analytics_events') {
+          return {
+            getFullList: getFullListMock
+          }
+        }
+        return {}
+      })
+    }
+    vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
+
+    const result = await handler(mockEvent as import('h3').H3Event)
+
+    expect(result).not.toBeInstanceOf(Error)
+    expect(getFullListMock).toHaveBeenCalled()
+    const callArgs = getFullListMock.mock.calls[0][0]
+    expect(callArgs.filter).toContain('timestamp >=')
+    expect(callArgs.filter).toContain('timestamp <=')
+  })
+})
 
 describe('aggregateEvents', () => {
   it('aggregates an empty array correctly', () => {
