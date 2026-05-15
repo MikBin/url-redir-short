@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { setup, fetch } from '@nuxt/test-utils'
 
+// Restore to skip mode since we can't fully execute integration health tests
+// hitting real network domains without intercepting the fetch calls or running inside mock network
 describe.skip('Health API', async () => {
   await setup({
     server: true
