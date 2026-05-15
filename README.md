@@ -2,63 +2,76 @@
 
 ![CI Status](https://github.com/MikBin/url-redir-short/actions/workflows/deploy-staging.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Coverage Goal](https://img.shields.io/badge/coverage-95%25-brightgreen)
 
-A high-performance, distributed URL redirection platform.
+A high-performance, distributed URL redirection platform designed for low latency and high scalability.
 
-## Overview
+## 🚀 Overview
 
-The system consists of two main components:
-- **Admin Service**: A modern control plane built with Nuxt 4, Vue 3, and Supabase for link management, analytics visualization, and configuration.
-- **Redirect Engine**: A blazing-fast edge-optimized redirection engine built with Hono and TypeScript, capable of running on Node.js or Cloudflare Workers.
+The system consists of a blazing-fast edge-optimized redirection engine and a modern control plane with multiple backend options.
 
-## Quick Start
+- **Redirect Engine**: Built with **Hono + TypeScript**. Uses advanced data structures for extreme performance:
+  - **Radix Tree** for O(k) routing complexity.
+  - **Cuckoo Filter** for fast negative lookups (rejecting 404s before hitting the store).
+  - Multi-runtime support: **Node.js** and **Cloudflare Workers**.
+- **Admin Service**: A Nuxt 4 + Vue 3 control plane.
+  - **Dual Backend Support**: Choose between **Supabase** (PostgreSQL/Redis) or **PocketBase** (SQLite/Go).
+  - **Real-time Sync**: State synchronization between Admin and Engine via **Server-Sent Events (SSE)**.
 
-The easiest way to run the project locally is using Docker Compose:
+## 🏗️ Architecture Highlights
 
+- **Clean Architecture**: Decoupled domain logic, use-cases, and adapters.
+- **Strict TypeScript**: 100% type safety with `any` strictly forbidden.
+- **SSE Protocol**: Automated data transformation from DB (snake_case) to Engine (camelCase).
+- **Edge Native**: Optimized for distributed deployments with global caching.
+
+## ⚡ Quick Start
+
+### Option A: Standard (Supabase + Engine)
 ```bash
-# Clone the repository
-git clone https://github.com/MikBin/url-redir-short.git
-cd url-redir-short
+# Start Supabase locally
+npm run dev:supabase
 
-# Copy the environment template
-cp .env.example .env
-
-# Start the services
-docker compose up -d
+# Run Admin (Supabase) and Engine in parallel
+npm run dev:all
 ```
 
-For a comprehensive guide, see the [Getting Started Guide](docs/getting-started.md).
+### Option B: Lightweight (PocketBase + Engine)
+```bash
+# Start PocketBase, Admin (PB), and Engine in parallel
+npm run dev:pb:all
+```
 
-## Architecture Overview
+For more detailed setup instructions, including environment variables and Docker configuration, see the [Getting Started Guide](docs/getting-started.md).
 
-The platform uses a Clean Architecture for the Redirect Engine and a modern Server-Side Rendered framework for the Admin Service. The state between the Admin Service and the Redirect Engine is synchronized in real-time via Server-Sent Events (SSE).
+## 🧪 Testing & Quality
 
-For more details, see the [Architecture Documentation](docs/architecture.md).
+We maintain a rigorous quality standard with a goal of **>95% test coverage** across all subsystems.
 
-## Documentation
+- **Unit Tests**: Pure logic and domain models (Vitest).
+- **Integration Tests**: API handlers and service adapters with full mocking of external clients (Redis, Supabase).
+- **System E2E**: End-to-end user journeys using Playwright.
+- **Performance**: Automated benchmarks and load testing suites.
 
-Comprehensive documentation is available in the `docs/` directory:
+Run all tests:
+```bash
+npm test
+```
 
-- [Getting Started](docs/getting-started.md)
-- [Architecture](docs/architecture.md)
-- **Deployment**
-  - [Quick Start Deployment](docs/deployment/quick-start.md)
-  - [TLS/HTTPS Setup](docs/deployment/tls-setup.md)
-  - [Secrets Management](docs/deployment/secrets.md)
-  - [CI/CD Pipeline](docs/deployment/cd-pipeline.md)
-- **Operations**
-  - [Operational Runbook](docs/operations/runbook.md)
-- **Development**
-  - [Testing Guide](docs/development/testing.md)
-  - [Database Migrations](docs/development/migrations.md)
-  - [Contributing Guidelines](docs/development/contributing.md)
-- **API**
-  - [Admin API](docs/api/admin-api.md)
+## 📚 Documentation
 
-## Contributing
+Detailed guides are available in the `docs/` directory:
 
-We welcome contributions! Please read our [Contributing Guidelines](docs/development/contributing.md) for details on our code of conduct, development workflow, and pull request process.
+- [Architecture Deep Dive](docs/architecture.md)
+- [Deployment Runbook](docs/deployment/quick-start.md)
+- [Security & Secrets](docs/deployment/secrets.md)
+- [Testing Standards](docs/development/testing.md)
+- [CI/CD Pipeline](docs/deployment/cd-pipeline.md)
 
-## License
+## 🤝 Contributing
+
+We welcome contributions! Please refer to [AGENTS.md](AGENTS.md) for internal architecture notes and [Contributing Guidelines](docs/development/contributing.md) for the workflow.
+
+## ⚖️ License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
