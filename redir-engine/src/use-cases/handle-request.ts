@@ -96,7 +96,7 @@ export class HandleRequestUseCase {
     }
 
     // 4. Apply A/B Testing Logic
-    if (!targetingMatched && finalRule.ab_testing?.enabled && finalRule.ab_testing.variations.length > 0) {
+    if (!targetingMatched && finalRule.ab_testing?.enabled && finalRule.ab_testing.variations?.length > 0) {
       const random = Math.random() * 100;
       let cumulativeWeight = 0;
 
