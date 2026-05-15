@@ -5,12 +5,14 @@ export default defineVitestConfig({
     environment: 'happy-dom',
     globals: true,
     include: ['tests/**/*.test.ts'],
+    setupFiles: ['./tests/setup/env.ts'],
     env: {
-      SUPABASE_URL: 'https://example.com',
-      SUPABASE_KEY: 'some-random-key'
-    },
-    alias: {
-      'ioredis': 'ioredis-mock'
+      SUPABASE_URL: 'https://dummy.supabase.co',
+      SUPABASE_KEY: 'dummy-supabase-key',
+      SUPABASE_SERVICE_KEY: 'dummy-supabase-service-key',
+      NUXT_PUBLIC_SUPABASE_URL: 'https://dummy.supabase.co',
+      NUXT_PUBLIC_SUPABASE_KEY: 'dummy-supabase-key',
+      TEST_ENV: 'true'
     }
   }
 })

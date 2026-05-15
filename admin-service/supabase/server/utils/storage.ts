@@ -13,6 +13,25 @@ export const useValkey = () => {
   // @ts-ignore - Nuxt runtime config typing
   const url = config.valkeyUrl || 'redis://localhost:6379'
 
+  // If we're in a test environment, skip actually connecting to Redis. This prevents
+  // connection timeouts during Nitro startup inside test suites.
+  if (process.env.TEST_ENV === 'true' || process.env.NODE_ENV === 'test') {
+    // Just return a mock-like structure with basic methods wrapped in promises
+    return {
+      multi: () => ({
+        incr: () => {},
+        ttl: () => {},
+        exec: async () => [[null, 1], [null, 60]]
+      }),
+      ttl: async () => -1,
+      incr: async () => 1,
+      expire: async () => 1,
+      setex: async () => 'OK',
+      on: () => {},
+      quit: async () => 'OK'
+    } as unknown as Redis
+  }
+
   console.log(`Connecting to Valkey/Redis at ${url.replace(/:[^:@]*@/, ':***@')}`) // Redact password in logs
 
   redisClient = new Redis(url, {
