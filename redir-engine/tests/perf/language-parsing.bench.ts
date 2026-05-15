@@ -44,7 +44,7 @@ describe('Language Targeting Performance', () => {
       code: 301,
       targeting: {
         enabled: true,
-        rules: rules as any
+        rules: rules as NonNullable<RedirectRule['targeting']>['rules']
       }
     };
   };

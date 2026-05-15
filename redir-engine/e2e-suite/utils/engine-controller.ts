@@ -156,7 +156,7 @@ E2E_TEST_MODE=true
     if (this.process && this.process.pid) {
       // Use tree-kill to ensure all child processes (including those spawned by shell) are killed
       await new Promise<void>((resolve) => {
-        kill(this.process!.pid, 'SIGKILL', (err: any) => {
+        kill(this.process!.pid, 'SIGKILL', (err: Error | null) => {
           if (err) console.error('Failed to kill process tree:', err);
           resolve();
         });

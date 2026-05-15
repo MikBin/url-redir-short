@@ -78,10 +78,33 @@ export const linkSchema = z.object({
   destination: schemas.url,
   domainId: schemas.uuid.optional(),
   isActive: z.boolean().optional().default(true),
-  targeting: z.any().optional(),
-  abTesting: z.any().optional(),
-  hsts: z.any().optional(),
-  passwordProtection: z.any().optional(),
+  targeting: z.object({
+    enabled: z.boolean(),
+    rules: z.array(z.object({
+      id: z.string(),
+      target: z.enum(['language', 'device', 'country']),
+      value: z.string(),
+      destination: z.string()
+    }))
+  }).optional(),
+  abTesting: z.object({
+    enabled: z.boolean(),
+    variations: z.array(z.object({
+      id: z.string(),
+      destination: z.string(),
+      weight: z.number()
+    }))
+  }).optional(),
+  hsts: z.object({
+    enabled: z.boolean(),
+    maxAge: z.number().optional(),
+    includeSubDomains: z.boolean().optional(),
+    preload: z.boolean().optional()
+  }).optional(),
+  passwordProtection: z.object({
+    enabled: z.boolean(),
+    password: z.string()
+  }).optional(),
   expiresAt: z.string().datetime().optional().nullable(),
   maxClicks: z.number().int().min(1).optional().nullable()
 })

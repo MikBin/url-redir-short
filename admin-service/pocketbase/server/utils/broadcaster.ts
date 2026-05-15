@@ -5,7 +5,7 @@ export const syncEvents = new EventEmitter();
 export const SYNC_EVENT_NAME = 'pb-change';
 
 export const broadcaster = {
-  broadcast: (event: string, data: any) => {
+  broadcast: (event: string, data: import("./transformer").PocketBaseLink) => {
     try {
       const transformedData = transformLink(data);
       syncEvents.emit(SYNC_EVENT_NAME, { event, data: transformedData });

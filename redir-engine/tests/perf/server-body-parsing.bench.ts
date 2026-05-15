@@ -19,7 +19,7 @@ vi.mock('../../src/core/analytics/payload-builder', () => ({
 }));
 
 describe('Server Body Parsing Performance', () => {
-  let app: any;
+  let app: import('hono').Hono;
   let useCase: HandleRequestUseCase;
 
   beforeEach(() => {

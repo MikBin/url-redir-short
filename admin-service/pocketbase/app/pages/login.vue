@@ -47,8 +47,8 @@ const handleLogin = async () => {
       body: { email: email.value, password: password.value }
     })
     router.push('/')
-  } catch (err: any) {
-    errorMsg.value = err.data?.statusMessage || 'Login failed'
+  } catch (err: unknown) {
+    errorMsg.value = (err as { data?: { statusMessage?: string } }).data?.statusMessage || 'Login failed'
   } finally {
     loading.value = false
   }

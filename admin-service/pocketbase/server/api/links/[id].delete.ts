@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     broadcaster.broadcast('delete', record);
 
     return { success: true };
-  } catch (err: any) {
-    throw createError({ statusCode: err.status || 500, statusMessage: err.message || 'Error deleting link' });
+  } catch (err: unknown) {
+    throw createError({ statusCode: (err as { status?: number }).status || 500, statusMessage: (err instanceof Error ? err.message : String(err)) || 'Error deleting link' });
   }
 });

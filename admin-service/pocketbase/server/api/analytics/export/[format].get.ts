@@ -4,7 +4,7 @@ import { serverPocketBase } from '../../../utils/pocketbase'
 import { exportQuerySchema } from '../../../utils/sanitizer'
 
 // Exporting for testing
-export function convertToCSV(data: any[]): string {
+export function convertToCSV(data: Record<string, unknown>[]): string {
   if (!data || data.length === 0) {
     return 'No data available'
   }
@@ -91,8 +91,9 @@ export default defineEventHandler(async (event) => {
           })
         }
         filter += ` && path = "${link.slug}"`
-      } catch (err: any) {
-        if (err.statusCode === 403) throw err
+      } catch (err: unknown) {
+        if (typeof err === "object" && err !== null && "statusCode" in err && (err as { statusCode: number }).statusCode === 403) throw err
+
         throw createError({
           statusCode: 404,
           message: 'Link not found',
@@ -109,7 +110,7 @@ export default defineEventHandler(async (event) => {
     const selectedFields = ['id', 'path', 'destination', 'timestamp', 'country', 'city', 'device_type', 'browser', 'os', 'referrer', 'status']
 
     const data = records.map((record) => {
-      const filteredRecord: any = {}
+      const filteredRecord: Record<string, unknown> = {}
       for (const field of selectedFields) {
         filteredRecord[field] = record[field]
       }

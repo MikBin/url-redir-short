@@ -22,7 +22,7 @@ describe('User Agent Parsing Performance', () => {
   });
 
   it('Optimized: LRU Cached Parsing', () => {
-    const cache = new LRUCache<string, { device: any; os: any }>(1000);
+    const cache = new LRUCache<string, { device: ReturnType<UAParser['getDevice']>; os: ReturnType<UAParser['getOS']> }>(1000);
 
     // Simulate cache warming (first run)
     const parser = new UAParser(userAgent);

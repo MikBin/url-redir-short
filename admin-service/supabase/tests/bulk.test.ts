@@ -36,6 +36,6 @@ describe('Bulk Import Utility', () => {
   })
 
   it('should throw error if input is not array', () => {
-      expect(() => validateBulkLinks(null as any)).toThrow('Input must be an array')
+      expect(() => validateBulkLinks(null as unknown[])).toThrow('Input must be an array')
   })
 })

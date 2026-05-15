@@ -117,7 +117,7 @@ export default defineEventHandler(async (event) => {
           const filter = `link_id = "${linkId}" && date = "${dateStr}" && hour = ${hour}`;
           const aggregate = await pb.collection('analytics_aggregates').getFirstListItem(filter);
 
-          const updates: any = {
+          const updates: Record<string, unknown> = {
             "click_count+": 1
           };
 
@@ -150,8 +150,8 @@ export default defineEventHandler(async (event) => {
         } catch (e) {
           // If aggregate doesn't exist, create it
           // Pocketbase throws a 404 when getFirstListItem finds no matches
-          if ((e as any).status === 404) {
-             const newAggregate: any = {
+          if (typeof e === "object" && e !== null && "status" in e && (e as { status: number }).status === 404) {
+             const newAggregate: Record<string, unknown> = {
                link_id: linkId,
                date: dateStr,
                hour: hour,

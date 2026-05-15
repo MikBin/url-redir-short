@@ -29,7 +29,7 @@ vi.mock('h3', async () => {
       Object.assign(err, opts)
       return err
     }),
-    defineEventHandler: (fn: any) => fn
+    defineEventHandler: (fn: Parameters<typeof import('h3').defineEventHandler>[0]) => fn
   }
 })
 
@@ -40,7 +40,7 @@ describe('Analytics Export', () => {
     })
 
     it('returns "No data available" for null data', () => {
-      expect(convertToCSV(null as any)).toBe('No data available')
+      expect(convertToCSV(null as unknown as { id: string }[])).toBe('No data available')
     })
 
     it('formats simple data correctly', () => {
@@ -86,7 +86,7 @@ describe('Analytics Export', () => {
   })
 
   describe('Handler Format Validation', () => {
-    let mockEvent: any
+    let mockEvent: Partial<import('h3').H3Event>
 
     beforeEach(() => {
       vi.clearAllMocks()
@@ -102,10 +102,10 @@ describe('Analytics Export', () => {
       vi.mocked(h3.getRouterParam).mockReturnValue('pdf')
       vi.mocked(h3.getQuery).mockReturnValue({})
 
-      const error = await handler(mockEvent)
+      const error = await handler(mockEvent as import('h3').H3Event)
 
       expect(error).toBeInstanceOf(Error)
-      expect((error as any).statusCode).toBe(400)
+      expect((error as { statusCode: number }).statusCode).toBe(400)
       expect(error.message).toBe('Invalid export format. Must be "csv" or "json".')
     })
 
@@ -120,9 +120,9 @@ describe('Analytics Export', () => {
           getFullList: vi.fn().mockResolvedValue([])
         })
       }
-      vi.mocked(serverPocketBase).mockResolvedValue(pbMock as any)
+      vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
 
-      const result = await handler(mockEvent)
+      const result = await handler(mockEvent as import('h3').H3Event)
 
       expect(result).not.toBeInstanceOf(Error)
       expect(result).toHaveProperty('exportedAt')
@@ -141,19 +141,19 @@ describe('Analytics Export', () => {
           getFullList: vi.fn().mockResolvedValue([])
         })
       }
-      vi.mocked(serverPocketBase).mockResolvedValue(pbMock as any)
+      vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
 
-      const result = await handler(mockEvent)
+      const result = await handler(mockEvent as import('h3').H3Event)
 
       expect(result).toBe('No data available')
     })
 
     it('requires authentication', async () => {
       const unauthEvent = { context: {} } // no user
-      const error = await handler(unauthEvent as any)
+      const error = await handler(unauthEvent as unknown as import('h3').H3Event)
 
       expect(error).toBeInstanceOf(Error)
-      expect((error as any).statusCode).toBe(401)
+      expect((error as { statusCode: number }).statusCode).toBe(401)
       expect(error.message).toBe('Unauthorized')
     })
   })

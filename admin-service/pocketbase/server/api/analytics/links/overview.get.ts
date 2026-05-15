@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     const result = await pb.collection('analytics_aggregates').getList(1, 500);
 
     // Aggregate click_count per link_id
-    const aggregatedClicks = aggregateLinkClicks(result.items as any[]);
+    const aggregatedClicks = aggregateLinkClicks(result.items as { link_id: string; click_count: number }[]);
 
     return aggregatedClicks;
   } catch (error) {

@@ -3,9 +3,9 @@ import { validateBulkLinks } from '../server/utils/bulk';
 
 describe('validateBulkLinks', () => {
   it('should throw an error if input is not an array', () => {
-    expect(() => validateBulkLinks({} as any)).toThrow('Input must be an array of links');
-    expect(() => validateBulkLinks('not an array' as any)).toThrow('Input must be an array of links');
-    expect(() => validateBulkLinks(null as any)).toThrow('Input must be an array of links');
+    expect(() => validateBulkLinks({} as unknown as import('../server/utils/sanitizer').LinkInput[])).toThrow('Input must be an array of links');
+    expect(() => validateBulkLinks('not an array' as unknown as import('../server/utils/sanitizer').LinkInput[])).toThrow('Input must be an array of links');
+    expect(() => validateBulkLinks(null as unknown as import('../server/utils/sanitizer').LinkInput[])).toThrow('Input must be an array of links');
   });
 
   it('should return empty arrays for an empty input array', () => {

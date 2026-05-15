@@ -3,7 +3,7 @@ import { buildAnalyticsPayload } from '../../src/core/analytics/payload-builder'
 
 // Mock expensive crypto operation
 vi.mock('../../src/core/analytics/payload-builder', async (importOriginal) => {
-  const actual = await importOriginal() as any;
+  const actual = await importOriginal() as typeof import('../../src/core/analytics/payload-builder');
   return {
     ...actual,
     anonymizeIp: async () => 'mock-ip-hash',

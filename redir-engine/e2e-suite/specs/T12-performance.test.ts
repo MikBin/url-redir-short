@@ -261,7 +261,7 @@ console.log('[T12] Engine started');
         times.push((end - start) / batchSize);
         
         for (const response of responses) {
-          expect((response as any).status).toBe(301);
+          expect((response as Response).status).toBe(301);
         }
       }
 

@@ -3,7 +3,7 @@ import { AnalyticsCollector, AnalyticsPayload } from '../../core/analytics/colle
 export class FireAndForgetCollector implements AnalyticsCollector {
   constructor(
     private readonly analyticsUrl: string,
-    private readonly waitUntil?: (promise: Promise<any>) => void
+    private readonly waitUntil?: (promise: Promise<unknown>) => void
   ) {}
 
   async collect(payload: AnalyticsPayload): Promise<void> {
