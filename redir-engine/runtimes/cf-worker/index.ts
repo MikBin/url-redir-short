@@ -25,7 +25,7 @@ let FireAndForgetCollectorClass: typeof FireAndForgetCollector;
 let CloudflareKVStoreClass: typeof CloudflareKVStore;
 let NoOpSyncAdapterClass: typeof NoOpSyncAdapter;
 
-let memStoreRef: any = null;
+let memStoreRef: unknown = null;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -72,13 +72,13 @@ export default {
     if (env.E2E_TEST_MODE === 'true' && request.method === 'POST') {
         const url = new URL(request.url);
         if (url.pathname === '/_test/inject') {
-            const body = await request.json() as any;
+            const body = await request.json() as { type: string; data: { path: string; [key: string]: unknown } };
             if (body.type === 'create' || body.type === 'update') {
                 await env.REDIRECTS_KV.put(body.data.path, JSON.stringify(body.data));
-                if (memStoreRef) await memStoreRef.addRedirect(body.data);
+                if (memStoreRef) await (memStoreRef as { addRedirect: (d: unknown) => Promise<void> }).addRedirect(body.data);
             } else if (body.type === 'delete') {
                 await env.REDIRECTS_KV.delete(body.data.path);
-                if (memStoreRef) await memStoreRef.removeRedirect(body.data.path);
+                if (memStoreRef) await (memStoreRef as { removeRedirect: (p: string) => Promise<void> }).removeRedirect(body.data.path);
             }
             return new Response('OK');
         } else if (url.pathname === '/_test/clear') {
@@ -94,11 +94,11 @@ export default {
     const analyticsCollector = new FireAndForgetCollectorClass(ANALYTICS_SERVICE_URL);
 
     // Initialize Storage with KV
-    let store: any = new CloudflareKVStoreClass(env);
+    let store: { getRedirect(path: string): Promise<unknown> } = new CloudflareKVStoreClass(env);
 
     if (env.E2E_TEST_MODE === 'true' && memStoreRef) {
         // Use in-memory store instead of KV for tests to guarantee local cache behavior in tests like T13
-        store = memStoreRef;
+        store = memStoreRef as { getRedirect(path: string): Promise<unknown> };
     }
 
     // Initialize Use Case
