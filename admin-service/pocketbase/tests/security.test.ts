@@ -1,5 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getAllowedOrigins, isOriginAllowed, securityHeaders } from '../server/middleware/1.security';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import defaultHandler, { getAllowedOrigins, isOriginAllowed, securityHeaders } from '../server/middleware/1.security';
+import { setHeader, setResponseStatus } from 'h3';
+
+vi.mock('h3', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('h3')>();
+  return {
+    ...actual,
+    setHeader: vi.fn(),
+    setResponseStatus: vi.fn(),
+  };
+});
 
 describe('Security Middleware Logic', () => {
   describe('securityHeaders', () => {
@@ -89,6 +99,68 @@ describe('Security Middleware Logic', () => {
     it('should return true if allowedOrigins contains wildcard "*"', () => {
       expect(isOriginAllowed('http://hacker.com', ['*'])).toBe(true);
       expect(isOriginAllowed('https://example.com', ['http://localhost:3000', '*'])).toBe(true);
+    });
+  });
+
+  describe('defaultHandler', () => {
+    const originalEnv = process.env.CORS_ALLOWED_ORIGINS;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      delete process.env.CORS_ALLOWED_ORIGINS;
+    });
+
+    afterEach(() => {
+      process.env.CORS_ALLOWED_ORIGINS = originalEnv;
+    });
+
+    it('should set security headers for every request', () => {
+      const mockEvent = {
+        node: { req: { headers: {} } },
+        method: 'GET'
+      } as any;
+
+      defaultHandler(mockEvent);
+
+      expect(setHeader).toHaveBeenCalledWith(mockEvent, 'X-Frame-Options', 'DENY');
+      expect(setHeader).toHaveBeenCalledWith(mockEvent, 'X-Content-Type-Options', 'nosniff');
+    });
+
+    it('should set CORS headers if origin is allowed', () => {
+      process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:3000';
+      const mockEvent = {
+        node: { req: { headers: { origin: 'http://localhost:3000' } } },
+        method: 'GET'
+      } as any;
+
+      defaultHandler(mockEvent);
+
+      expect(setHeader).toHaveBeenCalledWith(mockEvent, 'Access-Control-Allow-Origin', 'http://localhost:3000');
+      expect(setHeader).toHaveBeenCalledWith(mockEvent, 'Access-Control-Allow-Credentials', 'true');
+    });
+
+    it('should NOT set CORS headers if origin is NOT allowed', () => {
+      process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:3000';
+      const mockEvent = {
+        node: { req: { headers: { origin: 'http://hacker.com' } } },
+        method: 'GET'
+      } as any;
+
+      defaultHandler(mockEvent);
+
+      expect(setHeader).not.toHaveBeenCalledWith(mockEvent, 'Access-Control-Allow-Origin', expect.any(String));
+    });
+
+    it('should handle OPTIONS requests by returning 204', () => {
+      const mockEvent = {
+        node: { req: { headers: {} } },
+        method: 'OPTIONS'
+      } as any;
+
+      const result = defaultHandler(mockEvent);
+
+      expect(setResponseStatus).toHaveBeenCalledWith(mockEvent, 204);
+      expect(result).toBe('');
     });
   });
 });
