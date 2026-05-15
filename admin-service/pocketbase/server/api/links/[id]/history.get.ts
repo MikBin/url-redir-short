@@ -33,8 +33,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     await pb.collection('links').getOne(id);
-  } catch (err: any) {
-    if (err.status === 404) {
+  } catch (err: unknown) {
+    if ((err as { status?: number }).status === 404) {
       throw createError({ statusCode: 404, statusMessage: 'Link not found' });
     }
     throw createError({ statusCode: 500, statusMessage: 'Error fetching link' });
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
       page: result.page,
       perPage: result.perPage
     };
-  } catch (err: any) {
-    throw createError({ statusCode: 500, statusMessage: err.message || 'Error fetching audit log' });
+  } catch (err: unknown) {
+    throw createError({ statusCode: 500, statusMessage: (err instanceof Error ? err.message : String(err)) || 'Error fetching audit log' });
   }
 });

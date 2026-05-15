@@ -25,7 +25,7 @@ export function createLogger(defaultContext?: LogContext) {
     const timestamp = new Date().toISOString()
     const mergedContext = { ...defaultContext, ...context }
 
-    const logEntry: any = {
+    const logEntry: Record<string, unknown> = {
       level,
       timestamp,
       service: serviceName,

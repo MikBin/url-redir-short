@@ -21,11 +21,20 @@ const UpdateLinkSchema = z.object({
   }).optional(),
   targeting: z.object({
     enabled: z.boolean(),
-    rules: z.array(z.any())
+    rules: z.array(z.object({
+      id: z.string(),
+      target: z.enum(['language', 'device', 'country']),
+      value: z.string(),
+      destination: z.string()
+    }))
   }).optional(),
   ab_testing: z.object({
     enabled: z.boolean(),
-    variations: z.array(z.any())
+    variations: z.array(z.object({
+      id: z.string(),
+      destination: z.string(),
+      weight: z.number()
+    }))
   }).optional()
 });
 
@@ -54,20 +63,20 @@ export default defineEventHandler(async (event) => {
     let oldData;
     try {
       oldData = await pb.collection('links').getOne(id);
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw createError({ statusCode: 404, statusMessage: 'Link not found' });
     }
 
     let data;
     try {
       data = await pb.collection('links').update(id, validation.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       logAudit({
           actor: { id: user.id, role: user?.role },
           action: 'update',
           resource: { type: 'link', id },
           status: 'failure',
-          error: err.message,
+          error: (err instanceof Error ? err.message : String(err)),
           oldValue: oldData,
           newValue: validation.data
       });

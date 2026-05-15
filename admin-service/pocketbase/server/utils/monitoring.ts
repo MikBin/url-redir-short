@@ -55,9 +55,9 @@ export async function checkDatabaseHealth(event: H3Event): Promise<ComponentHeal
     }
 
     return { status: 'healthy', latencyMs };
-  } catch (error: any) {
+  } catch (error: unknown) {
     const latencyMs = Math.round(performance.now() - start);
-    return { status: 'unhealthy', message: error.message || 'Database unreachable', latencyMs };
+    return { status: 'unhealthy', message: (error instanceof Error ? error.message : String(error)) || 'Database unreachable', latencyMs };
   }
 }
 

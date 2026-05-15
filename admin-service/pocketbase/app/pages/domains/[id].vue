@@ -73,6 +73,13 @@
 </template>
 
 <script setup lang="ts">
+
+interface Domain {
+  id?: string;
+  name: string;
+  is_active: boolean;
+  [key: string]: unknown;
+}
 import { ref, watchEffect } from 'vue'
 
 const route = useRoute()
@@ -91,7 +98,7 @@ const { data: domain, pending, error: fetchError } = await useFetch(`/api/domain
 // Initialize form when data is loaded
 watch(domain, (newVal) => {
   if (newVal) {
-    const d = newVal as any
+    const d = newVal as Domain
     name.value = d.name
     isActive.value = d.is_active
   }
@@ -112,8 +119,8 @@ const handleUpdate = async () => {
 
     // Redirect back to domains list on success
     router.push('/domains')
-  } catch (err: any) {
-    actionError.value = err.data?.statusMessage || err.message || 'Failed to update domain'
+  } catch (err: unknown) {
+    actionError.value = ((err as { data?: { statusMessage?: string } }).data?.statusMessage || (err as Error).message) || 'Failed to update domain'
   } finally {
     actionLoading.value = false
   }
@@ -133,8 +140,8 @@ const handleDelete = async () => {
     })
 
     router.push('/domains')
-  } catch (err: any) {
-    actionError.value = err.data?.statusMessage || err.message || 'Failed to delete domain'
+  } catch (err: unknown) {
+    actionError.value = ((err as { data?: { statusMessage?: string } }).data?.statusMessage || (err as Error).message) || 'Failed to delete domain'
     actionLoading.value = false
   }
 }

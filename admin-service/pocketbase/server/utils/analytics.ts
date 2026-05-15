@@ -8,7 +8,13 @@ export function aggregateLinkClicks(records: { link_id: string; click_count: num
   }, {} as Record<string, number>);
 }
 
-export function processAnalyticsEvents(events: any[], now: Date) {
+export function processAnalyticsEvents(events: Array<{
+  path?: string;
+  country?: string;
+  device_type?: string;
+  browser?: string;
+  timestamp?: string;
+}>, now: Date) {
   const linkCounts: Record<string, number> = {};
   const geoCounts: Record<string, number> = {};
   const deviceCounts: Record<string, number> = {};

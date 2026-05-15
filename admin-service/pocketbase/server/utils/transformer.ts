@@ -47,10 +47,33 @@ export interface PocketBaseLink {
   slug: string;
   destination: string;
   is_active?: boolean;
-  targeting?: any;
-  ab_testing?: any;
-  hsts?: any;
-  password_protection?: any;
+  targeting?: {
+    enabled: boolean;
+    rules: Array<{
+      id: string;
+      target: 'language' | 'device' | 'country';
+      value: string;
+      destination: string;
+    }>;
+  };
+  ab_testing?: {
+    enabled: boolean;
+    variations: Array<{
+      id: string;
+      destination: string;
+      weight: number;
+    }>;
+  };
+  hsts?: {
+    enabled: boolean;
+    maxAge?: number;
+    includeSubDomains?: boolean;
+    preload?: boolean;
+  };
+  password_protection?: {
+    enabled: boolean;
+    password?: string;
+  };
   expires_at?: string | null;
   max_clicks?: number | null;
   created_at?: string;
@@ -77,7 +100,7 @@ export function transformLink(link: PocketBaseLink): RedirectRule {
     rule.targeting = {
       enabled: link.targeting.enabled,
       rules: Array.isArray(link.targeting.rules)
-        ? link.targeting.rules.map((r: any) => ({
+        ? link.targeting.rules.map((r: { id: string, target: string, value: string, destination: string }) => ({
             ...r,
             value: typeof r.value === 'string' ? r.value.toLowerCase() : r.value
           }))

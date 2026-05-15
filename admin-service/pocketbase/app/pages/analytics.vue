@@ -187,6 +187,27 @@
 </template>
 
 <script setup lang="ts">
+
+interface DashboardData {
+  hourlyTrend: Array<{ hour: string; count: number; time?: string }>;
+  geoDistribution: Array<{ country: string; count: number }>;
+  deviceDistribution: Array<{ device: string; count: number }>;
+  browserDistribution: Array<{ browser: string; count: number }>;
+  topLinks: Array<{ path: string; clicks: number }>;
+}
+
+interface StatsData {
+  events: Array<{
+    id: string;
+    timestamp?: string;
+    created?: string;
+    path: string;
+    destination?: string;
+    country?: string;
+    device_type?: string;
+    browser?: string;
+  }>;
+}
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCookie, useFetch } from '#imports'
@@ -200,8 +221,8 @@ if (!pbAuth.value) {
 }
 
 // Fetch data
-const { data: dashboardData, pending: dashboardPending, error: dashboardError } = await useFetch<any>('/api/analytics/dashboard')
-const { data: statsData, pending: statsPending, error: statsError } = await useFetch<any>('/api/analytics/stats')
+const { data: dashboardData, pending: dashboardPending, error: dashboardError } = await useFetch<DashboardData>('/api/analytics/dashboard')
+const { data: statsData, pending: statsPending, error: statsError } = await useFetch<StatsData>('/api/analytics/stats')
 
 const pending = computed(() => dashboardPending.value || statsPending.value)
 const error = computed(() => dashboardError.value || statsError.value)
@@ -209,12 +230,12 @@ const error = computed(() => dashboardError.value || statsError.value)
 // Chart helpers
 const maxHourlyClicks = computed(() => {
   if (!dashboardData.value?.hourlyTrend || dashboardData.value.hourlyTrend.length === 0) return 0
-  return Math.max(...dashboardData.value.hourlyTrend.map((d: any) => d.count))
+  return Math.max(...dashboardData.value.hourlyTrend.map((d: { count: number }) => d.count))
 })
 
 const maxGeoCount = computed(() => {
   if (!dashboardData.value?.geoDistribution || dashboardData.value.geoDistribution.length === 0) return 0
-  return Math.max(...dashboardData.value.geoDistribution.map((d: any) => d.count))
+  return Math.max(...dashboardData.value.geoDistribution.map((d: { count: number }) => d.count))
 })
 
 const getBarPercentage = (value: number, maxValue: number) => {
