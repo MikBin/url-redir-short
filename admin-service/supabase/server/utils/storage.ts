@@ -1,4 +1,5 @@
 import Redis from 'ioredis'
+import RedisMock from 'ioredis-mock'
 
 let redisClient: Redis | null = null
 
@@ -7,29 +8,15 @@ export const useValkey = () => {
 
   const config = useRuntimeConfig()
 
-  // In a real production app, we might want to handle reconnection strategies or clusters.
-  // For now, a single connection instance is sufficient.
-
   // @ts-ignore - Nuxt runtime config typing
   const url = config.valkeyUrl || 'redis://localhost:6379'
 
-  // If we're in a test environment, skip actually connecting to Redis. This prevents
-  // connection timeouts during Nitro startup inside test suites.
+  // Let's directly create a mock if in test env to avoid timeout and ECONNREFUSED issues
   if (process.env.TEST_ENV === 'true' || process.env.NODE_ENV === 'test') {
-    // Just return a mock-like structure with basic methods wrapped in promises
-    return {
-      multi: () => ({
-        incr: () => {},
-        ttl: () => {},
-        exec: async () => [[null, 1], [null, 60]]
-      }),
-      ttl: async () => -1,
-      incr: async () => 1,
-      expire: async () => 1,
-      setex: async () => 'OK',
-      on: () => {},
-      quit: async () => 'OK'
-    } as unknown as Redis
+    if (!redisClient) {
+       redisClient = new RedisMock() as unknown as Redis
+    }
+    return redisClient
   }
 
   console.log(`Connecting to Valkey/Redis at ${url.replace(/:[^:@]*@/, ':***@')}`) // Redact password in logs
