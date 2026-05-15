@@ -11,7 +11,12 @@
 - **Sync Protocol**: Admin → Engine via SSE. Data transformed in `transformer.ts` (snake_case DB → camelCase Engine).
 
 ## Code Conventions
-- TypeScript strict mode. Types in `src/core/config/types.ts`.
+- **Strict TypeScript**: `any` keyword is strictly forbidden. 
+  - Use `unknown` for data from external sources/APIs.
+  - Use **Generics** (`<T>`) for reusable utilities.
+  - Use specific **Interfaces/Types** or **Zod schemas** for domain models.
+  - Only `any` allowed in existing auto-generated code or where specifically documented in `ANY_USAGE_REPORT.md`.
+- **Enforcement**: Strict mode enabled in `tsconfig.json`. Project-wide linting via `npm run lint`.
 - Use camelCase for code, snake_case for DB columns. Use existing utilities before adding new deps.
 - Tests: Vitest for unit/E2E. E2E specs in `e2e-suite/specs/`. Admin tests in `admin-service/supabase/tests/`.
 - No comments unless complex. Async/await over callbacks. Functional style preferred.
