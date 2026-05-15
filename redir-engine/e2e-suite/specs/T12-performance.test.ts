@@ -252,7 +252,9 @@ console.log('[T12] Engine started');
               // @ts-ignore
               keepalive: true
             })
-          );
+          ).catch((e) => {
+            return { status: 500, error: e } as any;
+          });
         });
 
         const responses = await Promise.all(promises);
@@ -433,6 +435,9 @@ console.log('[T12] Engine started');
         times.push(batchEnd - batchStart);
 
         for (const response of responses) {
+          if (response.status !== 301) {
+            console.error(`Expected 301 in real-world sim batch, got ${response.status}`);
+          }
           expect(response.status).toBe(301);
         }
 
