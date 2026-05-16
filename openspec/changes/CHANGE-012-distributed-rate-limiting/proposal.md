@@ -1,4 +1,8 @@
-# Change Proposal: Distributed Rate Limiting
+# Change Proposal: Distributed Rate Limiting (STATUS: SUSPENDED)
+
+> [!CAUTION]
+> **This change is currently SUSPENDED.**
+> Recent priority has shifted to limiting admin resource usage (see `usage-quotas`) rather than high-volume redirect rate limiting. Distributed rate limiting is not strictly required at this stage.
 
 ## Problem
 Current rate limiting uses in-memory counters (`server/utils/rate-limit.ts`). This works for single-instance deployments but fails when running multiple Admin Service or Engine instances — each instance maintains independent counters, allowing attackers to bypass limits by hitting different instances.
