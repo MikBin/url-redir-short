@@ -1,50 +1,60 @@
 
 import { describe, it, expect, vi } from 'vitest';
-import { InMemoryStore } from './InMemoryStore';
+import { InMemoryStore } from '../store/in-memory-store';
 import { CloudflareKVStore } from './CloudflareKVStore';
 import { RedirectRule } from '../../core/config/types';
+import { RadixTree } from '../../core/routing/radix-tree';
+import { CuckooFilter } from '../../core/filtering/cuckoo-filter';
 
 describe('InMemoryStore', () => {
   it('should store and retrieve a redirect rule', async () => {
-    const store = new InMemoryStore();
+    const radixTree = new RadixTree();
+    const cuckooFilter = new CuckooFilter(10000);
+    const store = new InMemoryStore(radixTree, cuckooFilter);
     const rule: RedirectRule = { id: '1', path: '/test', destination: 'https://example.com', code: 301 };
 
-    store.insert(rule);
+    await store.addRedirect(rule);
 
     const retrieved = await store.getRedirect('/test');
     expect(retrieved).toEqual(rule);
   });
 
   it('should return null for non-existent path', async () => {
-    const store = new InMemoryStore();
+    const radixTree = new RadixTree();
+    const cuckooFilter = new CuckooFilter(10000);
+    const store = new InMemoryStore(radixTree, cuckooFilter);
 
     const retrieved = await store.getRedirect('/missing');
     expect(retrieved).toBeNull();
   });
 
   it('should correctly report mightExist', async () => {
-    const store = new InMemoryStore();
+    const radixTree = new RadixTree();
+    const cuckooFilter = new CuckooFilter(10000);
+    const store = new InMemoryStore(radixTree, cuckooFilter);
     const rule: RedirectRule = { id: '1', path: '/test', destination: 'https://example.com', code: 301 };
 
-    store.insert(rule);
+    await store.addRedirect(rule);
 
     expect(await store.mightExist('/test')).toBe(true);
     // Note: Cuckoo filters might have false positives, but for simple tests, a false negative won't happen.
-    // Testing negative case for a string we didn't insert
     expect(await store.mightExist('/missing')).toBe(false);
   });
 
   it('should handle remove correctly', async () => {
-    const store = new InMemoryStore();
+    const radixTree = new RadixTree();
+    const cuckooFilter = new CuckooFilter(10000);
+    const store = new InMemoryStore(radixTree, cuckooFilter);
     const rule: RedirectRule = { id: '1', path: '/test', destination: 'https://example.com', code: 301 };
 
-    store.insert(rule);
-    store.remove('/test');
+    await store.addRedirect(rule);
+    await store.removeRedirect('/test');
 
     expect(await store.getRedirect('/test')).toBeNull();
     expect(await store.mightExist('/test')).toBe(false);
   });
 });
+
 
 describe('CloudflareKVStore', () => {
   it('should retrieve a redirect rule from KV', async () => {

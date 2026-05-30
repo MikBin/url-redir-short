@@ -100,6 +100,12 @@ model {
         description "Implements ISyncManager; wraps SSEClient, drives IRedirectStore on events"
       }
 
+      // Adapters — Cache & Eviction
+      cacheEvictionManager = component "CacheEvictionManager" {
+        technology "adapters/cache/cache-eviction.ts"
+        description "Manages LRU cache tracking and triggers heap-based memory eviction batches"
+      }
+
       // Core domain
       radixTree = component "Radix Tree" {
         technology "src/core/routing/radix-tree.ts"
@@ -128,7 +134,7 @@ model {
       }
 
       analyticsCollector = component "FireAndForgetCollector" {
-        technology "adapters/analytics/"
+        technology "adapters/analytics/fire-and-forget.ts"
         description "Async HTTP POST — never blocks redirect hot path"
       }
 
@@ -148,6 +154,7 @@ model {
       iSyncManager -> sseSyncAdapter "Implemented by"
       sseSyncAdapter -> syncState "Drives handleCreate/Update/Delete"
       syncState -> iRedirectStore "Mutates store via port"
+      syncState -> cacheEvictionManager "Drives eviction / tracks metrics"
     }
 
     redirectorEngineWorker = container "Redirect Engine (Cloudflare Workers)" {
