@@ -16,13 +16,21 @@ Both the Admin Service and the Redirect Engine utilize Vitest as the core test r
 
 ### Admin Service Tests
 
-Located in `admin-service/supabase/tests/`.
+The project has two admin variants with separate test suites:
 
+**Supabase variant** — located in `admin-service/supabase/tests/`:
 ```bash
 cd admin-service/supabase
 npm run test
 ```
-*Note: These tests cover utilities like the transformer, rate-limit, hashing, QR generation, broadcaster, and Vue components.*
+
+**PocketBase variant** — located in `admin-service/pocketbase/tests/`:
+```bash
+cd admin-service/pocketbase
+npm run test
+```
+
+*Note: These tests cover utilities like the transformer, rate-limit, hashing, QR generation, broadcaster, and Vue components. The Supabase variant has significantly deeper test coverage.*
 
 ### Redirect Engine Tests
 
@@ -36,7 +44,9 @@ npm run test
 
 ## 2. End-to-End (E2E) Tests
 
-The E2E tests are crucial as they verify the SSE synchronization protocol. They are located in the `redir-engine/e2e-suite/` directory.
+### Engine E2E Suite
+
+The engine E2E tests are crucial as they verify the SSE synchronization protocol. They are located in the `redir-engine/e2e-suite/` directory.
 
 The E2E suite usually orchestrates a mock or real Admin Service instance alongside the Engine to simulate full user flows.
 
@@ -50,6 +60,19 @@ To run a specific test suite during debugging:
 ```bash
 npm test -- specs/T01-basic.test.ts
 ```
+
+### System E2E Suite (Playwright)
+
+A separate Playwright-based system-level E2E suite validates the full stack end-to-end, including the Admin UI, Redirect Engine, and database integration. Located in `system-e2e/`.
+
+```bash
+cd system-e2e
+npm install
+npx playwright install
+npm test
+```
+
+This suite starts all services, exercises the Admin UI and Engine, and validates complete user flows (link creation → sync → redirect → analytics).
 
 ## 3. Performance Testing
 

@@ -1,7 +1,7 @@
 # Architecture Documentation: Universal Redirector System (arc42)
 
-**Version:** 1.1
-**Date:** 2026-04-29
+**Version:** 1.2
+**Date:** 2026-05-30
 **Status:** Current
 
 > **Navigation**
@@ -41,9 +41,11 @@ The Universal Redirector System is a high-performance URL redirection platform h
 ## 2. Architecture Constraints
 - **Language**: TypeScript strict mode, end-to-end.
 - **Frameworks**: Hono (Engine), Nuxt 4 + Vue 3 (Admin).
-- **Database**: Supabase (PostgreSQL) as the system of record; Row Level Security enforced.
+- **Database**: Supabase (PostgreSQL) or PocketBase (SQLite) as the system of record. Supabase is the reference implementation; PocketBase offers a lighter-weight alternative for self-hosted deployments.
+- **Cache/Rate-Limit Store**: Valkey (Redis-compatible) for distributed rate limiting and caching.
 - **Infrastructure**: Must support both traditional VPS/Docker and serverless Cloudflare Workers.
 - **No Shared Runtime Dependencies**: Engine core must have zero I/O dependencies (testable without network).
+- **Dual Admin Variants**: Two parallel admin service implementations (Supabase, PocketBase) must maintain API parity. Shared code lives in `admin-service/shared/`.
 
 ---
 
@@ -55,14 +57,16 @@ The Universal Redirector System is a high-performance URL redirection platform h
 C4Context
     title System Context Diagram
     Person(admin, "Admin User", "Manages links and views analytics")
-    System(admin_service, "Admin Service", "Control Plane: Management UI & API (Nuxt 4 + Supabase)")
+    System(admin_service, "Admin Service", "Control Plane: Management UI & API (Nuxt 4 + Supabase or PocketBase)")
     System(redir_engine, "Redirect Engine", "Data Plane: High-speed redirection (Hono)")
-    System_Ext(supabase, "Supabase", "PostgreSQL database & Realtime events")
+    System_Ext(supabase, "Supabase / PocketBase", "Database (PostgreSQL or SQLite) & Realtime events")
+    System_Ext(redis, "Valkey (Redis)", "Distributed rate limiting and caching")
     Person_Ext(end_user, "End User", "Clicks short links")
 
     Rel(admin, admin_service, "Manages links", "HTTPS")
-    Rel(admin_service, supabase, "Persists data", "PostgreSQL/REST")
-    Rel(supabase, admin_service, "Realtime events", "WebSocket")
+    Rel(admin_service, supabase, "Persists data", "PostgreSQL/REST or PocketBase SDK")
+    Rel(supabase, admin_service, "Realtime events", "WebSocket or SSE")
+    Rel(admin_service, redis, "Rate limit counters", "Redis protocol")
     Rel(redir_engine, admin_service, "Syncs state", "SSE")
     Rel(redir_engine, admin_service, "Reports analytics", "HTTPS fire-and-forget")
     Rel(end_user, redir_engine, "Clicks link", "HTTP/HTTPS")
@@ -75,10 +79,13 @@ C4Context
 |-----------|-----------|-----------|
 | Admin UI ↔ API | Nuxt server routes (REST) | Bidirectional |
 | Admin ↔ Supabase | Supabase JS client (PostgreSQL) | Bidirectional |
+| Admin ↔ PocketBase | PocketBase SDK (SQLite) | Bidirectional |
 | Supabase → Admin | Supabase Realtime (WebSocket) | Push |
+| PocketBase → Admin | PocketBase Realtime (SSE) | Push |
+| Admin ↔ Valkey | Redis protocol (rate limiting, caching) | Bidirectional |
 | Admin → Engine | Server-Sent Events (SSE) | Push |
 | Engine → Admin | HTTP POST (analytics collect) | Fire-and-forget |
-| Admin → CF KV | Cloudflare REST API | Push on mutation |
+| Admin → CF KV | Cloudflare REST API (Supabase variant only) | Push on mutation |
 
 ---
 
@@ -110,14 +117,16 @@ C4Container
     Container(redir_node, "Redirect Engine (VPS)", "Hono / Node.js", "InMemoryStore + SSESyncAdapter")
     Container(redir_cf, "Redirect Engine (CF)", "Hono / CF Workers", "CloudflareKVStore + NoOpSyncAdapter")
     ContainerDb(supabase_db, "Supabase", "PostgreSQL + Realtime", "Links, domains, analytics, users")
+    ContainerDb(redis, "Valkey (Redis)", "In-Memory Store", "Rate limiting counters, caching")
     ContainerDb(cf_kv, "Cloudflare KV", "Key-Value Store", "Redirect rules for CF Workers")
 
     Rel(admin, nuxt_ui, "Uses", "HTTPS")
     Rel(nuxt_ui, nuxt_api, "Calls", "Internal")
-    Rel(nuxt_api, supabase_db, "Reads/Writes", "PostgreSQL")
-    Rel(supabase_db, nuxt_api, "Realtime events", "WebSocket")
+    Rel(nuxt_api, supabase_db, "Reads/Writes", "PostgreSQL or SQLite")
+    Rel(supabase_db, nuxt_api, "Realtime events", "WebSocket or SSE")
+    Rel(nuxt_api, redis, "Rate limit counters", "Redis protocol")
     Rel(nuxt_api, redir_node, "Pushes rule changes", "SSE")
-    Rel(nuxt_api, cf_kv, "Writes rule changes", "CF REST API")
+    Rel(nuxt_api, cf_kv, "Writes rule changes", "CF REST API (Supabase only)")
     Rel(redir_cf, cf_kv, "Reads rules", "KV API")
     Rel(end_user, redir_node, "HTTP request", "")
     Rel(end_user, redir_cf, "HTTP request", "")
@@ -127,16 +136,35 @@ C4Container
 
 #### 5.1.1 Admin Service
 
-Built with **Nuxt 4 + Vue 3 + Supabase** following a hybrid BFF pattern:
+The Admin Service has **two parallel implementations** with full API parity:
+
+| Variant | Directory | Database | Auth | Realtime |
+|---------|-----------|----------|------|----------|
+| **Supabase** (reference) | `admin-service/supabase/` | PostgreSQL (Supabase) | JWT (Supabase Auth) | WebSocket |
+| **PocketBase** | `admin-service/pocketbase/` | SQLite (PocketBase) | Cookie (PocketBase Auth) | SSE |
+
+Shared types and utilities live in `admin-service/shared/`.
+
+Both are built with **Nuxt 4 + Vue 3** following a hybrid BFF pattern:
 
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| Vue pages | `app/pages/` | Dashboard UI: link management, analytics charts, status |
-| Nuxt server routes | `server/api/` | REST CRUD for links, analytics RPCs, QR generation, sync stream |
-| Realtime plugin | `server/plugins/realtime.ts` | Subscribes to Supabase Realtime; broadcasts to SSE clients |
+| Vue pages | `app/pages/` | Dashboard UI: link management, analytics, status, login |
+| Nuxt server routes | `server/api/` | REST CRUD for links, analytics RPCs, QR generation, sync stream, auth |
+| Middleware | `server/middleware/` | Error handling, security headers, rate limiting, auth |
+| Realtime plugin | `server/plugins/realtime.ts` | Subscribes to DB Realtime; broadcasts to SSE clients |
 | Broadcaster | `server/utils/broadcaster.ts` | In-process EventEmitter fanning out to SSE connections |
 | Transformer | `server/utils/transformer.ts` | DB snake_case → Engine camelCase conversion |
-| CF KV Publisher | `server/utils/cloudflare-kv.ts` | Pushes rule changes to CF KV when CF Workers are deployed |
+| CF KV Publisher | `server/utils/cloudflare-kv.ts` | Pushes rule changes to CF KV (Supabase variant only) |
+| Rate limiter | `server/utils/rate-limit.ts` | In-memory sliding window (Redis-backed planned: CHANGE-012) |
+| Monitoring | `server/utils/monitoring.ts` | System health and performance metrics |
+| Sanitizer | `server/utils/sanitizer.ts` | Input validation and sanitization |
+| Audit | `server/utils/audit.ts` | Link change audit logging |
+| QR generator | `server/utils/qr.ts` | QR code image generation |
+| Bulk import | `server/utils/bulk.ts` | Bulk link import (JSON format) |
+| Hash utility | `server/utils/hash.ts` | IP address anonymization (SHA-256) |
+| Logger | `server/utils/logger.ts` | Structured JSON logging (Pino-style) |
+| Storage abstraction | `server/utils/storage.ts` | File storage abstraction (Supabase variant) |
 
 #### 5.1.2 Redirect Engine
 
@@ -145,20 +173,27 @@ Built with **Hono + TypeScript** following **Clean Architecture** (Hexagonal):
 ```
 redir-engine/src/
 ├── core/            # Domain: RadixTree, CuckooFilter, types — zero I/O deps
+│   ├── analytics/   # Payload builder, collector interface
+│   ├── config/      # Types and configuration
+│   ├── context/     # Lazy device/language context detection
+│   ├── filtering/   # Cuckoo Filter (O(1) 404 rejection)
+│   ├── routing/     # Radix Tree (O(k) path lookup)
+│   └── utils/       # Case transformer, LRU cache
 ├── use-cases/       # Application: HandleRequestUseCase, SyncStateUseCase
 ├── ports/           # Interfaces: IRedirectStore, ISyncManager
 └── adapters/
-    ├── store/       # InMemoryStore (Node)
-    ├── storage/     # CloudflareKVStore (CF Workers)
-    ├── sync/        # SSESyncAdapter (Node), NoOpSyncAdapter (CF Workers)
-    ├── http/        # Hono HTTP handler
     ├── analytics/   # FireAndForgetCollector
-    ├── cache/       # CacheEvictionManager
-    └── metrics/     # Prometheus metrics
+    ├── cache/       # CacheEvictionManager, doubly-linked-list, cache-metrics
+    ├── http/        # Hono HTTP handler (server.ts)
+    ├── metrics/     # Prometheus exporter
+    ├── sse/         # SSE client (for connecting to Admin SSE stream)
+    ├── storage/     # CloudflareKVStore (CF Workers), InMemoryStore (Node)
+    ├── store/       # In-memory store (wraps RadixTree + CuckooFilter)
+    └── sync/        # SSESyncAdapter (Node), NoOpSyncAdapter (CF Workers)
 
 redir-engine/runtimes/
 ├── node/            # Entry: InMemoryStore + SSESyncAdapter
-└── cf-worker/       # Entry: CloudflareKVStore + NoOpSyncAdapter
+└── cf-worker/       # Entry: CloudflareKVStore + NoOpSyncAdapter + fetch-event-source
 ```
 
 ---
@@ -246,9 +281,10 @@ A/B Testing, Geo/Language/Device Targeting, Password Protection, and HSTS are ap
 | Type Safety | TypeScript strict mode; shared `RedirectRule` type in `core/config/types.ts` |
 | Error Handling | Graceful degradation — analytics failure never affects redirect latency |
 | Logging | Structured JSON via Pino (Admin); console.log (Engine, lightweight) |
-| Observability | Prometheus metrics exposed at `/metrics` on Engine |
-| Security | Supabase RLS; API key on SSE stream (`?apiKey=`); CF API token for KV |
+| Observability | Prometheus metrics exposed at `/metrics` on Engine; Valkey/Redis for operational state |
+| Security | Supabase RLS or PocketBase auth; API key on SSE stream (`?apiKey=`); CF API token for KV |
 | Privacy | Configurable IP hashing (SHA-256) before analytics transmission |
+| Rate Limiting | In-memory sliding window (both variants); Redis-backed planned (CHANGE-012) |
 | Testability | Core domain is pure functions; adapters are injected via ports |
 
 ---
@@ -261,6 +297,8 @@ A/B Testing, Geo/Language/Device Targeting, Password Protection, and HSTS are ap
 | 002 | Clean / Hexagonal Architecture for multi-runtime | [ADR-002](../adrs/002-clean-architecture.md) |
 | 003 | Cuckoo Filter for 404 rejection | [ADR-003](../adrs/003-cuckoo-filter.md) |
 | 004 | CF KV for edge Worker state | [ADR-004](../adrs/004-cf-kv-edge-state.md) |
+| 005 | Dual Admin Service (Supabase + PocketBase) | [ADR-005](../adrs/005-dual-admin-service.md) |
+| 006 | Redis/Valkey for rate limiting and caching | [ADR-006](../adrs/006-redis-valkey-rate-limiting.md) |
 
 ---
 
@@ -286,6 +324,8 @@ A/B Testing, Geo/Language/Device Targeting, Password Protection, and HSTS are ap
 | No domain awareness in routing | Multi-domain links collide in RadixTree | Planned: CHANGE-015 follow-up |
 | CF Worker eviction loses in-memory state | Rare for KV-backed workers | KV is persistent; no in-memory state in CF runtime |
 | CF KV fire-and-forget publish can fail silently | Rule in DB but not in KV | Planned: retry queue / reconciliation job |
+| Dual admin codebase drift | Features implemented in one variant but not the other | Tracked in `docs/analysis/implementation-status.md`; shared code in `admin-service/shared/` |
+| In-memory rate limiting | Does not work across multiple Admin instances | CHANGE-012: Redis-backed sliding window (Valkey already in stack) |
 
 ---
 

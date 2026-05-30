@@ -13,7 +13,9 @@ docs/architecture/
 │   ├── 001-sse-state-sync.md
 │   ├── 002-clean-architecture.md
 │   ├── 003-cuckoo-filter.md
-│   └── 004-cf-kv-edge-state.md
+│   ├── 004-cf-kv-edge-state.md
+│   ├── 005-dual-admin-service.md
+│   └── 006-redis-valkey-rate-limiting.md
 └── diagrams/          ← Static diagram exports (generated from likec4/)
     └── README.md
 ```

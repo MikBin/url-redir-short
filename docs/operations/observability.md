@@ -2,6 +2,10 @@
 
 The URL Redirector & Shortener service includes a centralized observability stack based on Prometheus, Loki, and Grafana.
 
+> **Implementation Status (2026-05-30):** The infrastructure configuration files exist in `infra/` (Prometheus, Loki, Promtail, Grafana configs) and the `docker-compose.observability.yml` is ready to use. However, full integration (CHANGE-007) is **not yet complete** — alerting rules, dashboard definitions, and production log aggregation are still pending. See `docs/analysis/implementation-status.md` for tracking.
+>
+> The Redirect Engine's Prometheus metrics exporter (`adapters/metrics/prometheus.ts`) and the Admin's metrics endpoint (`/api/metrics`) are functional.
+
 ## Components
 
 - **Prometheus**: Collects and stores time-series metrics from the Admin Service and Redirect Engine.

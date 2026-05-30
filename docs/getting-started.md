@@ -7,8 +7,13 @@ Welcome to the url-redir-short project! This guide will help you set up the proj
 Before you begin, ensure you have the following installed on your machine:
 - [Node.js](https://nodejs.org/) (v20 or higher recommended)
 - [Docker](https://www.docker.com/) or [Podman](https://podman.io/) (for running services via containers)
-- [Supabase CLI](https://supabase.com/docs/guides/cli) (optional, but recommended for local database management)
 - `git`
+
+**Optional (based on admin variant):**
+- [Supabase CLI](https://supabase.com/docs/guides/cli) — for the Supabase admin variant
+- [PocketBase](https://pocketbase.io/docs/) — for the PocketBase admin variant (lightweight, single-binary)
+
+> The project supports two admin service backends: **Supabase** (PostgreSQL, reference) and **PocketBase** (SQLite, lightweight). See [ADR-005](architecture/adrs/005-dual-admin-service.md) for the full comparison. Both variants expose the same API. The instructions below default to Supabase; see the [PocketBase section](#pocketbase-admin-setup) for the alternative.
 
 ## Clone and Setup
 
@@ -56,13 +61,13 @@ If you want to actively develop the code without rebuilding containers for every
 
 ### 1. Install Dependencies
 
-You'll need to install dependencies for both the Admin Service and the Redirect Engine.
+You'll need to install dependencies for the Admin Service and the Redirect Engine.
 
 ```bash
 # Install root dependencies
 npm install
 
-# Install Admin Service dependencies
+# Install Admin Service dependencies (Supabase variant)
 cd admin-service/supabase
 npm install
 cd ../..
@@ -71,6 +76,13 @@ cd ../..
 cd redir-engine
 npm install
 cd ..
+```
+
+If using the PocketBase variant instead:
+```bash
+cd admin-service/pocketbase
+npm install
+cd ../..
 ```
 
 ### 2. Start the Database
@@ -86,7 +98,7 @@ docker compose up -d supabase-db
 
 Open two separate terminal windows or tabs:
 
-**Terminal 1: Admin Service**
+**Terminal 1: Admin Service (Supabase variant)**
 ```bash
 cd admin-service/supabase
 npm run dev
@@ -123,3 +135,18 @@ npm test
 ```
 
 For more detailed information on testing, refer to the [Testing Guide](development/testing.md).
+
+## PocketBase Admin Setup
+
+The PocketBase variant is a lightweight alternative that uses SQLite instead of PostgreSQL. It requires the PocketBase binary (automatically downloaded on first run).
+
+```bash
+# Install dependencies
+cd admin-service/pocketbase
+npm install
+
+# Start the PocketBase binary + Nuxt dev server
+npm run dev
+```
+
+The PocketBase variant provides the same API surface and UI as the Supabase variant. See [ADR-005](architecture/adrs/005-dual-admin-service.md) for feature differences.
