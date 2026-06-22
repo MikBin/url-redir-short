@@ -38,3 +38,6 @@ domain-screenshots/
 backups/
 **/backups/
 admin-service/pocketbase/pocketbase
+
+# Unix sockets
+{{PORT}}
