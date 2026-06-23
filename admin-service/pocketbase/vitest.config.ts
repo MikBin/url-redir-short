@@ -7,9 +7,15 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['server/middleware/**', 'server/utils/**', 'server/api/**'],
+      reporter: ['text', 'text-summary', 'html'],
+      include: ['server/**/*.ts'],
       exclude: ['node_modules/**', 'tests/**', 'tests/setup.ts'],
+      thresholds: {
+        statements: 47,
+        branches: 42,
+        functions: 52,
+        lines: 47,
+      },
     },
   },
 })

@@ -12,8 +12,15 @@ export default defineVitestConfig({
     setupFiles: ['./tests/setup/env.ts'],
     coverage: {
       provider: 'v8',
-      include: ['server/api/**/*.ts'],
-      exclude: ['tests/**', 'server/api/health.get.ts', 'server/api/metrics.get.ts', '**/node_modules/**']
+      reporter: ['text', 'text-summary', 'html'],
+      include: ['server/**/*.ts'],
+      exclude: ['tests/**', 'server/api/health.get.ts', 'server/api/metrics.get.ts', '**/node_modules/**'],
+      thresholds: {
+        statements: 72,
+        branches: 86,
+        functions: 78,
+        lines: 72,
+      },
     },
     env: {
       SUPABASE_URL: 'https://dummy.supabase.co',
