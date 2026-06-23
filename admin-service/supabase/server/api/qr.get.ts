@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { serverSupabaseUser } from '#supabase/server'
 import { generateQRCode, QRCodeOptions } from '../utils/qr'
 

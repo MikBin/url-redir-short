@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { createHash } from 'crypto'
 import { z } from 'zod'

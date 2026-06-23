@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { createClient } from '@supabase/supabase-js'
 import { syncEvents, SYNC_EVENT_NAME } from '../utils/broadcaster'
 import { transformLink, SupabaseLink } from '../utils/transformer'

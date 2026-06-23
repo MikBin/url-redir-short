@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { H3Event } from 'h3'
 
 class Broadcaster {

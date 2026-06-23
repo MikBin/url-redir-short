@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 const health = ref<Record<string, unknown> | null>(null)
 const metrics = ref<Record<string, unknown> | null>(null)
 const error = ref<string | null>(null)

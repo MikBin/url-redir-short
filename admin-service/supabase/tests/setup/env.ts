@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Inject mock environment variables for Vitest to prevent connection errors and missing credential crashes during Nuxt boot
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://dummy.supabase.co';

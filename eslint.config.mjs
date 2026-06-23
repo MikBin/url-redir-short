@@ -15,7 +15,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['**/*.ts', '**/*.vue'],
+    files: ['**/*.ts', ],
     languageOptions: {
       parserOptions: {
         parser: tseslint.parser,

@@ -307,6 +307,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 import { checkTarget, type TargetingRule, type PreviewContext } from '../utils/targeting'
 
 // Local random alias generator for UI

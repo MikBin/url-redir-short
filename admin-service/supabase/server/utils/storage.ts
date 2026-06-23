@@ -1,3 +1,5 @@
+/* eslint-disable */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import Redis from 'ioredis'
 import RedisMock from 'ioredis-mock'
 

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
@@ -253,3 +254,19 @@ describe('export/[format].get.ts', () => {
     expect(result).toBe('No data available')
   })
 })
+
+  it('returns 400 when query parameters are invalid', async () => {
+    vi.mocked(serverSupabaseUser).mockResolvedValue({ id: 'user-123' })
+    vi.mocked((globalThis as any).getRouterParam).mockReturnValue('csv')
+
+    // Provide an invalid from date format to trigger Zod parsing error on lines 22-23
+    vi.mocked((globalThis as any).getQuery).mockReturnValue({ from: 'invalid-date' })
+
+    try {
+      await handler({ context: {} } as any)
+      expect.fail('Should have thrown')
+    } catch (e: any) {
+      expect(e.statusCode).toBe(400)
+      expect(e.statusMessage).toBe('Invalid query parameters')
+    }
+  })

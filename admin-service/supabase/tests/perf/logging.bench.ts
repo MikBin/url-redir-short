@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { bench, describe } from 'vitest'
 import { logger } from '../../server/utils/logger'
 

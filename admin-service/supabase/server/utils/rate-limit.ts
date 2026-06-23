@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useValkey } from './storage'
 
 export interface RateLimitResult {

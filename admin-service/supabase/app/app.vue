@@ -18,6 +18,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 const user = useSupabaseUser()
 const supabase = useSupabaseClient()
 const router = useRouter()

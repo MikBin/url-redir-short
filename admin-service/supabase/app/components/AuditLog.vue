@@ -106,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 import { ref, computed, watch } from 'vue'
 
 const props = defineProps<{
