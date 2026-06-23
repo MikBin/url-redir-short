@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { convertToCSV } from '../server/api/analytics/export/[format].get'
+
 import handler from '../server/api/analytics/export/[format].get'
 
 // Mock dependencies
@@ -29,62 +29,12 @@ vi.mock('h3', async () => {
       Object.assign(err, opts)
       return err
     }),
-    defineEventHandler: (fn: Parameters<typeof import('h3').defineEventHandler>[0]) => fn
+    defineEventHandler: (fn: Parameters<typeof import('h3').defineEventHandler>[0]) => fn,
+    sendStream: vi.fn((event, stream) => stream)
   }
 })
 
 describe('Analytics Export', () => {
-  describe('convertToCSV', () => {
-    it('returns "No data available" for empty array', () => {
-      expect(convertToCSV([])).toBe('No data available')
-    })
-
-    it('returns "No data available" for null data', () => {
-      expect(convertToCSV(null as unknown as { id: string }[])).toBe('No data available')
-    })
-
-    it('formats simple data correctly', () => {
-      const data = [
-        { id: 1, name: 'John' },
-        { id: 2, name: 'Jane' }
-      ]
-      const expected = '"id","name"\n1,John\n2,Jane'
-      expect(convertToCSV(data)).toBe(expected)
-    })
-
-    it('escapes quotes by doubling them', () => {
-      const data = [
-        { id: 1, text: 'Hello "World"' }
-      ]
-      const expected = '"id","text"\n1,"Hello ""World"""'
-      expect(convertToCSV(data)).toBe(expected)
-    })
-
-    it('wraps fields in quotes if they contain commas', () => {
-      const data = [
-        { id: 1, text: 'Hello, World' }
-      ]
-      const expected = '"id","text"\n1,"Hello, World"'
-      expect(convertToCSV(data)).toBe(expected)
-    })
-
-    it('wraps fields in quotes if they contain newlines', () => {
-      const data = [
-        { id: 1, text: 'Hello\nWorld' }
-      ]
-      const expected = '"id","text"\n1,"Hello\nWorld"'
-      expect(convertToCSV(data)).toBe(expected)
-    })
-
-    it('handles null or undefined values as empty strings', () => {
-      const data = [
-        { id: 1, text: null, other: undefined }
-      ]
-      const expected = '"id","text","other"\n1,,'
-      expect(convertToCSV(data)).toBe(expected)
-    })
-  })
-
   describe('Handler Format Validation', () => {
     let mockEvent: Partial<import('h3').H3Event>
 
@@ -178,7 +128,7 @@ describe('Analytics Export', () => {
       const pbMock = {
         collection: vi.fn((name) => {
           if (name === 'links') return { getOne: getOneMock }
-          return { getFullList: vi.fn().mockResolvedValue([]) }
+          return { getFullList: vi.fn().mockResolvedValue([]), getList: vi.fn().mockResolvedValue({items: [], totalPages: 1}) }
         })
       }
       vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
@@ -192,7 +142,7 @@ describe('Analytics Export', () => {
 
     it('returns 500 on unexpected database errors', async () => {
       const h3 = await import('h3')
-      vi.mocked(h3.getRouterParam).mockReturnValue('csv')
+      vi.mocked(h3.getRouterParam).mockReturnValue('json')
       vi.mocked(h3.getQuery).mockReturnValue({ linkId: '123e4567-e89b-12d3-a456-426614174000' })
 
       const { serverPocketBase } = await import('../server/utils/pocketbase')
@@ -200,7 +150,7 @@ describe('Analytics Export', () => {
       const pbMock = {
         collection: vi.fn((name) => {
           if (name === 'links') return { getOne: getOneMock }
-          return { getFullList: vi.fn().mockRejectedValue(new Error('Database connection failed')) }
+          return { getFullList: vi.fn().mockRejectedValue(new Error('Database connection failed')), getList: vi.fn().mockRejectedValue(new Error('Database connection failed')) }
         })
       }
       vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
@@ -221,7 +171,7 @@ describe('Analytics Export', () => {
       const pbMock = {
         collection: vi.fn((name) => {
           if (name === 'links') return { getOne: getOneMock }
-          return { getFullList: vi.fn().mockResolvedValue([]) }
+          return { getFullList: vi.fn().mockResolvedValue([]), getList: vi.fn().mockResolvedValue({items: [], totalPages: 1}) }
         })
       }
       vi.mocked(serverPocketBase).mockResolvedValue(pbMock as unknown as Record<string, ReturnType<typeof vi.fn>>)
@@ -250,7 +200,11 @@ describe('Analytics Export', () => {
             return {
               getFullList: vi.fn().mockResolvedValue([
                 { id: '1', path: 'my-link', destination: 'https://example.com' }
-              ])
+              ]),
+              getList: vi.fn().mockResolvedValue({
+                items: [{ id: '1', path: 'my-link', destination: 'https://example.com' }],
+                totalPages: 1
+              })
             }
           }
           return {}
@@ -261,9 +215,20 @@ describe('Analytics Export', () => {
       const result = await handler(mockEvent as import('h3').H3Event)
 
       expect(result).not.toBeInstanceOf(Error)
-      expect(typeof result).toBe('string')
-      expect(result as string).toContain('"id","path","destination","timestamp","country","city","device_type","browser","os","referrer","status"')
-      expect(result as string).toContain('1,my-link,https://example.com')
+
+      // Consume the stream to check contents
+      const stream = result as unknown as ReadableStream
+      const reader = stream.getReader()
+      let output = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        output += value
+      }
+
+      expect(output).toContain('"id","path","destination","timestamp","country","city","device_type","browser","os","referrer","status"')
+      expect(output).toContain('1,my-link,https://example.com')
+      expect(h3.sendStream).toHaveBeenCalled()
     })
 
     it('requires authentication', async () => {
