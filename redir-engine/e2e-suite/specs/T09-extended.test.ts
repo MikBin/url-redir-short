@@ -21,6 +21,7 @@ describe('T09-Extended: Password & Query Params', () => {
       `http://127.0.0.1:${analyticsService.port}`,
       3019
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

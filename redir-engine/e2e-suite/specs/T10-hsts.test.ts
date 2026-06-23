@@ -21,6 +21,7 @@ describe('T10: HSTS', () => {
       `http://127.0.0.1:${analyticsService.port}`,
       3010
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 // Wait for SSE connection

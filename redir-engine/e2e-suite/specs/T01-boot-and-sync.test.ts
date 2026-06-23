@@ -33,6 +33,7 @@ describe('T01: Boot & Sync', () => {
       runtime
     );
     console.log('[T01] Starting engine...');
+    adminService.setEnginePort(engine.port);
     await engine.start();
     // Explicitly wait for SSE connection to be established at the Admin Service
     console.log('[T01] Waiting for SSE connection...');

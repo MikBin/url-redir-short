@@ -22,6 +22,7 @@ describe('T02: Basic Redirect', () => {
       3002,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

@@ -22,6 +22,7 @@ describe('T04: Analytics Emission', () => {
       3004,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

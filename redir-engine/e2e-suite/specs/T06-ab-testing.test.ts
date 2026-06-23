@@ -22,6 +22,7 @@ describe('T06: A/B Testing', () => {
       3006,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 // Wait for SSE connection

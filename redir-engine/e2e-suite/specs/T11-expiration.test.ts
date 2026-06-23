@@ -22,6 +22,7 @@ describe('T11: Expiration Logic', () => {
       3011, // Unique port for this test
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

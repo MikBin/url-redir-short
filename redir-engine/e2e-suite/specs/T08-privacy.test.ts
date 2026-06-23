@@ -23,6 +23,7 @@ describe('T08: Privacy (IP Anonymization)', () => {
       3008,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

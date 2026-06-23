@@ -22,6 +22,7 @@ describe('T07: Geo/Lang Fallback', () => {
       3007,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 // Wait for SSE connection to be established ensuring no events are missed
