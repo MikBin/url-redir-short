@@ -1,39 +1,7 @@
-import { defineEventHandler, getRouterParam, getQuery, setHeader, createError } from 'h3'
+import { defineEventHandler, getRouterParam, getQuery, setHeader, createError, sendStream } from 'h3'
 import { createRequestLogger, handleError } from '../../../utils/error-handler'
 import { serverPocketBase } from '../../../utils/pocketbase'
 import { exportQuerySchema } from '../../../utils/sanitizer'
-
-// Exporting for testing
-export function convertToCSV(data: Record<string, unknown>[]): string {
-  if (!data || data.length === 0) {
-    return 'No data available'
-  }
-
-  const headers = Object.keys(data[0])
-  const csvRows = []
-
-  // Add header row
-  csvRows.push(headers.map(header => `"${header}"`).join(','))
-
-  // Add data rows
-  for (const row of data) {
-    const values = headers.map(header => {
-      let val = row[header]
-      if (val === null || val === undefined) {
-        val = ''
-      }
-      const stringVal = String(val)
-      // Escape quotes by doubling them, wrap in quotes if contains comma, quote, or newline
-      if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
-        return `"${stringVal.replace(/"/g, '""')}"`
-      }
-      return stringVal
-    })
-    csvRows.push(values.join(','))
-  }
-
-  return csvRows.join('\n')
-}
 
 export default defineEventHandler(async (event) => {
   const logger = createRequestLogger(event)
@@ -101,13 +69,87 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    const selectedFields = ['id', 'path', 'destination', 'timestamp', 'country', 'city', 'device_type', 'browser', 'os', 'referrer', 'status']
+
+    const dateStr = new Date().toISOString().split('T')[0]
+
+    if (format === 'csv') {
+      setHeader(event, 'Content-Type', 'text/csv')
+      setHeader(event, 'Content-Disposition', `attachment; filename="analytics-export-${dateStr}.csv"`)
+
+      let currentPage = 1
+      let totalPages = 1
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const headers = selectedFields
+          controller.enqueue(headers.map(header => `"${header}"`).join(',') + '\n')
+        },
+        async pull(controller) {
+          if (currentPage > totalPages) {
+            controller.close()
+            return
+          }
+
+          try {
+            const result = await pb.collection('analytics_events').getList(currentPage, 1000, {
+              filter,
+              sort: '-timestamp',
+            })
+
+            totalPages = result.totalPages
+
+            if (!result.items || result.items.length === 0) {
+              if (currentPage === 1) {
+                controller.enqueue('No data available\n')
+              }
+              controller.close()
+              return
+            }
+
+            const headers = selectedFields
+            let chunkStr = ''
+            for (const record of result.items) {
+              const row: Record<string, unknown> = {}
+              for (const field of selectedFields) {
+                row[field] = record[field]
+              }
+
+              const values = headers.map(header => {
+                let val = row[header]
+                if (val === null || val === undefined) {
+                  val = ''
+                }
+                const stringVal = String(val)
+                if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
+                  return `"${stringVal.replace(/"/g, '""')}"`
+                }
+                return stringVal
+              })
+              chunkStr += values.join(',') + '\n'
+            }
+
+            controller.enqueue(chunkStr)
+            currentPage++
+
+          } catch (error) {
+            controller.error(error)
+          }
+        }
+      })
+
+      return sendStream(event, stream)
+    }
+
+    // json format
+    setHeader(event, 'Content-Type', 'application/json')
+    setHeader(event, 'Content-Disposition', `attachment; filename="analytics-export-${dateStr}.json"`)
+
     const records = await pb.collection('analytics_events').getFullList({
       filter,
       sort: '-timestamp',
       batch: 500,
     })
-
-    const selectedFields = ['id', 'path', 'destination', 'timestamp', 'country', 'city', 'device_type', 'browser', 'os', 'referrer', 'status']
 
     const data = records.map((record) => {
       const filteredRecord: Record<string, unknown> = {}
@@ -116,19 +158,6 @@ export default defineEventHandler(async (event) => {
       }
       return filteredRecord
     })
-
-    const dateStr = new Date().toISOString().split('T')[0]
-
-    if (format === 'csv') {
-      const csvData = convertToCSV(data)
-      setHeader(event, 'Content-Type', 'text/csv')
-      setHeader(event, 'Content-Disposition', `attachment; filename="analytics-export-${dateStr}.csv"`)
-      return csvData
-    }
-
-    // json format
-    setHeader(event, 'Content-Type', 'application/json')
-    setHeader(event, 'Content-Disposition', `attachment; filename="analytics-export-${dateStr}.json"`)
 
     return {
       exportedAt: new Date().toISOString(),
