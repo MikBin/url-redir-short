@@ -22,6 +22,7 @@ describe('T09: Password Protection', () => {
       3009,
       runtime // Unique port for this test
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

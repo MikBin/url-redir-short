@@ -22,6 +22,7 @@ describe('T03: Fast 404', () => {
       3003,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

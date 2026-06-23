@@ -35,6 +35,7 @@ describe('T13: Cache Performance & DB Fallback', () => {
       3013,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
     console.log('[T13] Engine started');

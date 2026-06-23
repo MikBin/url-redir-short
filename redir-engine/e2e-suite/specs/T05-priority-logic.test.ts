@@ -22,6 +22,7 @@ describe('T05: Priority Logic', () => {
       3005,
       runtime
     );
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 });

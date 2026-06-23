@@ -38,6 +38,7 @@ describe('T12: Performance & Load Testing', () => {
     const analyticsUrl = `http://127.0.0.1:${analyticsService.port}`;
 
     engine = new EngineController(adminUrl, analyticsUrl, 3001, runtime);
+    adminService.setEnginePort(engine.port);
     await engine.start();
     await adminService.waitForConnection(15000);
 console.log('[T12] Engine started');
