@@ -10,7 +10,7 @@ describe('User Agent Parsing Performance', () => {
     const start = performance.now();
     for (let i = 0; i < iterations; i++) {
       const parser = new UAParser(userAgent);
-      const result = {
+      const _result = { // Changed to _result to ignore unused warning without eslint-disable
         device: parser.getDevice(),
         os: parser.getOS(),
       };
