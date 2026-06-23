@@ -42,6 +42,31 @@ npm run test
 ```
 *Note: These cover the Clean Architecture core domain (Radix Tree, Cuckoo Filter), use cases (handle-request), and adapters.*
 
+## 1b. Test Coverage
+
+Coverage is measured with `@vitest/coverage-v8` in every workspace, and **thresholds are enforced** — a
+coverage regression fails the run (and CI). Each workspace has a `test:coverage` script:
+
+```bash
+cd redir-engine              && npm run test:coverage   # src/** + runtimes/**
+cd admin-service/pocketbase  && npm run test:coverage   # server/**
+cd admin-service/supabase    && npm run test:coverage   # server/**
+```
+
+Each writes `text`, `text-summary`, and `html` reports (HTML at `<pkg>/coverage/index.html`). Current
+headline figures and the full per-file breakdown live in [`COVERAGE_PLAN.md`](../../COVERAGE_PLAN.md)
+(regenerate it after significant change). Snapshot (2026-06-23):
+
+| Workspace | % Lines | % Branch | Enforced floor (lines) |
+|---|---:|---:|---:|
+| Redir-Engine | 78.7% | 69.1% | 54 |
+| Admin · PocketBase | 81.5% | 66.8% | 80 |
+| Admin · Supabase | 78.9% | 93.1% | 72 |
+
+> Scope note: both admin services measure the full `server/**` tree, so their figures are directly
+> comparable. Supabase's headline is lower than its API surface (~95–100%) because the measurement now
+> includes Nitro middleware/plugin IO code that is exercised mainly via `system-e2e`.
+
 ## 2. End-to-End (E2E) Tests
 
 ### Engine E2E Suite

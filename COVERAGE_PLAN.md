@@ -1,34 +1,45 @@
 # Test Coverage Analysis & Plan
 
-> **Snapshot date:** 2026-06-23 · **Data source:** live `@vitest/coverage-v8` runs against the current `main`.
-> This document is regenerated from real coverage runs (not estimates). Re-run the commands in
-> [§6 Reproducing this report](#6-reproducing-this-report) to refresh the figures after significant change.
+> **Snapshot date:** 2026-06-23 (post-completion re-run) · **Data source:** live `@vitest/coverage-v8`
+> runs against `main` @ `1593295`. This document is regenerated from real coverage runs (not estimates).
+> Re-run the commands in [§6 Reproducing this report](#6-reproducing-this-report) to refresh the figures.
 
-This document captures the current state of automated test coverage across every subsystem of the
-`url-redir-short` repository, identifies the specific files/modules that are under-tested, and lays out a
-prioritized plan to reach and sustain **≥ 95% line/branch coverage**.
+This document captures the state of automated test coverage across every subsystem of the
+`url-redir-short` repository, tracks the work done to raise it, and lists the remaining gaps on the road to
+a sustained **≥ 95% line/branch coverage**.
+
+> **Status (2026-06-23):** Phases 0–4 of the original plan are **complete**. Coverage thresholds are now
+> enforced in all three workspaces (CI fails on regression), the Supabase measurement scope was widened to
+> the whole `server/**` tree, and system-E2E grew from 1 to 5 Playwright journeys. Coverage rose sharply in
+> every package. Remaining work is concentrated in **runtime bootstrap code (engine) and Nuxt middleware /
+> plugin IO (admin services)** — see [§4 Remaining gaps](#4-remaining-gaps--forward-plan).
 
 ## 1. At-a-Glance Summary
 
-| Subsystem | Path | Tests | % Stmts | % Branch | % Funcs | % Lines | Coverage scope (configured `include`) |
-|---|---|---:|---:|---:|---:|---:|---|
-| **Redir-Engine** | `redir-engine/` | 123 ✅ | **55.5%** | **45.6%** | **45.4%** | **56.9%** | `src/**` + `runtimes/**` (build artifacts excluded) |
-| **Admin · PocketBase** | `admin-service/pocketbase/` | 143 ✅ | **49.7%** | **46.2%** | **56.9%** | **49.9%** | `server/middleware/**` + `server/utils/**` + `server/api/**` |
-| **Admin · Supabase** | `admin-service/supabase/` | 286 ✅ | **95.9%** | **86.9%** | **100%** | **95.9%** | `server/api/**` *only* |
-| E2E (engine) | `redir-engine/e2e-suite/` | 14 specs | — | — | — | — | Functional/Vitest (not counted in unit %) |
-| E2E (system) | `system-e2e/` | 1 spec | — | — | — | — | Playwright (requires live services) |
+| Subsystem | Path | Tests | % Stmts | % Branch | % Funcs | % Lines | Coverage scope (`include`) | Enforced thresholds (stmt/br/func/line) |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| **Redir-Engine** | `redir-engine/` | 175 ✅ | **77.7%** | **69.1%** | **85.4%** | **78.7%** | `src/**` + `runtimes/**` | 53 / 43 / 43 / 54 |
+| **Admin · PocketBase** | `admin-service/pocketbase/` | 191 ✅ | **80.8%** | **66.8%** | **80.7%** | **81.5%** | `server/**` | 80 / 65 / 80 / 80 |
+| **Admin · Supabase** | `admin-service/supabase/` | 360 ✅ | **78.9%** | **93.1%** | **86.8%** | **78.9%** | `server/**` | 72 / 86 / 78 / 72 |
+| E2E (engine) | `redir-engine/e2e-suite/` | 14 specs | — | — | — | — | Functional/Vitest (not counted in unit %) | — |
+| E2E (system) | `system-e2e/` | 5 specs | — | — | — | — | Playwright (requires live services) | — |
 
-**All 552 unit/integration tests currently pass** (engine 123 + pocketbase 143 + supabase 286).
+**All 726 unit/integration tests currently pass** (engine 175 + pocketbase 191 + supabase 360), up from 552.
 
-### Headline takeaways
-1. **Supabase is at target for its configured scope** (95.9% lines on `server/api/**`), but that scope is
-   **narrow** — it deliberately excludes `server/utils`, `server/middleware`, and Vue components. The true
-   repo-wide figure is lower.
-2. **Redir-Engine and PocketBase are the real gaps** (~56% and ~50% lines). In both cases the **core/pure
-   logic is excellent**; the gaps are concentrated in **adapters, Nitro/h3 handler entrypoints, and runtime
-   bootstrap code**.
-3. **No coverage thresholds are enforced anywhere**, and the engine has **no coverage configuration at all**
-   (no `coverage:` block, no `@vitest/coverage-v8` dependency). Coverage can therefore silently regress.
+### Headline takeaways (before → after)
+1. **Engine** lines **56.9% → 78.7%** (123 → 175 tests). Every previously-0% *pure* module is now fully
+   covered (`sync-state`, `fire-and-forget`, `cache-metrics`, `core/config`, `case-transformer`,
+   `NoOpSyncAdapter`); only the runtime bootstrap entrypoints remain at 0% by design.
+2. **PocketBase** lines **49.9% → 81.5%** (143 → 191 tests). The historic gap — handlers reading 0% while
+   their extracted utils read 100% — is closed: handler-level tests now drive the actual Nitro handlers.
+3. **Supabase** headline **dropped 95.9% → 78.9%** *by design*: the measurement scope was widened from
+   `server/api/**` only to the full `server/**` tree (utils, middleware, plugins). The API surface itself
+   remains ~95–100%; the new denominator now reflects the previously-hidden middleware/plugin IO code.
+4. **system-e2e** grew **1 → 5** Playwright journeys (login→create→redirect→analytics, advanced routing,
+   QR, bulk import, analytics dashboard).
+5. **Thresholds are enforced** in all three workspaces; PocketBase/Supabase thresholds are ratcheted just
+   below current levels. Engine thresholds still sit at the old baseline (54 lines) and have headroom to
+   ratchet toward the new ~79% — see [§3](#3-tooling--guardrails).
 
 ---
 
@@ -36,207 +47,183 @@ prioritized plan to reach and sustain **≥ 95% line/branch coverage**.
 
 ### 2.1 Redir-Engine (Hono + TypeScript) — `redir-engine/`
 
-- **Framework:** Vitest + `@vitest/coverage-v8` (provider installed transiently for measurement; **not yet declared in `package.json`** — see §5).
-- **Overall:** 55.5% Stmts / 45.6% Branch / 45.4% Funcs / 56.9% Lines · **123 tests / 19 files · all passing.**
+- **Framework:** Vitest + `@vitest/coverage-v8` (now a declared devDependency).
+- **Overall:** 77.7% Stmts / 69.1% Branch / 85.4% Funcs / 78.7% Lines · **175 tests / 30 files · all passing.**
 
 | Area | File | Coverage | Notes |
 |---|---|---:|---|
-| ✅ Excellent | `core/filtering/cuckoo-filter.ts` | 100% | + property-based test |
-| ✅ Excellent | `core/routing/radix-tree.ts` | 95.3% | + property-based test |
-| ✅ Excellent | `core/utils/lru-cache.ts` | 100% | |
-| ✅ Excellent | `adapters/cache/doubly-linked-list.ts` | 100% | |
-| ✅ Excellent | `adapters/metrics/prometheus.ts` | 100% | branch gaps only (24-94) |
-| ✅ Excellent | `core/analytics/payload-builder.ts` | 94.7% | |
-| ✅ Excellent | `core/context/lazy-*-context.ts` | 100% | |
-| ✅ Strong | `use-cases/handle-request.ts` | 98.5% | |
-| ⚠ Partial | `adapters/http/server.ts` | 62% | routing/error paths (6-115) |
-| ⚠ Partial | `adapters/storage/CloudflareKVStore.ts` | 57.9% | |
-| ⚠ Partial | `adapters/sse/sse-client.ts` | 73.6% | reconnect/error paths |
-| ⚠ Partial | `adapters/cache/cache-eviction.ts` | 48% | eviction branches (37-217) |
-| ❌ Untested | `use-cases/sync-state.ts` | 0% | 14-117 |
-| ❌ Untested | `adapters/analytics/fire-and-forget.ts` | 0% | 5-21 |
-| ❌ Untested | `adapters/cache/cache-metrics.ts` | 0% | 30-122 |
-| ❌ Untested | `adapters/sync/NoOpSyncAdapter.ts` | 0% | |
-| ❌ Untested | `adapters/sync/SSESyncAdapter.ts` | 0% | 10-26 |
-| ❌ Untested | `core/config/index.ts` | 0% | 8-18 |
-| ❌ Untested | `core/utils/case-transformer.ts` | 0% | 15-29 |
-| ❌ Untested | `adapters/store/in-memory-store.ts` | 0% | exercised only via E2E |
-| ❌ Untested | `runtimes/node/index.ts` | 0% | bootstrap entrypoint |
-| ❌ Untested | `runtimes/cf-worker/{index,fetch-event-source}.ts` | 0% | CF Worker bootstrap |
+| ✅ Full | `core/config/index.ts` | 100% | was 0% — config loading/defaults/validation |
+| ✅ Full | `core/utils/case-transformer.ts` | 100% | was 0% — snake↔camel |
+| ✅ Full | `adapters/analytics/fire-and-forget.ts` | 100% | was 0% |
+| ✅ Full | `adapters/sync/NoOpSyncAdapter.ts` | 100% | was 0% |
+| ✅ Full | `adapters/cache/cache-metrics.ts` | 100% | was 0% |
+| ✅ Full | `use-cases/sync-state.ts` | 100% | was 0% — SSE state machine |
+| ✅ Strong | `adapters/cache/cache-eviction.ts` | 98.2% | was 48% (gap: L156) |
+| ✅ Strong | `use-cases/handle-request.ts` | 98.5% | gap: L124 |
+| ✅ Strong | `core/routing/radix-tree.ts` | 95.3% | gaps: L46, L84 |
+| ✅ Strong | `core/analytics/payload-builder.ts` | 94.4% | gap: L20 |
+| ⚠ Partial | `adapters/http/server.ts` | 82% | gaps: L25-26, L76-83, L112 |
+| ⚠ Partial | `adapters/sse/sse-client.ts` | 84.6% | reconnect/error paths |
+| ⚠ Partial | `adapters/metrics/prometheus.ts` | 100%* | branch gap: L94 |
+| ⚠ Partial | `adapters/storage/CloudflareKVStore.ts` | 57.9% | gaps: L11, L36-47 |
+| ⚠ Partial | `adapters/sync/SSESyncAdapter.ts` | 57.1% | gaps: L15-17 |
+| ❌ E2E-only | `runtimes/node/index.ts` | 0% | bootstrap entrypoint (L14-47) |
+| ❌ E2E-only | `runtimes/cf-worker/{index,fetch-event-source}.ts` | 0% | CF Worker bootstrap |
 
-> **Caveat:** several "0%" adapters (`in-memory-store`, `sync-state`, `fire-and-forget`, `server.ts`) are
-> exercised indirectly by `redir-engine/e2e-suite/`, whose coverage is **not** collected here. This is real
-> functional confidence that does not show up in the unit figure.
+> Fully-covered files (`cuckoo-filter.ts`, `lru-cache.ts`, `doubly-linked-list.ts`, `core/context/*`,
+> `core/config`, `case-transformer`, `fire-and-forget`, `NoOpSyncAdapter`) are omitted from the v8 text
+> report when they have zero uncovered lines. The two 0% **runtime** files are exercised end-to-end by
+> `redir-engine/e2e-suite/`; the plan is to keep them out of strict unit thresholds and rely on E2E.
 
 ### 2.2 Admin Service · PocketBase (Nuxt 4) — `admin-service/pocketbase/`
 
 - **Framework:** Vitest + `@vitest/coverage-v8`.
-- **Overall:** 49.7% Stmts / 46.2% Branch / 56.9% Funcs / 49.9% Lines · **143 tests / 24 files · all passing.**
+- **Overall:** 80.8% Stmts / 66.8% Branch / 80.7% Funcs / 81.5% Lines · **191 tests / 34 files · all passing.**
 
 | Area | File | Coverage | Notes |
 |---|---|---:|---|
-| ✅ Excellent | `server/utils/analytics.ts` | 100% | |
-| ✅ Strong | `server/utils/transformer.ts` | 95.2% | |
-| ✅ Strong | `api/auth/{login,logout,register}.post.ts` | ~97% | |
-| ✅ Strong | `api/analytics/links/[linkId]/detailed.get.ts` | 100% | |
-| ⚠ Partial | `server/utils/{logger,rate-limit,targeting,error-handler,config}.ts` | 54-83% | |
-| ❌ Untested | `api/analytics/{dashboard,overview}.get.ts` | 0 / 0% | see note below |
-| ❌ Untested | `api/analytics/v1/collect.post.ts` | 0% | 5-185 |
-| ❌ Untested | `api/links/{create,index,[id].delete,[id].patch}.ts` | 0% | full CRUD handlers |
-| ❌ Untested | `api/sync/stream.get.ts` | 0% | SSE sync to engines |
-| ❌ Untested | `api/{bulk,health,metrics,qr}.ts` | 0% | |
-| ❌ Untested | `server/middleware/{0.error,2.auth,3.rate-limit}.ts` | 0% | middleware dir avg 35.7% |
-| ❌ Untested | `server/utils/{alias-generator,audit,metrics,pocketbase}.ts` | 0% | client/IO helpers |
-| ⚠ Partial | `server/utils/sanitizer.ts` | 54% | |
+| ✅ Strong | `api/links/{index,[id].delete}.ts` | 100% / 84.6% | was 0% — CRUD handlers now driven |
+| ✅ Strong | `api/sync/stream.get.ts` | 94.7% | was 0% — SSE generation |
+| ✅ Strong | `api/auth/{login,logout,register}.post.ts` | 93–100% | |
+| ✅ Strong | `middleware/{0.error,3.rate-limit}.ts` | 100% / 89.7% | was 0% |
+| ✅ Strong | `server/utils/{analytics,pocketbase,transformer}.ts` | 91–93% | |
+| ⚠ Partial | `api/bulk.post.ts` | 94.5% | branch gaps: L77, L141-148 |
+| ⚠ Partial | `api/links/{create,[id].patch}.ts` | 84.6% / 76% | create funcs 50%; patch gaps L46-83 |
+| ⚠ Partial | `api/analytics/v1/collect.post.ts` | 62.1% | **branches 33.8%** — biggest PocketBase gap |
+| ❌ Untested | `api/links/[id]/history.get.ts` | 0% | L4-69 — handler exists, no test |
+| ⚠ Partial | `server/utils/sanitizer.ts` | 53.8% | funcs 42.9% |
+| ⚠ Partial | `server/utils/config.ts` | 66.7% | |
 
-> **Critical finding — tests exist but don't cover handlers.** Many PocketBase test files
-> (e.g. `tests/analytics-dashboard.test.ts`) assert against the **extracted pure function**
-> (`processAnalyticsEvents` in `server/utils/analytics`) rather than the Nitro **handler** itself
-> (`server/api/analytics/dashboard.get.ts`). That is why the utility reads 100% while its handler reads 0%.
-> The handlers are thin (data fetch → call util → error handling), but their **fetch/error/IO paths are
-> untested**. This is the single biggest, highest-leverage PocketBase gap.
+> The "tests exist but cover the extracted util, not the handler" problem from the prior snapshot is
+> resolved: `*-handler.test.ts` files now exercise the real Nitro handlers via mocked PocketBase client +
+> H3 event fixtures.
 
 ### 2.3 Admin Service · Supabase (Nuxt 4) — `admin-service/supabase/`
 
 - **Framework:** Vitest + `@nuxt/test-utils` + `@vitest/coverage-v8`; Supabase/ioredis fully mocked
   (`tests/setup/env.ts` injects dummy credentials + `ioredis-mock`).
-- **Overall (scoped to `server/api/**`):** 95.9% Stmts / 86.9% Branch / **100%** Funcs / 95.9% Lines ·
-  **286 tests / 58 files · all passing.** ✅ *The historic Nuxt+Supabase+Redis bootstrapping crashes that
-  previously held this subsystem at ~28% are fully resolved.*
+- **Overall (now scoped to full `server/**`):** 78.9% Stmts / **93.1%** Branch / 86.8% Funcs / 78.9% Lines ·
+  **360 tests / 70 files · all passing.**
 
-| Weakest handlers | Coverage | Gap |
-|---|---:|---|
-| `api/analytics/v1/collect.post.ts` | 87.6% | branches 63.9% — lines 167-207, 224, 242-254 |
-| `api/links/create.post.ts` | 94.2% | lines 58-62 |
-| `api/links/[id]/history.get.ts` | 96.6% | lines 52-53 |
-| everything else | 95-100% | branch gaps only |
+| Area | File | Coverage | Notes |
+|---|---|---:|---|
+| ✅ Full | `api/links/**`, `api/{bulk,qr}`, `api/sync/stream` | 100% | |
+| ✅ Strong | `api/analytics/**` (dashboard, stats, export, overview, detailed) | 95–100% | |
+| ✅ Strong | `api/analytics/v1/collect.post.ts` | 94.8% | was 87.6% (Phase 3) |
+| ✅ Strong | `server/utils/{transformer,bulk,hash,metrics,qr,audit,cloudflare-kv,...}.ts` | 100% | widened scope now reported |
+| ⚠ Partial | `server/utils/rate-limit.ts` | 79.7% | gaps: L37-44, L56-69 |
+| ⚠ Partial | `server/utils/broadcaster.ts` | 77.8% | funcs 0% |
+| ⚠ Partial | `server/utils/sanitizer.ts` | 90.6% | funcs 71% |
+| ❌ Untested | `server/middleware/{error,security}.ts` | 0% stmts | stmts not exercised (branch-stubbed) |
+| ❌ Untested | `server/middleware/rate-limit.ts` | 0% | L1-97 |
+| ❌ Untested | `server/plugins/{metrics,realtime}.ts` | 0% stmts | Nitro plugin lifecycle |
+| ❌ Untested | `server/utils/monitoring.ts`, `server/utils/storage.ts` | 0% stmts | |
 
-> **Scope caveat (important):** the configured `coverage.include` is **`server/api/**/*.ts` only**.
-> `server/utils/**`, `server/middleware/**`, and all Vue components are **excluded from measurement**, so
-> 95.9% describes the API surface, not the whole service. (Many utils *are* tested — e.g.
-> `transformer`, `hash`, `bulk`, `sanitizer` — but their coverage is not currently reported.)
+> **Scope note:** `coverage.include` was widened from `server/api/**` to `server/**` in Phase 3, so the
+> reported figure finally reflects middleware, plugins, and utils. The API surface alone remains ~95–100%;
+> the new gaps are Nitro **plugin/middleware lifecycle** code that is hard to exercise without a booted
+> Nitro server (these run only via `system-e2e`). `health.get.ts` / `metrics.get.ts` are explicitly
+> excluded from measurement.
 
 ### 2.4 E2E Suites
 
 - **`redir-engine/e2e-suite/`** — 14 Vitest specs (`T01`–`T13`) running the real engine against **mocked**
-  admin/analytics services. Provides strong functional confidence (boot/sync, redirect, 404 fast-path, A/B,
-  geo/language fallback, analytics emission, HSTS, password protection, expiration, privacy, performance).
-  *Not counted toward unit-coverage %, but materially de-risks the engine adapters.*
-- **`system-e2e/`** — Playwright, **1 spec** (`system-flow.spec.ts`) gated behind `scripts/start-services.ts`
-  (requires live admin + engine). Minimal breadth; no coverage generation.
+  admin/analytics services. Covers boot/sync, redirect, 404 fast-path, A/B, geo/language fallback, analytics
+  emission, HSTS, password protection, expiration, privacy, and performance. *Not counted toward unit-coverage %,
+  but materially de-risks the engine adapters and the runtime bootstrap code that is 0% in unit runs.*
+- **`system-e2e/`** — Playwright, **5 specs** (`system-flow`, `advanced-routing`, `qr-code`, `bulk-import`,
+  `analytics-dashboard`), each gated behind `scripts/start-services.ts` (requires live admin + engine).
 
 ---
 
-## 3. Cross-Cutting Tooling Gaps
+## 3. Tooling & Guardrails
 
-These affect the reliability of *every* number above and should be fixed first:
+The cross-cutting tooling gaps from the prior snapshot are resolved; what remains is **threshold ratcheting**:
 
-1. **No coverage thresholds anywhere.** None of the four `vitest.config.ts` files define
-   `coverage.thresholds`, so coverage can drop without any signal.
-2. **Engine has no coverage config / provider.** `redir-engine/vitest.config.ts` has no `coverage:` block and
-   `@vitest/coverage-v8` is not in its `package.json`. (Figures above were produced with a transient
-   `--no-save` install + CLI flags — see §6.)
-3. **Inconsistent `include` scopes** make the three subsystem numbers **not directly comparable**:
-   Supabase measures only `server/api`, PocketBase measures `server/{api,utils,middleware}`, Engine measures
-   `src` + `runtimes`. Normalize these so "repo coverage" is well-defined.
-4. **Engine build artifacts pollute measurement.** Without explicit excludes, Cloudflare Worker bundles
-   (`bundle-*/loader.entry.ts`) inflate the denominator and crater the headline (the raw run reports
-   **11.3%** until artifacts are excluded). The excludes must be baked into config.
+1. ✅ **Coverage config + `@vitest/coverage-v8`** declared in `redir-engine` (Phase 0). Build artifacts
+   (`bundle-*`, `.wrangler/`, `dist/`, `loader.entry.ts`) and test/bench files are excluded.
+2. ✅ **`coverage.thresholds`** set in all three workspaces; `npm run test:coverage` wired in every
+   `package.json`. CI fails when coverage drops below threshold.
+3. ✅ **Scopes normalized** — both admin services now measure `server/**`; the engine measures
+   `src` + `runtimes`. Figures are now directly comparable across admin services.
+4. ⚠ **Ratchet thresholds upward.** Current thresholds vs. actual coverage:
 
----
+   | Workspace | Threshold (stmt/br/func/line) | Actual (stmt/br/func/line) | Headroom |
+   |---|---|---|---|
+   | Engine | 53 / 43 / 43 / 54 | 77.7 / 69.1 / 85.4 / 78.7 | large (set at old baseline) |
+   | PocketBase | 80 / 65 / 80 / 80 | 80.8 / 66.8 / 80.7 / 81.5 | tight |
+   | Supabase | 72 / 86 / 78 / 72 | 78.9 / 93.1 / 86.8 / 78.9 | moderate |
 
-## 4. Plan to Reach ≥ 95% (Prioritized)
-
-### Phase 0 — Tooling & guardrails (do first, unblocks everything)
-1. Add `@vitest/coverage-v8` to `redir-engine` devDependencies and a `coverage:` block to its
-   `vitest.config.ts` (`include: ['src/**/*.ts','runtimes/**/*.ts']`, `exclude` test files + `.wrangler/`,
-   `bundle-*`, `dist/`).
-2. Normalize `coverage.include` across all three workspaces (e.g. measure `server/**` consistently in both
-   admin services) so figures are comparable.
-3. Set ascending `coverage.thresholds` in every config (start just above current levels, ratchet toward 95):
-   - Engine: `lines: 57, branches: 46, functions: 46, statements: 55`
-   - PocketBase: `lines: 50, branches: 47, functions: 57, statements: 50`
-   - Supabase: `lines: 96, branches: 87, functions: 100, statements: 96`
-   - Wire `npm run test:coverage` scripts in each `package.json`.
-
-### Phase 1 — Redir-Engine adapters & runtime (target: ~56% → ≥ 90%)
-Highest-leverage because several large files are at **0%**:
-1. **`use-cases/sync-state.ts`** (0%, ~104 lines) — unit-test the SSE sync state machine: connect, replay,
-   apply-chunk, gap/reset, and error paths. *(Much is covered by E2E; extract & cover the pure logic.)*
-2. **`adapters/cache/cache-metrics.ts` + `cache-eviction.ts`** (0% / 48%) — test metric recording and the
-   eviction-policy branches (LRU victim selection, manual eviction, capacity edge cases).
-3. **`adapters/analytics/fire-and-forget.ts`** (0%) — test non-blocking dispatch + failure isolation.
-4. **`adapters/sync/{NoOp,SSE}SyncAdapter.ts`** (0%) — contract tests against `ISyncManager`.
-5. **`core/config/index.ts`** (0%) — test config loading/defaults/validation.
-6. **`core/utils/case-transformer.ts`** (0%) — trivial snake↔camel; quick property-based test.
-7. **Runtime entrypoints** (`runtimes/node/index.ts`, `runtimes/cf-worker/*`) — cover via the e2e-suite boot
-   path or thin integration tests; exclude from strict unit thresholds if intended to be E2E-only.
-8. Close branch gaps in already-high files: `prometheus.ts` (24-94), `server.ts` (6-115),
-   `CloudflareKVStore.ts` (36-47), `sse-client.ts` (reconnect paths).
-
-### Phase 2 — PocketBase handlers & middleware (target: ~50% → ≥ 90%)
-The single biggest opportunity: **the API handlers are mostly 0% despite companion test files.**
-1. **Drive the actual handlers**, not just extracted utils. Use `vi.mock('../../utils/pocketbase')` and
-   `createEvent()`-style H3 fixtures to exercise each handler's fetch → transform → respond → error path:
-   - `api/links/{create.post,[id].patch,[id].delete,index.get}.ts` (0%)
-   - `api/sync/stream.get.ts` (0%) — SSE generation/backpressure
-   - `api/analytics/{dashboard,overview}.get.ts` and `api/analytics/v1/collect.post.ts` (0%)
-   - `api/{bulk,qr,metrics}.get/post.ts` (0%)
-2. **Middleware** (0%): `0.error.ts`, `2.auth.ts`, `3.rate-limit.ts` — synthetic H3 events: missing/invalid
-   auth, rate-limit exceeded, error capture.
-3. **Untested utils** (0%): `alias-generator.ts`, `audit.ts`, `metrics.ts`, `pocketbase.ts` (client wrapper).
-
-### Phase 3 — Supabase: widen scope, then close branch gaps
-1. **Expand `coverage.include`** to `server/**` (utils, middleware) so the reported number reflects reality.
-   Most utils are already tested; expect the widened figure to remain high.
-2. Close remaining branch gaps: `collect.post.ts` (63.9% → target ≥ 90%), `create.post.ts`, `history.get.ts`,
-   `[format].get.ts` export branches, `bulk.post.ts` (55-60).
-3. Decide & document the policy for **Vue components/pages**: either unit-test key components with
-   `@vue/test-utils` (component tests already exist for `Status`/`Analytics`) or formally exclude `.vue`
-   from the threshold and rely on `system-e2e`.
-
-### Phase 4 — E2E & system testing
-1. Grow `system-e2e` Playwright journeys (currently 1 spec): login → create link → hit engine → view
-   analytics; QR download; bulk import.
-2. Keep `redir-engine/e2e-suite` performance tests isolated so they never skew unit metrics.
+   Engine thresholds in particular can move from the legacy baseline toward ~70/60/75/70 without blocking
+   CI. Ratchet incrementally so each bump is a deliberate floor, not a moving target.
 
 ---
 
-## 5. Immediate Action Items (Next Steps)
+## 4. Remaining Gaps & Forward Plan
 
-- [ ] **P0** Add coverage config + `@vitest/coverage-v8` to `redir-engine`; add `coverage` excludes for build artifacts.
-- [ ] **P0** Set initial `coverage.thresholds` (just above current levels) in all three workspaces + `test:coverage` scripts.
-- [ ] **P0** Normalize `coverage.include` scopes (esp. widen Supabase to `server/**`).
-- [ ] **P1** PocketBase: write handler-level tests driving `api/links/*`, `api/sync/stream`, `api/analytics/*` with a mocked PocketBase client (biggest single coverage win).
-- [ ] **P1** Engine: unit-test `sync-state.ts`, `cache-metrics.ts`, `cache-eviction.ts`, `fire-and-forget.ts`.
-- [ ] **P2** PocketBase middleware (`2.auth`, `3.rate-limit`, `0.error`) and 0% utils.
-- [ ] **P2** Supabase: close `collect.post.ts` branch gaps; ratify `.vue` coverage policy.
-- [ ] **P3** Expand `system-e2e` Playwright journeys.
+Phases 0–4 (tooling, engine adapters, PocketBase handlers, Supabase scope-widening, E2E) are **complete**.
+The work below closes the distance to ≥ 95%.
+
+### Phase 5 — Close the last gaps (target: → ≥ 90–95%)
+
+**Engine:**
+1. `adapters/storage/CloudflareKVStore.ts` (57.9%) and `adapters/sync/SSESyncAdapter.ts` (57.1%) —
+   the last sub-60% adapters. Add contract tests (mocked KV / EventSource).
+2. Close branch gaps in already-high files: `server.ts` (82%), `sse-client.ts` (84.6%),
+   `payload-builder.ts` (94.4%), `prometheus.ts` (branch L94).
+3. **Decide the runtime-entrypoint policy.** `runtimes/node/index.ts` and `runtimes/cf-worker/*` are 0%
+   in unit runs (E2E-only). Either add thin integration boot-tests or formally exclude them from the
+   threshold and document that E2E owns them.
+
+**PocketBase:**
+1. `api/analytics/v1/collect.post.ts` — **branches 33.8%** (the worst branch figure in the repo). Cover the
+   collect/validation/batching branches.
+2. `api/links/[id]/history.get.ts` (0%) — add a handler test (parallel to the Supabase one).
+3. `server/utils/sanitizer.ts` (53.8%), `server/utils/config.ts` (66.7%).
+
+**Supabase:**
+1. `server/middleware/{rate-limit,error,security}.ts` (0%) and `server/plugins/{metrics,realtime}.ts` (0%) —
+   Nitro lifecycle code. Either boot a Nitro test server (`nitro` dev engine in tests) or accept that
+   `system-e2e` owns these and document the carve-out.
+2. `server/utils/monitoring.ts` (0%), `server/utils/storage.ts` (0%), `server/utils/broadcaster.ts` (77.8%).
+
+### Phase 6 — Maintain & sustain
+1. Ratchet thresholds upward each release (see §3) so coverage cannot silently regress.
+2. Grow `system-e2e` only where a user journey adds confidence beyond unit/adapter tests (avoid redundant
+   breadth). Keep `redir-engine/e2e-suite` perf tests isolated from unit metrics.
+
+---
+
+## 5. Action Items (Next Steps)
+
+- [x] **P0** Coverage config + `@vitest/coverage-v8` added to `redir-engine`; build artifacts excluded.
+- [x] **P0** `coverage.thresholds` set in all three workspaces; `test:coverage` scripts wired.
+- [x] **P0** `coverage.include` normalized (Supabase widened to `server/**`).
+- [x] **P1** PocketBase: handler-level tests driving `api/links/*`, `api/sync/stream`, `api/analytics/*`
+      with a mocked PocketBase client.
+- [x] **P1** Engine: unit tests for `sync-state`, `cache-metrics`, `cache-eviction`, `fire-and-forget`,
+      sync adapters, `core/config`, `case-transformer`.
+- [x] **P2** PocketBase middleware + 0% utils.
+- [x] **P2** Supabase: `collect.post.ts` branch gaps raised (87.6% → 94.8%).
+- [x] **P3** `system-e2e` expanded to 5 Playwright journeys.
+- [ ] **P4** Ratchet engine thresholds from legacy baseline (54 → ~70 lines).
+- [ ] **P5** Close remaining < 90% files listed in [§4](#4-remaining-gaps--forward-plan).
+- [ ] **P5** Ratify the `.vue` / runtime-entrypoint / Nitro-plugin coverage policy (unit vs. E2E ownership).
 
 ## 6. Reproducing this report
 
+Every workspace now has a permanent coverage config, so a single script reproduces all figures:
+
 ```bash
-# Admin · Supabase (provider already declared)
-cd admin-service/supabase && npx vitest run --coverage
+# Redir-Engine
+cd redir-engine && npm run test:coverage
 
-# Admin · PocketBase (provider already declared)
-cd admin-service/pocketbase && npx vitest run --coverage
+# Admin · PocketBase
+cd admin-service/pocketbase && npm run test:coverage
 
-# Engine — until Phase 0 lands a permanent config, measure with a transient provider + CLI flags:
-cd redir-engine
-npm install --no-save @vitest/coverage-v8
-npx vitest run \
-  --coverage.enabled \
-  --coverage.include='src/**/*.ts' \
-  --coverage.include='runtimes/**/*.ts' \
-  --coverage.exclude='**/*.test.ts' \
-  --coverage.exclude='tests/**' \
-  --coverage.exclude='**/.wrangler/**' \
-  --coverage.exclude='**/bundle-*/**' \
-  --coverage.exclude='**/loader.entry.ts' \
-  --coverage.exclude='**/dist/**' \
-  --coverage.reporter=text
+# Admin · Supabase
+cd admin-service/supabase && npm run test:coverage
 ```
 
-> The engine `--no-save` install does **not** modify `package.json`/`package-lock.json`; it only populates
-> `node_modules` (gitignored). Phase 0 makes this permanent and scriptable.
+Each writes `text`, `text-summary`, and `html` reports (the HTML report lands in `<pkg>/coverage/index.html`).
+Thresholds are enforced, so a coverage regression fails the run.
