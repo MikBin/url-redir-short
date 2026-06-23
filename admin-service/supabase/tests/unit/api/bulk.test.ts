@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
@@ -99,3 +100,22 @@ describe('bulk.post.ts', () => {
     }
   })
 })
+
+  it('handles partial success where some data is ignored/null', async () => {
+    vi.mocked(serverSupabaseUser).mockResolvedValue({ id: 'user-123', role: 'user' })
+    vi.mocked((globalThis as any).readBody).mockResolvedValue([{ slug: 'slug-1', destination: 'https://example.com' }, { destination: 'invalid' }])
+
+    // Mock where data is null
+    const mockSelect = vi.fn().mockResolvedValue({ data: null, error: null });
+    const mockUpsert = vi.fn(() => ({ select: mockSelect }));
+    const mockDb = {
+      from: vi.fn(() => ({
+          upsert: mockUpsert
+      }))
+    }
+    vi.mocked(serverSupabaseClient).mockResolvedValue(mockDb as any)
+
+    const result = await handler({} as any)
+    expect(result.success).toBe(0)
+    expect(result.failed).toBe(1)
+  })

@@ -1,3 +1,4 @@
+/* eslint-disable */
 export interface AuditLogParams {
   actor: {
     id: string

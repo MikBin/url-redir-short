@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()

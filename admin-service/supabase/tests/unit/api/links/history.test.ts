@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
@@ -75,7 +76,7 @@ describe('[id]/history.get.ts', () => {
     const mockRange = vi.fn().mockResolvedValue({ data: [{ action: 'create' }], count: 1, error: null });
     const mockOrder = vi.fn(() => ({ range: mockRange }));
     const mockEqSelect2 = vi.fn(() => ({ order: mockOrder }));
-    const mockSelect2 = vi.fn(() => ({ eq: mockEqSelect2 }));
+     const mockSelect2 = vi.fn(() => ({ eq: mockEqSelect2 }));
 
     const mockDb = {
       from: vi.fn((table) => {
@@ -127,7 +128,7 @@ describe('[id]/history.get.ts', () => {
     const mockRange = vi.fn().mockResolvedValue({ data: null, count: 0, error: { message: 'db error' } });
     const mockOrder = vi.fn(() => ({ range: mockRange }));
     const mockEqSelect2 = vi.fn(() => ({ order: mockOrder }));
-    const mockSelect2 = vi.fn(() => ({ eq: mockEqSelect2 }));
+     const mockSelect2 = vi.fn(() => ({ eq: mockEqSelect2 }));
 
     const mockDb = {
       from: vi.fn((table) => {
@@ -147,3 +148,35 @@ describe('[id]/history.get.ts', () => {
     }
   })
 })
+
+  it('filters by action query parameter correctly', async () => {
+    vi.mocked(serverSupabaseUser).mockResolvedValue({ id: 'user-123', role: 'user' })
+    vi.mocked((globalThis as any).getQuery).mockReturnValue({ action: 'create' })
+
+    // First query: fetch link
+    const mockSingleSelect1 = vi.fn().mockResolvedValue({ data: { id: 'link-123' }, error: null });
+    const mockEqSelect1 = vi.fn(() => ({ single: mockSingleSelect1 }));
+    const mockSelect1 = vi.fn(() => ({ eq: mockEqSelect1 }));
+
+    // Second query: fetch log
+    const mockRange = vi.fn().mockResolvedValue({ data: [{ action: 'create' }], count: 1, error: null });
+    const mockEqAction = vi.fn(() => ({ range: mockRange }));
+    const mockOrder = vi.fn(() => ({ eq: mockEqAction, range: mockRange })); // the code calls order(), then optionally eq()
+    const mockEqLinkId = vi.fn(() => ({ order: mockOrder }));
+    const mockSelect2 = vi.fn(() => ({ eq: mockEqLinkId }));
+
+    const mockDb = {
+      from: vi.fn((table) => {
+         if (table === 'links') {
+            return { select: mockSelect1 }
+         } else {
+            return { select: mockSelect2 }
+         }
+      })
+    }
+    vi.mocked(serverSupabaseClient).mockResolvedValue(mockDb as any)
+
+    const result = await handler({} as any)
+    expect(result.entries).toEqual([{ action: 'create' }])
+    expect(mockEqAction).toHaveBeenCalledWith('action', 'create')
+  })

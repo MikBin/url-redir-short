@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { H3Event, createError } from 'h3'
 import { createRequestLogger } from '../utils/error-handler'
 

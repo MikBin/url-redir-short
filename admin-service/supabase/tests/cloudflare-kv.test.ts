@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { publishRuleToKV, deleteRuleFromKV } from '../server/utils/cloudflare-kv'
 import { logger } from '../server/utils/logger'

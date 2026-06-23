@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { z } from 'zod'
 

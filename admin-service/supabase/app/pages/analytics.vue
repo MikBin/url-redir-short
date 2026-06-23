@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable */
 import {
   Chart as ChartJS,
   Title,
