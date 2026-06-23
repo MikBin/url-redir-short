@@ -45,9 +45,16 @@ export function processAnalyticsEvents(events: Array<{
     }
 
     if (event.timestamp) {
-      const eventTime = new Date(event.timestamp);
-      eventTime.setUTCMinutes(0, 0, 0);
-      const iso = eventTime.toISOString();
+      let iso: string;
+      if (event.timestamp.length >= 13) {
+        // PocketBase timestamp format "YYYY-MM-DD HH:mm:ss.SSSZ" or ISO "YYYY-MM-DDTHH:mm:ss.SSSZ"
+        iso = event.timestamp.substring(0, 10) + 'T' + event.timestamp.substring(11, 13) + ':00:00.000Z';
+      } else {
+        const eventTime = new Date(event.timestamp.replace(' ', 'T'));
+        eventTime.setUTCMinutes(0, 0, 0);
+        iso = eventTime.toISOString();
+      }
+
       if (hourlyTrendMap[iso] !== undefined) {
         hourlyTrendMap[iso]++;
       }
