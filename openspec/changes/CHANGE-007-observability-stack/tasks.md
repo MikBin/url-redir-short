@@ -40,3 +40,18 @@
 - [ ] Configure Alertmanager with webhook/email receiver
 - [ ] Test alert rules with Prometheus unit testing
 - [ ] Create `docs/runbooks/` with alert response procedures
+
+## Review Log
+
+**Date:** 2026-09-29 · **Reviewer:** nw-platform-architect-reviewer (Kilo) + nw-software-crafter-reviewer (Kilo)
+**Verdict:** NEEDS_REVISION — backlog false negative: Tasks 1–3 are ~75% implemented in reality (0% claimed). Task 4 (alerting) genuinely 0%.
+
+**Findings (priority order):**
+
+- `issue (blocking):` Task 4 has zero implementation: no `infra/prometheus/alerts.yml`, no Alertmanager anywhere in `infra/`, and `docs/operations/observability.md` admits alerting rules are "still pending".
+- `issue (blocking, security):` `docker-compose.observability.yml:48` — Grafana admin password hardcoded as `admin` with port 3004 published; Prometheus (9090) and Loki (3100) also published unauthenticated. Use a file secret and bind observability ports to localhost (or drop in prod overlay).
+- `issue (blocking):` Shipped dashboard is broken: `infra/grafana/dashboards/system-overview.json:28` references datasource `uid: "Prometheus"`, but `infra/grafana/provisioning/datasources/datasources.yml` provisions no `uid:` — panels resolve to a nonexistent datasource and render empty.
+- `suggestion (non-blocking):` `docker-compose.observability.yml:62-64` hardcodes external network name `url-redir-short_url-redir-net` (breaks under podman-compose naming and when the base stack is down); `infra/loki/loki-config.yaml:28` sets `enforce_metric_name`, removed in Loki 3.x, and images are `:latest` — the observability stack likely won't boot as pinned. Pin versions and update config.
+- `suggestion (non-blocking):` Task checkbox hygiene: Tasks 1–3 largely implemented (`redir-engine/src/adapters/metrics/prometheus.ts`, `/metrics` endpoint, `admin-service/supabase/server/utils/metrics.ts`, `/api/metrics`, compose stack, system-overview dashboard + tests exist). Stale unchecked boxes make the roadmap untrustworthy for planning — reconcile status with reality.
+- `nitpick (non-blocking):` Only one of the three dashboards (Task 3) exists; `engine-performance.json` is missing.
+- `praise:` Metric exporters match the spec tables exactly, dashboard queries reference real metric names, and `observability.md` carries an honest implementation-status banner. Careful work most repos of this size never get right.

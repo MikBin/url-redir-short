@@ -2,9 +2,10 @@
 
 > **Supersedes:** `z-review.md`, `k-review.md`, and `review-crosscheck.md` (removed 2026-06-22). This document is the single living review.
 
-**Reviewer:** Senior Solution Architect · **Date:** 2026-06-22
+**Reviewer:** Senior Solution Architect · **Date:** 2026-06-22 (delta re-review integrated: 2026-09-29)
 **Scope:** Entire monorepo — `redir-engine`, `admin-service` (Supabase + PocketBase), infrastructure, CI/CD, observability, tests, specs, docs, and the LikeC4 architecture model.
 **Method:** Deep code and configuration review across ~4,000 lines of core source + 300+ files; independent spot-checking of the highest-severity claims; reconciliation of two prior internal reviews.
+**2026-09-29 delta re-review:** three independent reviewer agents (`nw-solution-architect-reviewer`, `nw-platform-architect-reviewer`, `nw-software-crafter-reviewer`) re-verified every critical/high claim against current source, corrected two, and contributed new findings (§2.4, §5.5). Per-change verdicts are embedded as `## Review Log` sections in `openspec/roadmap.md` and each active `openspec/changes/*/tasks.md`.
 
 ---
 
@@ -20,6 +21,11 @@ However, **the platform is not production-ready as a whole**. It is best describ
 - `admin-service` PocketBase variant: **not safe for production**.
 - Cloudflare Worker runtime: **not deployable** as configured.
 - Infrastructure / CI / observability: good intent, but several wiring defects block any production cutover.
+
+**Delta re-review (2026-09-29, three agents — architecture, platform, implementation):**
+- All headline verdicts **confirmed unchanged**; platform cutover is formally **REJECTED as wired** (TLS edge, both VPS deploy scripts, and the CF deploy path are provably broken; CI gates nothing; DB runs `trust` auth on a published port).
+- Two prior findings **corrected**: C6 (`vue-router@5.0.4` now resolves in the lockfile — retired) and M17 (E2E hang not reproduced; 726 tests re-run green: 175 engine + 191 PocketBase + 360 Supabase).
+- New criticals: **C11** (FR-36/37 click-expiration cannot work — `transformer.ts` never syncs `clicks`), **C12** (rate limiter fails open on Redis error + INCR/EXPIRE permanent-lock race), **H19** (blanket `/* eslint-disable */` across ~10 admin-service files; 100+ `any`s; required `ANY_USAGE_REPORT.md` absent). Full delta: §2.4, §5.5.
 
 ---
 
@@ -52,9 +58,23 @@ However, **the platform is not production-ready as a whole**. It is best describ
 - **Both reviews now agree** after correction: the system is not production-ready as a whole; the Supabase+Node path is ~80% to a hardened launch.
 - **One inaccuracy inside `z-review.md` was corrected by the cross-check:** the original claim "no `npm run lint` script exists" was false. The root `package.json` does define a lint script; the real defect is that CI does not run it and the workspace resolution may be incomplete.
 
+### 2.4 Delta Re-Review (2026-09-29)
+
+Three independent nWave reviewer agents were dispatched over the whole project and the nine active OpenSpec backlog changes:
+
+| Agent | Scope | Verdict |
+|---|---|---|
+| `nw-solution-architect-reviewer` | ADRs, arc42, OpenSpec specs/roadmap vs code; architectural coherence | **NEEDS_REVISION** (5 blocking, 12 non-blocking) |
+| `nw-platform-architect-reviewer` | Compose/infra, CI/CD, observability, deploy scripts, 4 platform changes | **REJECTED for production cutover** (7 blocking — 2 security, 12 non-blocking) |
+| `nw-software-crafter-reviewer` | Engine + both admin services vs `AGENTS.md` standards; RPP L1–L3 scan; all 9 task backlogs | **NEEDS_REVISION** (24 blocking, ~15 non-blocking) |
+
+Every critical/high claim from this document was re-verified against current source (results in Appendix A). Per-change verdicts live in the `## Review Log` sections embedded in `openspec/roadmap.md` and `openspec/changes/*/tasks.md`.
+
 ---
 
 ## 3. Production Readiness Scorecard
+
+*Ratings re-confirmed unchanged by the 2026-09-29 delta re-review; every blocking finding remains open except retired C6.*
 
 | Subsystem | Rating | One-line verdict |
 |---|---|---|
@@ -135,8 +155,8 @@ Claims parity with Supabase but has significant drift:
 - **Multi-runtime strategy is real.** The same `HandleRequestUseCase` runs on Node and CF Workers via different adapters.
 - **Performance engineering with measured intent.** Radix trie (O(k) lookup), cuckoo filter (O(1) 404 gate), shared UA LRU cache, deferred body parsing, lazy contexts.
 - **Privacy-by-design.** Salted SHA-256 IP anonymization; verified by E2E `T08-privacy.test.ts`.
-- **TypeScript `strict: true`** in the engine.
-- **Only one explicit `any`** in production source: `admin-service/pocketbase/server/plugins/realtime.ts:9`.
+- **TypeScript `strict: true`** in the engine, with **zero `any` in `redir-engine/src/`** (re-confirmed 2026-09-29).
+- ~~Only one explicit `any` in production source~~ **CORRECTED (2026-09-29):** the admin services carry 100+ `any` usages hidden behind blanket file-level `/* eslint-disable */` headers (~10 production files, e.g. `collect.post.ts:1`, `realtime.ts:1`, `rate-limit.ts:1`); the `ANY_USAGE_REPORT.md` required by `AGENTS.md` does not exist, and committed `fix-lint*.js` scripts show lint failures were mass-suppressed rather than fixed. See H19.
 - **Excellent git/secret hygiene.** `.env` and `secrets/*.txt` gitignored; file-based Docker secrets.
 - **Multi-stage, non-root Docker images** with health checks.
 - **Scenario-driven OpenSpec proposals** and a respectable ADR/arc42 documentation set.
@@ -163,10 +183,10 @@ Every item below includes a location citation and, for critical/high items, an i
 |---|---|---|---|---|
 | C1 | **PocketBase authorization bypass** — `links` API rules are `@request.auth.id != ""` (any authenticated user can CRUD any tenant's links). | `admin-service/pocketbase/pb_migrations/1777556624_updated_links.js:7-11` | Cross-tenant data breach / privilege escalation. | ✅ Verified against source. |
 | C2 | **Caddy TLS edge points at wrong ports.** `reverse_proxy admin:3001` / `engine:3002`, but containers listen internally on `3000` (`docker-compose.yml` maps `3001:3000` / `3002:3000`). The `docker-compose.prod.yml` overlay only `!reset []`s host-side ports, so the bug persists. | `infra/caddy/Caddyfile:6,15,23` vs `docker-compose.yml:59,73,99,108` | HTTPS unreachable in production. | ✅ Verified against source. |
-| C3 | **Cloudflare Worker deploy will fail.** CI runs `wrangler deploy --env staging/prod`, but `wrangler.toml` has no `[env.staging]`/`[env.production]` sections and vars are placeholders. | `.github/workflows/deploy-*.yml:37-38`; `redir-engine/runtimes/cf-worker/wrangler.toml` | Edge runtime cannot be deployed via the documented path. | ✅ Verified against source. |
-| C4 | **Deploy scripts cannot deploy registry images.** `deploy-production.sh` exports `ADMIN_IMAGE_TAG` and runs `docker compose pull admin`, but `docker-compose.yml` defines `admin`/`engine` with `build:` and no `image:` field. | `scripts/deploy-production.sh:17-21`; `docker-compose.yml:46-48` | `pull` is a no-op; deploys silently rebuild or fail. | ✅ Verified against source. |
+| C3 | **Cloudflare Worker deploy will fail.** CI runs `wrangler deploy --env staging/prod`, but `wrangler.toml` has no `[env.staging]`/`[env.production]` sections and vars are placeholders. **2026-09-29: worse —** both deploy workflows also set wrangler `workingDirectory: ./redir-engine` (`deploy-production.yml:36`, `deploy-staging.yml:37`) where no `wrangler.toml` exists at all. | `.github/workflows/deploy-*.yml:36-38`; `redir-engine/runtimes/cf-worker/wrangler.toml` | Edge runtime cannot be deployed via the documented path. | ✅ Verified against source (re-confirmed 2026-09-29). |
+| C4 | **Deploy scripts cannot deploy registry images.** `deploy-production.sh` exports `ADMIN_IMAGE_TAG` and runs `docker compose pull admin`, but `docker-compose.yml` defines `admin`/`engine` with `build:` and no `image:` field. | `scripts/deploy-production.sh:17-21`; `docker-compose.yml:46-48` | `pull` is a no-op; deploys silently rebuild or fail; GHCR images built by CI are never deployed — version pinning/rollback in `cd-pipeline.md` is fiction. | ✅ Verified against source (re-confirmed 2026-09-29). |
 | C5 | **PocketBase analytics pipeline is broken.** `analytics_aggregates` collection is referenced but absent from `pb_schema.json`; `analytics_events` has only 4 fields but ingestion writes 14. Non-atomic read-modify-write. | `admin-service/pocketbase/server/api/analytics/v1/collect.post.ts:118,148,167` | Click counts zero/stale; lost updates. | ✅ Verified against source. |
-| C6 | **Non-existent `vue-router@^5.0.4` dependency.** Current major is 4. | `admin-service/pocketbase/package.json:24` | `npm install` broken for PocketBase variant. | ✅ Verified against source. |
+| C6 | ~~**Non-existent `vue-router@^5.0.4` dependency.**~~ **RETIRED (2026-09-29):** `vue-router@5.0.4` now resolves in the lockfile; `npm install` works. | `admin-service/pocketbase/package.json:24` | None — resolved. | ✅ Re-verified 2026-09-29, claim obsolete. |
 | C7 | **Expected API key printed to stdout.** `stream.get.ts:15` logs the expected secret. The 401 body only echoes the caller's own header and masks the expected value. | `admin-service/pocketbase/server/api/sync/stream.get.ts:15,18` | Secret disclosure to process logs. | ✅ Verified against source. |
 | C8 | **CORS fail-open (Supabase).** `security.ts` allows all origins when `CORS_ALLOWED_ORIGINS` is unset, combined with `Access-Control-Allow-Credentials: 'true'`. The shipped compose sets `CORS_ALLOWED_ORIGINS: "*"`. | `admin-service/supabase/server/middleware/security.ts:56-62` | Credential theft / CSRF surface. | ✅ Verified against source. |
 | C9 | **`POSTGRES_HOST_AUTH_METHOD: trust` disables Postgres password auth.** | `docker-compose.yml:17` | DB accessible without credentials. | ✅ Verified against source. |
@@ -187,8 +207,8 @@ Every item below includes a location citation and, for critical/high items, an i
 | H9 | **API key in SSE URL query string** (`?apiKey=...`). Leaks into proxy/access logs. | `redir-engine/src/adapters/sse/sse-client.ts:53,56` |
 | H10 | **Supabase tests pass vacuously.** `try/catch` blocks without `expect.assertions(n)`; `health.test.ts` accepts 200 or 503. | `admin-service/supabase/tests/unit/api/*.ts` |
 | H11 | **Audit duplication + plaintext password in UI.** `audit.ts` and DB trigger duplicate logging; `AuditLog.vue` renders `password_protection.password`; `actor_id` mis-attributed. | `admin-service/supabase/server/utils/audit.ts`; `admin-service/supabase/app/components/AuditLog.vue:60-71`; `admin-service/supabase/schema.sql:400-410` |
-| H12 | **Deploy health checks only warn.** A broken deploy is reported as success. | `scripts/deploy-production.sh:30-33`; `scripts/deploy-staging.sh:21-25` |
-| H13 | **Lint tooling is not enforced.** Root `package.json:30` defines `"lint": "eslint ."`, but CI never invokes it and workspace resolution may be incomplete. | root `package.json:30`; `.github/workflows/ci.yml` |
+| H12 | **Deploy health checks only warn.** A broken deploy is reported as success. **2026-09-29: worse —** the prod check curls `localhost:3001`, a port the prod overlay explicitly removes (`!reset []`); the check always fails yet the script still exits 0. | `scripts/deploy-production.sh:29-34`; `scripts/deploy-staging.sh:20-25` |
+| H13 | **Lint tooling is not enforced.** Root `package.json:30` defines `"lint": "eslint ."`, but CI never invokes it and workspace resolution may be incomplete. **2026-09-29: expanded —** CI uses `npm install` (not `npm ci`), deprecated actions v3, never builds the admin service, and nothing gates `build-push.yml` or the deploy workflows on CI success — the "CI Tests" gate advertised in `cd-pipeline.md:10-13` does not exist. | root `package.json:30`; `.github/workflows/ci.yml` |
 | H14 | **Three divergent copies of the link schema** + inline copies. PocketBase accepts non-URL destinations; slug length inconsistent. | `admin-service/shared/utils/sanitizer.ts`, `admin-service/supabase/server/utils/sanitizer.ts`, `admin-service/pocketbase/server/utils/sanitizer.ts` |
 | H15 | **Public analytics endpoint unauthenticated.** `/api/analytics/v1/collect` has no shared secret; rate-limited by spoofable `x-forwarded-for`. | `admin-service/supabase/server/api/analytics/v1/collect.post.ts:242-250` |
 | H16 | **`login.post.ts` sets `httpOnly: false`** (XSS can steal token); register/logout use `httpOnly: true`. | `admin-service/pocketbase/server/api/auth/login.post.ts:19` |
@@ -209,13 +229,13 @@ Every item below includes a location citation and, for critical/high items, an i
 | M8 | **`case-transformer.ts` is dead code.** AGENTS.md claims snake→camel transformation; not wired. | `admin-service/supabase/server/utils/case-transformer.ts` |
 | M9 | **PocketBase `test` script runs in watch mode.** | `admin-service/pocketbase/package.json` |
 | M10 | **`{{PORT}}` socket file committed at repo root.** | repo root |
-| M11 | **Observability gaps.** No Alertmanager/rules; Grafana datasource no `uid`; Loki uses deprecated `boltdb-shipper`/`v11`; `:latest` images; no Prometheus retention. | `infra/grafana/`, `infra/loki/`, `docker-compose.observability.yml` |
+| M11 | **Observability gaps.** No Alertmanager/rules; Grafana datasource no `uid`; Loki uses deprecated `boltdb-shipper`/`v11`; `:latest` images; no Prometheus retention. **2026-09-29:** Loki config also sets `enforce_metric_name` (removed in Loki 3.x) so the `:latest` stack likely won't boot; external network name hardcoded `url-redir-short_url-redir-net` breaks under podman-compose. | `infra/grafana/`, `infra/loki/`, `docker-compose.observability.yml` |
 | M12 | **No resource limits, `restart`, `read_only`, `cap_drop`** in compose. | `docker-compose.yml`; `docker-compose.prod.yml` |
 | M13 | **`engine_radix_tree_size` metric defined but never populated.** | `redir-engine/src/adapters/metrics/...` |
 | M14 | **`analytics_events` unbounded growth.** No retention/partitioning. | `admin-service/supabase/schema.sql` |
 | M15 | **Schema drift.** `schema.sql` and `20250125000000_baseline.sql` are two sources of truth; RLS permissive on analytics; `unique(slug, domain_id)` allows NULL duplicates. | `admin-service/supabase/schema.sql`; `admin-service/supabase/supabase/migrations/20250125000000_baseline.sql` |
-| M16 | **OpenSpec task status unreliable.** CHANGE-007/011 show 0% but are ~75–80% done; analysis doc stale. | `openspec/tasks.md`; `docs/analysis/openspec-implementation-analysis.md` |
-| M17 | **E2E suite hangs.** `redir-engine/e2e-suite` did not complete; possible deadlock or timeout issue. | `redir-engine/e2e-suite` |
+| M16 | **OpenSpec task status unreliable.** **2026-09-29 quantified:** CHANGE-007 is ~75% implemented vs 0% claimed (Tasks 1–3 largely done); CHANGE-011 ~60% vs 0%; CHANGE-012 ~50% vs 0% (Task 3 fully done, Task 4 half done). The other six active changes are truthfully "not started". | `openspec/changes/*/tasks.md`; `docs/analysis/openspec-implementation-analysis.md` |
+| M17 | **E2E suite hangs.** ~~`redir-engine/e2e-suite` did not complete.~~ **RETIRED (2026-09-29):** not reproduced — the suite is now bounded by timeouts; 726 tests re-run green (175 engine + 191 PocketBase + 360 Supabase, after refreshing a stale `node_modules`). Related risk now tracked as M26 (silent skip). | `redir-engine/e2e-suite` |
 | M18 | **Weak CSP.** Allows `'unsafe-inline'` and `'unsafe-eval'` for scripts. | `admin-service/supabase/server/middleware/security.ts:33` |
 | M19 | **Multi-domain routing not implemented.** `domainId` accepted in port methods but ignored. | `redir-engine/src/adapters/store/in-memory-store.ts` |
 | M20 | **Analytics enrichment lives in Admin, not engine.** Engine sends only `user_agent`; device/geo parsing is server-side. | `redir-engine/src/adapters/analytics/...`; `admin-service/*/server/api/analytics/...` |
@@ -228,7 +248,42 @@ Every item below includes a location citation and, for critical/high items, an i
 | # | Issue | Notes |
 |---|---|---|
 | L1 | **Console logging** in engine/SSE client instead of structured logger. | Prefer the injected logger. |
-| L2 | **`NODE_ENV` branching** in error handler leaks internal errors in dev mode only. | Acceptable but not ideal. |
+| L2 | **NODE_ENV branching** in error handler leaks internal errors in dev mode only. | Acceptable but not ideal. |
+
+### 5.5 New Findings — 2026-09-29 Delta Re-Review
+
+Contributed by the three reviewer agents (§2.4); IDs continue the existing scheme.
+
+**Critical**
+
+| # | Issue | Location | Source |
+|---|---|---|---|
+| C11 | **FR-36/37 click-expiration cannot work end-to-end.** `handle-request.ts:55` requires `rule.clicks`, but `transformer.ts` defines no `clicks` field on `SupabaseLink`/`RedirectRule` — synced rules never expire by clicks while the specs mark FR-36/37 ✅. Falsified ✅ markers corrupt the governance signal (also FR-50/51 per-link 301/302, see H20). | `admin-service/supabase/server/utils/transformer.ts`; `redir-engine/src/use-cases/handle-request.ts:55` | solution-architect |
+| C12 | **Rate limiter fails open + permanent-lock race.** Redis errors fail open (`rate-limit.ts:66-69`, "Open for resiliency?" unanswered — contradicts the constitution's "no endpoint bypasses rate limiting"), and the INCR/EXPIRE pair (`:48-77`) can interleave so a key never expires, permanently locking a client. | `admin-service/supabase/server/utils/rate-limit.ts` | software-crafter |
+
+**High**
+
+| # | Issue | Location | Source |
+|---|---|---|---|
+| H19 | **Standards enforcement is fiction in the admin services.** ~10 production files open with blanket `/* eslint-disable */` (`collect.post.ts:1`, `realtime.ts:1`, `rate-limit.ts:1`, …); 100+ `any` usages; `ANY_USAGE_REPORT.md` required by `AGENTS.md` does not exist; committed `fix-lint.js:19` proves lint failures were mass-suppressed by script, not fixed. | `admin-service/**` | software-crafter |
+| H20 | **FR-50/51 per-link redirect status code hardcoded** to `code: 301` in the transformer — per-link 301/302 selection is certified ✅ in specs but not implemented. | `admin-service/supabase/server/utils/transformer.ts:74` | solution-architect |
+| H21 | **`backup.sh` silent no-op failure.** If docker exists but the `url-redir-db` container is down, the `elif` chain never falls through and the script exits 0 with no backup — false success, RPO blown silently. | `scripts/backup.sh:46-55` | platform-architect |
+| H22 | **`restore.sh` is unsafe as shipped.** Destructive `pg_restore --clean --if-exists` with no confirmation prompt/`--force`, no safety backup of current state, no post-restore validation; stops only admin, not engine — the engine can write analytics mid-restore. | `scripts/restore.sh` | platform-architect + software-crafter |
+| H23 | **`/api/metrics` unauthenticated** with full-path metric labels → cardinality explosion. | `admin-service/supabase/server/api/metrics.get.ts`; `server/plugins/metrics.ts:19` | software-crafter |
+
+**Medium**
+
+| # | Issue | Location | Source |
+|---|---|---|---|
+| M24 | **Prod overlay uses `!reset` YAML tags** (Compose ≥2.24) while the repo's own scripts use podman-compose, which doesn't support them — the documented tooling cannot bring up the prod stack. | `docker-compose.prod.yml:25,28` vs root `package.json:24-29` | platform-architect |
+| M25 | **`docker-entrypoint.sh` export quoting bug** — `export "$secret"=$(cat ...)` corrupts on whitespace/metacharacters in secret files. | `scripts/docker-entrypoint.sh:10` | platform-architect |
+| M26 | **system-e2e silently skips when services are down** — green runs prove nothing without a running stack (test theater; successor to retired M17). | `system-e2e/tests/utils.ts:10-34` | software-crafter |
+| M27 | **Repo-root pollution:** 27 tracked `fix-lint*.js`/`fix-test*.js` scratch scripts plus `scratch/` and `test-results/` committed at root. | repo root | software-crafter |
+| M28 | **Runbook wrong on basics:** health route documented as `/_health` (actual: `/health`), `supabase-db` service (actual: `db`), `db_password.txt` secret (actual: `POSTGRES_PASSWORD.txt`). | `docs/operations/runbook.md:11,52,98` | platform-architect |
+| M29 | **`quick-start.md` broken for fresh operators:** creates secret files compose never mounts, references env vars absent from `.env.example`, calls `deploy-production.sh` without its required tag argument. | `docs/deployment/quick-start.md:50-87` | platform-architect |
+| M30 | **No scheduler owns the backup cron** (`backup-dr.md:39-42`); backups happen only if an operator hand-installed cron. Also: multi-platform-deploy-templates proposal ("zero-code templates") contradicts its own adapter-implementing task list. | `docs/operations/backup-dr.md`; `openspec/changes/multi-platform-deploy-templates/proposal.md:3` | platform-architect |
+
+**Positive verifications (2026-09-29):** 726 tests re-run green (175 engine + 191 PocketBase + 360 Supabase — `COVERAGE_PLAN.md` claim is true); engine `src/` has zero `any`; git secret hygiene excellent (only `secrets/.example/*` tracked); metrics exporters match spec tables exactly.
 
 ---
 
@@ -277,6 +332,8 @@ Strong intent (multi-stage non-root images, file secrets, retention policies, ro
 5. **Fix PocketBase `links` API rules** to `@request.auth.id = owner_id` (C1) — or explicitly deprecate the PocketBase variant for production.
 6. **Make deploy health checks fail the job** on error (H12).
 7. **Fix CORS fail-open** in Supabase `security.ts` — fail closed (C8).
+7a. **(2026-09-29)** Fix the `backup.sh` silent no-op failure path — rebuild as a fallback cascade, exit non-zero on failure (H21).
+7b. **(2026-09-29)** Decide the rate-limiter failure mode (fail-closed on Redis error or documented sign-off) and fix the INCR/EXPIRE permanent-lock race (C12).
 
 ### Phase 1 — Correctness & Durability
 
@@ -288,6 +345,8 @@ Strong intent (multi-stage non-root images, file secrets, retention policies, ro
 13. **Fix or delete the cache eviction subsystem** (H3).
 14. **Hash password-protection passwords** + use `crypto.timingSafeEqual` (H5).
 15. **Fix Supabase test pattern** with `expect.assertions(n)` / `rejects.toThrow` (H10).
+15a. **(2026-09-29)** Make `restore.sh` safe: confirmation prompt / `--force`, safety backup, quiesce the engine, post-restore validation (H22).
+15b. **(2026-09-29)** Sync `clicks` (and per-link status code) through `transformer.ts` so FR-36/37 and FR-50/51 actually work; audit every ✅ spec marker against implementation (C11, H20).
 
 ### Phase 2 — Hardening & CI Discipline
 
@@ -297,6 +356,9 @@ Strong intent (multi-stage non-root images, file secrets, retention policies, ro
 19. **Adopt npm/pnpm workspaces** to kill dep-drift.
 20. **Add compose hardening** — resource limits, `restart`, `read_only`, `cap_drop`; pin observability images; add Alertmanager; fix Grafana datasource `uid`; migrate Loki to `tsdb`.
 21. **Add analytics retention/partitioning** + a shared secret on the ingestion endpoint (H15).
+21a. **(2026-09-29)** Remove blanket `/* eslint-disable */` headers, create `ANY_USAGE_REPORT.md` or fix the `any`s, delete the `fix-*.js` root scripts, and add a lint + `npm ci` gate to CI wired so builds/deploys depend on it (H19, H13, M27).
+21b. **(2026-09-29)** Authenticate `/api/metrics` and use route-pattern (not full-path) metric labels (H23).
+21c. **(2026-09-29)** Fix `docker-entrypoint.sh` export quoting (M25); make system-e2e fail loudly when services are down (M26); correct runbook/quick-start documentation (M28, M29); reconcile CHANGE-007/011/012 checkboxes with reality (M16).
 
 ### Phase 3 — Feature Completion
 
@@ -368,6 +430,11 @@ The following critical/high claims were spot-checked against the current source:
 | C9 | Postgres trust | Read `docker-compose.yml:17`. | ✅ Confirmed: `POSTGRES_HOST_AUTH_METHOD: trust`. |
 | H13 | Lint exists but not enforced | Read root `package.json:30` and `eslint.config.mjs`; checked CI workflow for `npm run lint`. | ✅ Confirmed: script exists; eslint installed at root; not invoked in CI. |
 | M19 | Multi-domain ignored | Read `redir-engine/src/adapters/store/in-memory-store.ts`. | ✅ Confirmed: `domainId` accepted but not used. |
+| C11 | Clicks never synced | Read `admin-service/supabase/server/utils/transformer.ts` vs `redir-engine/src/use-cases/handle-request.ts:55`. | ✅ Confirmed (2026-09-29): no `clicks` field on synced rules. |
+| C12 | Rate limiter fails open + race | Read `admin-service/supabase/server/utils/rate-limit.ts:48-77`. | ✅ Confirmed (2026-09-29). |
+| H19 | Blanket lint suppression | Grep `/* eslint-disable */` across admin services; checked for `ANY_USAGE_REPORT.md`. | ✅ Confirmed (2026-09-29): ~10 files, 100+ `any`s, report absent. |
+| H21 | Backup silent no-op | Read `scripts/backup.sh:46-55` elif cascade. | ✅ Confirmed (2026-09-29): exits 0 with no backup when container is down. |
+| Tests | `COVERAGE_PLAN.md` "726 passing" claim | Re-ran all suites after refreshing stale `node_modules`. | ✅ Confirmed (2026-09-29): 175 engine + 191 PocketBase + 360 Supabase, all green. |
 
 ### B. Reconciliation of `z-review.md` vs `k-review.md`
 
@@ -383,3 +450,19 @@ The following critical/high claims were spot-checked against the current source:
 ### C. Disposition of Partial Review Files
 
 The partial review files (`z-review.md`, `k-review.md`, and `review-crosscheck.md`) have been removed. `review.md` is the single living document and should be updated as the project progresses.
+
+### D. 2026-09-29 Re-Review — Per-Change Verdicts
+
+Full Conventional-Comments findings are embedded as `## Review Log` sections in each file. Summary:
+
+| Change | Verdict | Backlog truthfulness |
+|---|---|---|
+| CHANGE-007 observability-stack | **NEEDS_REVISION** — Tasks 1–3 ~75% done; Task 4 (alerting) 0% | False negative |
+| CHANGE-011 backup-disaster-recovery | **NEEDS_REVISION** — ~60% done; silent-failure paths (H21, H22) | False negative |
+| CHANGE-012 distributed-rate-limiting | **NEEDS_REVISION as written** — Tasks 3–4 ~50–100% done; Task 1 spec ≠ implementation (fixed-window vs sliding window/Lua/factory) | False negative |
+| CHANGE-001 csv-bulk-import | NOT STARTED | Truthful |
+| CHANGE-003 advanced-qr-branding | NOT STARTED | Truthful |
+| CHANGE-013 rbac-sso | NOT STARTED — fix PocketBase tenant isolation (C1) before adding RBAC | Truthful |
+| multi-platform-deploy-templates | **APPROVED as plan** (0% started); reconcile proposal/tasks contradiction; do not start until the Node deploy path it templatizes works | Truthful |
+| supabase-signup-flow | NOT STARTED — endpoint must ship rate-limited from day one | Truthful |
+| usage-quotas | NOT STARTED — TOCTOU quota enforcement flagged; hidden dependency on supabase-signup-flow | Truthful |

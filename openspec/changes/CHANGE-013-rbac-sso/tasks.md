@@ -36,3 +36,15 @@
 - [ ] Auto-create `viewer` role entry on first login
 - [ ] Document Supabase dashboard SSO configuration steps
 - [ ] Integration test: SSO login flow
+
+## Review Log
+
+**Date:** 2026-09-29 · **Reviewer:** nw-software-crafter-reviewer (Kilo)
+**Verdict:** NOT STARTED — backlog status is truthful. No `user_roles` migration, no `rbac.ts` middleware/utilities, no `users.vue` page exist in the codebase.
+
+**Findings (priority order):**
+
+- `issue (blocking):` Sequencing risk: the PocketBase variant ships a cross-tenant authorization bypass today (`admin-service/pocketbase/pb_migrations/1777556624_updated_links.js:7-11` — all rules `@request.auth.id != ""`). Adding RBAC on the Supabase side while the PocketBase side lacks even tenant isolation will diverge the two admin variants further. Fix the PocketBase rules first (→ `@request.auth.id = owner_id` or equivalent), or explicitly descope PocketBase in this change's proposal.
+- `suggestion (non-blocking):` Task 1 filename uses `XXXXXXXX` placeholder — fine, but note that `admin-service/supabase/schema.sql` is the current source of truth; the migration must be reflected there too or schema drift will result.
+- `nitpick (non-blocking):` Task 4 depends on Supabase dashboard configuration that cannot be covered by repo tests — the "Integration test: SSO login flow" checkbox is not automatable as written. Consider marking it manual-verification.
+- `praise:` The role hierarchy (admin > editor > viewer) with a pure `hasPermission()` function and a full permission-matrix test requirement fits the project's pure-function/SOLID conventions exactly.

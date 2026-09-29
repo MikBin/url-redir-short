@@ -62,3 +62,17 @@
 - [ ] 9.2 Ensure all new server utils are covered by unit tests (quota.ts)
 - [ ] 9.3 Document superadmin bootstrapping in `README.md` or deployment docs (how to set first superadmin's `app_metadata.role`)
 - [ ] 9.4 Update `.env.example` with all new variables and comments explaining their purpose
+
+## Review Log
+
+**Date:** 2026-09-29 · **Reviewer:** nw-software-crafter-reviewer (Kilo)
+**Verdict:** NOT STARTED — backlog status is truthful. No `quota.ts` in either service, no quota migrations, no quota UI.
+
+**Findings (priority order):**
+
+- `issue (blocking):` Hidden dependency: Section 3 depends on `supabase-signup-flow` having created `admin-service/supabase/server/api/auth/register.post.ts` (3.2 says "created by supabase-signup-flow"). That change is 0% started. Either sequence this change after it or add a fallback task to create the endpoint here. Track the cross-change dependency explicitly in both proposals.
+- `issue (blocking):` Quota enforcement in 4.1–4.4 has a TOCTOU pattern (count-then-insert without a transaction or DB-level constraint) — two concurrent creates can both pass the check. Enforce with a DB constraint/trigger or a serializable transaction, not just an application-level count.
+- `suggestion (non-blocking):` 2.1's `getUserEffectiveQuota(userId, client)` takes a DB client argument (good purity discipline), but 3.1's `checkDailySignups` counts `auth.users` created since midnight UTC — on Supabase, `auth.users` is not readable by the service role without elevation; verify the service-role client can actually query it or maintain a count column.
+- `suggestion (non-blocking):` Dual-variant scope: every task is duplicated across Supabase and PocketBase. Given the PocketBase variant currently ships a cross-tenant auth bypass (`pb_migrations/1777556624_updated_links.js:7-11`), consider descoping PocketBase quota work until its authorization model is fixed.
+- `nitpick (non-blocking):` 8.2/7.2 reference `admin-service/pocketbase/app/` pages — confirm that directory structure exists as assumed.
+- `praise:` The task breakdown is the most rigorous of the nine active changes: pure-function quota utilities with mocked-client tests, explicit RLS policies, superadmin checks, and both happy-path and at-limit test cases per endpoint.

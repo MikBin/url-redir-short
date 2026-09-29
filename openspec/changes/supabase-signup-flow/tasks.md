@@ -20,3 +20,15 @@
 - [ ] 4.2 Verify security middleware (rate limiting, security headers) is applied to the new `/api/auth/register` endpoint
 - [ ] 4.3 Add `SUPABASE_SERVICE_KEY` to test setup env in `vitest.config.ts` if not already present (it is needed by the register endpoint)
 - [ ] 4.4 Document in `admin-service/supabase/README.md` that magic-link is still used for login; the register endpoint creates the user and sends a login link
+
+## Review Log
+
+**Date:** 2026-09-29 · **Reviewer:** nw-software-crafter-reviewer (Kilo)
+**Verdict:** NOT STARTED — backlog status is truthful. No `server/api/auth/register.post.ts` in the Supabase service, no `register.vue`, no signup link in `login.vue`.
+
+**Findings (priority order):**
+
+- `issue (blocking, security):` Task 1.1 creates an unauthenticated registration endpoint using the service-role client. It must be wired behind the existing rate-limit middleware from day one (4.2 acknowledges this — make it a Task 1 acceptance criterion, not a later verification), and `email_confirm: true` + immediate magic-link send must be reviewed against the security spec's signup requirements. `usage-quotas` Task 3.2 later adds `DAILY_SIGNUP_LIMIT` enforcement — without rate limiting + signup quotas, this endpoint is an account-creation firehose.
+- `suggestion (non-blocking):` 1.3's "unauthenticated request proceeds normally" test phrasing is ambiguous — clarify it means the endpoint is public by design and that auth'd users hitting it still get processed (or are rejected with 400).
+- `nitpick (non-blocking):` 4.3 patches `vitest.config.ts` env for `SUPABASE_SERVICE_KEY` — ensure the test value is a dummy and never a real key; `.env.example` should document it as test-only.
+- `praise:` Task 4.1's explicit "existing magic-link flow completely unchanged" regression gate is exactly the right guardrail for additive auth changes.
