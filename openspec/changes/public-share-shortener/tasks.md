@@ -2,6 +2,8 @@
 
 > **Priority:** sole active goal per `openspec/roadmap.md` (2026-09-30 pivot). All other active changes are postponed until this ships. Governing decision: ADR-007.
 
+> **Security/deployment spec:** implement against `docs/deployment/security-model.md` (variant-invariant trust model, ADR-008) and `docs/deployment/security-profile-pocketbase-cf.md` (this stack's profile) — binding for tasks 1.1, 1.2, 2.1, 2.8, 4.3, 4.4.
+
 ## 1. PocketBase Foundation (gating fixes)
 
 - [ ] 1.1 Fix C1: rewrite all `links` collection rules to owner scope (`user = @request.auth.id` for read/update/delete; create requires authenticated owner or the anonymous-create route) in `pb_migrations` — never `@request.auth.id != ""`
