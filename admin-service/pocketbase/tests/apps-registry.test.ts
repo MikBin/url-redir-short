@@ -43,16 +43,16 @@ describe('apps registry (task 1.4)', () => {
     const source = appsMigrationSource()
 
     for (const app of SEEDED_APPS) {
-      expect(source, `seed row for ${app.appId}`).toContain(`"${app.appId}"`)
-      expect(source).toContain(`"${app.shareHost}"`)
-      expect(source).toContain(`"${app.allowedHost}"`)
+      expect(source, `seed row for ${app.appId}`).toContain(`"app_id":"${app.appId}"`)
+      expect(source).toContain(`"share_host":"${app.shareHost}"`)
+      expect(source).toContain(`"allowed_host":"${app.allowedHost}"`)
       expect(source, `${app.appId} ${app.type} template`).toContain(
         `https://${app.allowedHost}/${app.type}/{contentId}`
       )
     }
 
-    expect(source).toContain('record.set("daily_create_limit", 100)')
-    expect(source).toContain('record.set("active", true)')
+    expect(source).toContain('"daily_create_limit":100')
+    expect(source).toContain('"active":true')
   })
 
   it('enforces unique registry keys', () => {

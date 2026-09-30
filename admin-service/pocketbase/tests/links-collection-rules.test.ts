@@ -31,15 +31,20 @@ describe('links collection rules (task 1.1 / C1 fix)', () => {
     for (const [file, source] of migrationSources()) {
       if (!source.includes('pbc_links')) continue
 
-      const assignments = [...source.matchAll(RULE_ASSIGNMENT)]
-      expect(assignments.length, `${file} must define links rules`).toBeGreaterThan(0)
-
-      for (const assignment of assignments) {
+      for (const assignment of [...source.matchAll(RULE_ASSIGNMENT)]) {
         const key = assignment[1] as string
         const value = assignment[2] as string
         expect(value.trim(), `${file} must lock ${key}`).toBe('null')
       }
     }
+  })
+
+  it('ends the migration chain with an explicit lock on links', () => {
+    const files = readdirSync(migrationsDir).filter((file) => file.endsWith('.js'))
+    expect(
+      files.some((file) => file.endsWith('_locked_links_rules.js')),
+      'the terminal _locked_links_rules.js migration must stay in the chain'
+    ).toBe(true)
   })
 
   it('locks every links rule in pb_schema.json (pb_init source of truth)', () => {

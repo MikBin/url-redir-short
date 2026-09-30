@@ -10,9 +10,9 @@
 - [x] 1.2 Fix H16: set `httpOnly: true` on the login cookie in `admin-service/pocketbase/server/api/auth/login.post.ts`
 - [x] 1.3 Remove the broken analytics endpoints and collections (C5): delete `server/api/analytics/**` writes to the absent `analytics_aggregates`; click analytics move to Analytics Engine (Task 3.4)
 - [x] 1.4 Create `apps` registry collection: `app_id`, `share_host`, `allowed_host`, `url_template` (map of type → template), `daily_create_limit` (default 100), `active`; seed rows for macrolattice, supatrainer, azurechip
-- [ ] 1.5 Extend `links` collection: `app` (relation), `slug` (unique per app), `content_ref` (JSON), `destination_url`, `expires_at`/`last_click_at` (nullable), `created_from_ip` (hashed)
-- [ ] 1.6 Make `pb_init.js`/migrations idempotent (no destructive recreation); fix watch-mode test script (`package.json`)
-- [ ] 1.7 Unit tests: rules enforce owner scope (cross-user CRUD rejected); registry seed validates
+- [x] 1.5 Extend `links` collection: `app` (relation), `slug` (unique per app), `content_ref` (JSON), `destination_url`, `expires_at`/`last_click_at` (nullable), `created_from_ip` (hashed)
+- [x] 1.6 Make `pb_init.js`/migrations idempotent (no destructive recreation); fix watch-mode test script (`package.json`)
+- [x] 1.7 Unit tests: rules enforce owner scope (cross-user CRUD rejected); registry seed validates
 
 ## 2. Anonymous Create Path (PocketBase)
 
