@@ -1,5 +1,8 @@
 # Change Proposal: Backup and Disaster Recovery
 
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred in favor of the `public-share-shortener` goal (which ships a minimal PocketBase ZIP-backup cron of its own). See `openspec/roadmap.md`.
+
 ## Problem
 There is no automated backup strategy for the PostgreSQL database or any disaster recovery plan. Data loss from hardware failure, accidental deletion, or corruption would be unrecoverable.
 

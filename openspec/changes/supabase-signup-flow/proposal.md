@@ -1,3 +1,6 @@
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred with the multi-tenant SaaS direction in favor of the `public-share-shortener` goal (which needs no user accounts at all). See `openspec/roadmap.md`.
+
 ## Why
 
 The Supabase admin service has no user registration page or server-side signup endpoint. Authentication uses magic-link only (`supabase.auth.signInWithOtp`), which implicitly creates new accounts without any server-controlled gate. This blocks quota enforcement (planned in `usage-quotas`) and creates a feature asymmetry with the PocketBase admin service, which has a complete registration flow. A server-mediated signup path is required before any usage limits can be enforced.

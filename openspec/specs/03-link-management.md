@@ -82,16 +82,16 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 
 ### FR-36: Click-Based Link Expiration
 - **Priority:** MUST
-- **Status:** ✅ Implemented
+- **Status:** ⚠️ Partial (corrected 2026-09-30 — was falsely ✅)
 - **Description:** The system MUST support link expiration based on a Maximum Click/Redirect Count.
-- **Implementation:** `maxClicks` and `clicks` fields on `RedirectRule`; checked in `handle-request.ts`
+- **Implementation:** Engine-side check exists (`maxClicks` in `handle-request.ts`), but `transformer.ts` defines no `clicks` field on synced rules, so the check never fires for any engine fed via sync; the engine also never counts clicks (C11, H6 in `review.md`). End-to-end this feature does not work.
 - **UI:** Max Clicks input in `index.vue`
 
 ### FR-37: Eventual Consistency for Click Counts
 - **Priority:** MUST
-- **Status:** ✅ Implemented
+- **Status:** ❌ Not Implemented (corrected 2026-09-30 — was falsely ✅)
 - **Description:** For click-based expiration, Eventual Consistency is acceptable. A slight margin of error (overshoot) is permitted to maintain edge performance.
-- **Implementation:** Click counter updated via async analytics, not locked
+- **Implementation:** No click-count feedback mechanism exists (async counter, decrement, or aggregate reconciliation) — see C11 in `review.md`
 
 ### FR-38: Expired Link Behavior
 - **Priority:** MUST
@@ -133,8 +133,8 @@ Link management covers URL generation (manual and auto), bulk operations (JSON/C
 | FR-33 | ✅ | On-demand API |
 | FR-34 | ❌ | No caching → CHANGE-003 |
 | FR-35 | ✅ | Time-based expiration |
-| FR-36 | ✅ | Click-based expiration |
-| FR-37 | ✅ | Eventual consistency |
+| FR-36 | ⚠️ | Engine check exists; `clicks` never synced → dead end-to-end (C11) |
+| FR-37 | ❌ | No click-count feedback mechanism (C11) |
 | FR-38 | ✅ | Returns 404 when expired |
 | FR-39 | ✅ | Password protection |
 | FR-40 | ✅ | Intermediate HTML form |

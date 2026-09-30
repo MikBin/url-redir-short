@@ -3,6 +3,7 @@
 > [!CAUTION]
 > **This change is currently SUSPENDED.**
 > Recent priority has shifted to limiting admin resource usage (see `usage-quotas`) rather than high-volume redirect rate limiting. Distributed rate limiting is not strictly required at this stage.
+> **2026-09-30:** additionally POSTPONED under the ADR-007 priority pivot (all non-`public-share-shortener` changes deferred; that change layers abuse control at the create path instead — see its `design.md` Decision 5).
 
 ## Problem
 Current rate limiting uses in-memory counters (`server/utils/rate-limit.ts`). This works for single-instance deployments but fails when running multiple Admin Service or Engine instances — each instance maintains independent counters, allowing attackers to bypass limits by hitting different instances.

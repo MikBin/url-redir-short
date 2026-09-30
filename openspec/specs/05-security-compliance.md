@@ -7,15 +7,15 @@ Security requirements cover configurable HTTP redirect status codes, HSTS enforc
 
 ### FR-50: Configurable Redirect Status Code
 - **Priority:** MUST
-- **Status:** ✅ Implemented
+- **Status:** ⚠️ Partial (corrected 2026-09-30 — was falsely ✅)
 - **Description:** The system MUST allow configuring the HTTP redirection status code per link.
-- **Implementation:** `code` field (301 | 302) on `RedirectRule` in `types.ts`
+- **Implementation:** `code` field exists on `RedirectRule` in `types.ts`, but `transformer.ts` hardcodes `code: 301` (schema has no `status_code` column), so per-link selection never reaches any synced engine (H20 in `review.md`)
 
 ### FR-51: Supported Status Codes (301/302)
 - **Priority:** MUST
-- **Status:** ✅ Implemented
+- **Status:** ⚠️ Partial (corrected 2026-09-30 — was falsely ✅)
 - **Description:** Supported status codes MUST include 301 Moved Permanently and 302 Found (Temporary).
-- **Implementation:** TypeScript union type `code: 301 | 302` enforced at type level
+- **Implementation:** TypeScript union type `code: 301 | 302` is enforced at type level only; in practice only 301 is ever emitted through the sync path (H20 in `review.md`)
 
 ### FR-52: Default Status Code (301)
 - **Priority:** MUST
@@ -59,8 +59,8 @@ Security requirements cover configurable HTTP redirect status codes, HSTS enforc
 
 | Requirement | Status | Notes |
 |---|---|---|
-| FR-50 | ✅ | Per-link status code |
-| FR-51 | ✅ | 301 and 302 supported |
+| FR-50 | ⚠️ | Type-level only; transformer hardcodes 301 (H20) |
+| FR-51 | ⚠️ | Only 301 ever flows through sync (H20) |
 | FR-52 | ✅ | Default 301 |
 | FR-53 | ✅ | HSTS enforcement |
 | FR-54 | ✅ | Configurable HSTS headers |

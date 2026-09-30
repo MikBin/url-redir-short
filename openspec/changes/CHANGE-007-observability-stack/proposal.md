@@ -1,5 +1,8 @@
 # Change Proposal: Centralized Observability Stack
 
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred in favor of the `public-share-shortener` goal (which carries its own minimal ops: PB backup cron, Analytics Engine dashboard, runbook). See `openspec/roadmap.md`.
+
 ## Problem
 The system has structured JSON logging via `createLogger()` but no log aggregation, metrics export, or alerting. In production, diagnosing issues across distributed Admin Service and multiple Engine instances requires centralized observability.
 

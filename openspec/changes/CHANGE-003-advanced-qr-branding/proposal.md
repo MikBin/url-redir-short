@@ -1,5 +1,8 @@
 # Change Proposal: Advanced QR Code Branding
 
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred in favor of the `public-share-shortener` goal. See `openspec/roadmap.md`.
+
 ## Problem
 QR code generation currently supports only basic customization (color, size, margin). Users cannot embed logos, adjust error correction levels, or cache generated QR codes for reuse (FR-32, FR-34).
 

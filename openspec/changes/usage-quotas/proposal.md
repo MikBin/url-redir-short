@@ -1,3 +1,6 @@
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred with the multi-tenant SaaS direction in favor of the `public-share-shortener` goal — which ships its own lightweight per-IP create quotas (see `design.md` Open Questions for the future merge). See `openspec/roadmap.md`.
+
 ## Why
 
 During the beta release, both admin services are publicly accessible with no limits on resource consumption. Without guardrails, a small number of users could exhaust database capacity (storage, rows, connections) and drive up hosting costs. We need configurable per-account and system-wide quotas to operate a safe, cost-controlled beta before moving to a paid tier model.

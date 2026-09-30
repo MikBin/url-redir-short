@@ -1,5 +1,8 @@
 # Change Proposal: CSV Bulk Import Format
 
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred in favor of the `public-share-shortener` goal. See `openspec/roadmap.md`.
+
 ## Problem
 The system currently only supports JSON format for bulk import of URL rules (FR-29). Users who manage links in spreadsheets must convert to JSON before importing, creating friction and potential errors.
 

@@ -1,3 +1,6 @@
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred in favor of the `public-share-shortener` goal (which itself fixes the CF deploy path — C3 — that this proposal depends on). See `openspec/roadmap.md`.
+
 ## Why
 
 The redirect engine currently runs on two platforms (VPS/Node.js and Cloudflare Workers), but has no documented or standardized path for deployment to other cloud environments. As the project moves toward client-facing distribution, the lack of multi-platform deployment guidance is a marketability gap — potential clients on AWS, Fly.io, Deno Deploy, or Supabase infrastructure have no clear path to adoption. This change addresses that gap with zero-code deploy templates and a runtime porting guide, deferring the implementation of new runtime adapters to a later phase when client demand validates the investment.

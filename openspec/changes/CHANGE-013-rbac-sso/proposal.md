@@ -1,5 +1,8 @@
 # Change Proposal: RBAC and SSO Authentication
 
+> [!NOTE]
+> **POSTPONED (2026-09-30, ADR-007):** deferred with the multi-tenant SaaS direction in favor of the `public-share-shortener` goal. See `openspec/roadmap.md`.
+
 ## Problem
 The Admin Service uses basic Supabase Auth with no role differentiation. All authenticated users have the same permissions. There is no support for enterprise SSO (SAML, OIDC) or team management.
 
