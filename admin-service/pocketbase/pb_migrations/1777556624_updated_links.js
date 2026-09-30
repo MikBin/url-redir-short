@@ -2,13 +2,13 @@
 migrate((app) => {
   const collection = app.findCollectionByNameOrId("pbc_links")
 
-  // update collection data
+  // C1 fix: lock by default (security-profile-pocketbase-cf.md §4.3)
   unmarshal({
-    "createRule": "@request.auth.id != \"\"",
-    "deleteRule": "@request.auth.id != \"\"",
-    "listRule": "@request.auth.id != \"\"",
-    "updateRule": "@request.auth.id != \"\"",
-    "viewRule": "@request.auth.id != \"\""
+    "createRule": null,
+    "deleteRule": null,
+    "listRule": null,
+    "updateRule": null,
+    "viewRule": null
   }, collection)
 
   return app.save(collection)
@@ -17,11 +17,11 @@ migrate((app) => {
 
   // update collection data
   unmarshal({
-    "createRule": "",
-    "deleteRule": "",
-    "listRule": "",
-    "updateRule": "",
-    "viewRule": ""
+    "createRule": null,
+    "deleteRule": null,
+    "listRule": null,
+    "updateRule": null,
+    "viewRule": null
   }, collection)
 
   return app.save(collection)

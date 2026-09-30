@@ -26,7 +26,7 @@
       { "name": "expires_at", "type": "date" },
       { "name": "max_clicks", "type": "number" }
     ],
-    "listRule": "@request.auth.id = owner_id", "viewRule": "@request.auth.id = owner_id", "createRule": "@request.auth.id != \"\"", "updateRule": "@request.auth.id = owner_id", "deleteRule": "@request.auth.id = owner_id"
+    "listRule": null, "viewRule": null, "createRule": null, "updateRule": null, "deleteRule": null
   },
   {
     "id": "pbc_sessions",
