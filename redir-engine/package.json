@@ -12,6 +12,8 @@
     "test:perf": "vitest run tests/perf/",
     "test:perf:watch": "vitest watch tests/perf/",
     "test:all": "npm run test:unit && npm run test:perf",
+    "test:contracts": "vitest run tests/contracts/",
+    "test:architecture": "vitest run tests/architecture/",
     "test:e2e": "cd e2e-suite && npm test",
     "test:e2e:performance": "cd e2e-suite && npm test -- specs/T12-performance.test.ts",
     "load-test": "tsx load-tests/run.ts"

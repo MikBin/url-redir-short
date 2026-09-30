@@ -1,0 +1,36 @@
+{
+  "combinations": [
+    {
+      "id": "supabase-node",
+      "admin": "supabase",
+      "engineRuntime": "node",
+      "store": "InMemoryStore",
+      "sync": "SSESyncAdapter",
+      "systemE2E": true
+    },
+    {
+      "id": "pocketbase-node",
+      "admin": "pocketbase",
+      "engineRuntime": "node",
+      "store": "InMemoryStore",
+      "sync": "SSESyncAdapter",
+      "systemE2E": false
+    },
+    {
+      "id": "supabase-cf",
+      "admin": "supabase",
+      "engineRuntime": "cf-worker",
+      "store": "CloudflareKVStore",
+      "sync": "NoOpSyncAdapter",
+      "systemE2E": false
+    },
+    {
+      "id": "pocketbase-cf",
+      "admin": "pocketbase",
+      "engineRuntime": "cf-worker",
+      "store": "CloudflareKVStore",
+      "sync": "NoOpSyncAdapter",
+      "systemE2E": false
+    }
+  ]
+}
