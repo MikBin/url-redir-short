@@ -381,7 +381,7 @@ Strong intent (multi-stage non-root images, file secrets, retention policies, ro
 ### Strategic Decisions
 
 - **PocketBase variant:** Decide now whether to invest in fixing it or formally mark it as dev-only/single-user. It is not a near-term production option.
-- **Cloudflare Worker:** Decide whether the CF edge is a current priority. If not, remove the broken CI deploy step until the runtime is hardened.
+- **Cloudflare Worker:** Decide whether the CF edge is a current priority. If not, remove the broken CI deploy step until the runtime is hardened. (Vendor/platform context for this decision: `docs/analysis/fermyon-vs-cloudflare-workers.md` — Fermyon was evaluated and is not a substitute for the CF edge path.)
 - **Monorepo structure:** Move to npm/pnpm workspaces and consolidate duplicated schemas before the codebase grows further.
 
 ### Observability & CI Guardrails

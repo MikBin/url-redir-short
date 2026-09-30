@@ -8,3 +8,5 @@ Point-in-time analytical documents. These capture state as of a specific date an
 | [admin-service-matrix.md](admin-service-matrix.md) | 2026-04-23 | Quick-reference matrix: features, endpoints, schema, decision guide |
 | [multi-engine-analysis.md](multi-engine-analysis.md) | 2026-04-28 (updated 2026-04-29) | Multi-engine / multi-domain feasibility analysis; tracks CHANGE-015 resolutions |
 | [openspec-implementation-analysis.md](openspec-implementation-analysis.md) | 2026-04-27 | OpenSpec vs actual implementation gap analysis (specs 01–06, CHANGE-001–014) |
+| [fermyon-vs-cloudflare-workers.md](fermyon-vs-cloudflare-workers.md) | 2026-09-30 | Fermyon (Spin/Fermyon Cloud) vs Cloudflare Workers for the engine edge runtime: features, pricing, blockers, recommendation |
+| [cloudflare-vs-vps.md](cloudflare-vs-vps.md) | 2026-09-30 | Cloudflare edge (Workers + KV) vs dedicated VPS vs hybrid (CF proxy + VPS) for the redirect hot path: platform limits, pros/cons, decision matrix, recommendation |
