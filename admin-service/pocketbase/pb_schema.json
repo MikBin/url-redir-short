@@ -1,5 +1,19 @@
 [
   {
+    "id": "pbc_apps",
+    "name": "apps",
+    "type": "base",
+    "fields": [
+      { "name": "app_id", "type": "text", "required": true },
+      { "name": "share_host", "type": "text", "required": true },
+      { "name": "allowed_host", "type": "text", "required": true },
+      { "name": "url_template", "type": "json", "required": true },
+      { "name": "daily_create_limit", "type": "number" },
+      { "name": "active", "type": "bool" }
+    ],
+    "listRule": null, "viewRule": null, "createRule": null, "updateRule": null, "deleteRule": null
+  },
+  {
     "id": "pbc_domains",
     "name": "domains",
     "type": "base",
