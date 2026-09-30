@@ -38,17 +38,5 @@
       { "name": "expires_at", "type": "date", "required": true }
     ],
     "listRule": "@request.auth.id = user_id", "viewRule": "@request.auth.id = user_id", "createRule": "@request.auth.id != \"\"", "updateRule": "@request.auth.id = user_id", "deleteRule": "@request.auth.id = user_id"
-  },
-  {
-    "id": "pbc_analytics",
-    "name": "analytics_events",
-    "type": "base",
-    "fields": [
-      { "name": "path", "type": "text", "required": true },
-      { "name": "destination", "type": "text", "required": true },
-      { "name": "timestamp", "type": "date", "required": true },
-      { "name": "link_id", "type": "relation", "collectionId": "pbc_links", "options": { "maxSelect": 1 } }
-    ],
-    "listRule": "@request.auth.id != \"\"", "viewRule": "@request.auth.id != \"\"", "createRule": "@request.auth.id != \"\"", "updateRule": "@request.auth.id != \"\"", "deleteRule": "@request.auth.id != \"\""
   }
 ]

@@ -546,17 +546,6 @@ const fetchLinks = async () => {
   try {
     const data = await $fetch<LinkState[]>('/api/links')
     links.value = data || []
-
-    // Fetch metrics
-    try {
-        const stats = await $fetch<Record<string, number>>('/api/analytics/links/overview')
-        links.value = links.value.map(l => ({
-            ...l,
-            clicks: stats[l.id] || 0
-        }))
-    } catch (e) {
-        console.error('Failed to fetch link stats', e)
-    }
   } catch (error) {
     console.error('Error fetching links:', error)
   }

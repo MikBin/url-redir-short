@@ -29,8 +29,8 @@ async function init() {
     console.log(`Found ${collections.length} collections to initialize.`);
 
     // Order collections based on dependencies:
-    // domains -> links -> analytics_events, analytics_aggregates
-    const order = ['domains', 'links', 'sessions', 'analytics_events', 'analytics_aggregates'];
+    // domains -> links -> sessions
+    const order = ['domains', 'links', 'sessions'];
 
     // Sort collections to match the dependency order
     const orderedCollections = [...collections].sort((a, b) => {

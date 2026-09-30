@@ -3,7 +3,6 @@ import { fnv1a64 } from '../utils/hash'
 import { checkRateLimit } from '../utils/rate-limit'
 
 const rateLimits: Record<string, { limit: number; windowSeconds: number }> = {
-  '/api/analytics': { limit: 100, windowSeconds: 60 },
   '/api/bulk': { limit: 5, windowSeconds: 60 },
   '/api/links': { limit: 30, windowSeconds: 60 },
   '/api/auth': { limit: 10, windowSeconds: 60 },
