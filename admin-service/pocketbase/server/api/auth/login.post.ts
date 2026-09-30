@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     const authData = await pb.collection('users').authWithPassword(email, password);
 
     setCookie(event, 'pb_auth', JSON.stringify({ token: pb.authStore.token, model: pb.authStore.model }), {
-      httpOnly: false, // Allow client-side UI to read login status
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       sameSite: 'lax',

@@ -66,6 +66,17 @@ describe('auth endpoints', () => {
       expect(setCookieMock).toHaveBeenCalledWith(mockEvent, 'pb_auth', expect.any(String), expect.any(Object))
     })
 
+    it('sets the session cookie httpOnly (H16)', async () => {
+      readBodyMock.mockResolvedValueOnce({ email: 'test@example.com', password: 'password123' })
+      pbMock.authWithPassword.mockResolvedValueOnce({ token: 'mock-token', record: { id: 'u1' } })
+
+      await (loginHandler as unknown as Function)(mockEvent)
+
+      expect(setCookieMock).toHaveBeenCalledTimes(1)
+      const options = setCookieMock.mock.calls[0]?.[3] as { httpOnly?: boolean } | undefined
+      expect(options?.httpOnly).toBe(true)
+    })
+
     it('throws 401 if auth fails', async () => {
       readBodyMock.mockResolvedValueOnce({ email: 'test@example.com', password: 'password123' })
       pbMock.authWithPassword.mockRejectedValueOnce(new Error('Invalid credentials'))
