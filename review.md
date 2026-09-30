@@ -380,9 +380,11 @@ Strong intent (multi-stage non-root images, file secrets, retention policies, ro
 
 ### Strategic Decisions
 
-- **PocketBase variant:** Decide now whether to invest in fixing it or formally mark it as dev-only/single-user. It is not a near-term production option.
-- **Cloudflare Worker:** Decide whether the CF edge is a current priority. If not, remove the broken CI deploy step until the runtime is hardened. (Vendor/platform context for this decision: `docs/analysis/fermyon-vs-cloudflare-workers.md` — Fermyon was evaluated and is not a substitute for the CF edge path.)
-- **Monorepo structure:** Move to npm/pnpm workspaces and consolidate duplicated schemas before the codebase grows further.
+- **(2026-09-30 pivot — ADR-007)** The next goal is the **`public-share-shortener`** change (openspec): an anonymous, first-party-allowlisted share shortener for the owner's apps, running on the CF Worker + KV + Analytics Engine edge with **PocketBase as the single backend**. All other active changes are postponed (see `openspec/roadmap.md`). This resolves two standing decisions below and re-scopes the third:
+  - **PocketBase variant:** no longer "fix or mark dev-only" for the SaaS — it becomes the backend of the new goal, with C1 (owner-scoped rules) and H16 as gating tasks inside that change, and the broken analytics (C5) deleted rather than fixed (click analytics move to Analytics Engine).
+  - **Cloudflare Worker:** the edge runtime becomes the *primary* redirect path for this product direction; C3/H8 fixes are scoped inside `public-share-shortener`, superseding the earlier "remove the broken CI deploy step / park the runtime" stance (`docs/analysis/cloudflare-vs-vps.md` §9 remains valid for the postponed SaaS direction).
+  - **Supabase SaaS path:** Phase 0 below stays valid but is postponed with everything else; re-prioritize only if/when that direction resumes.
+- **Monorepo structure:** Move to npm/pnpm workspaces and consolidate duplicated schemas before the codebase grows further. *(Postponed with the rest; still valid when work resumes.)*
 
 ### Observability & CI Guardrails
 

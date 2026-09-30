@@ -2,20 +2,23 @@
 
 > Changes still to be implemented (archived ones excluded).
 
+> **⚠️ 2026-09-30 priority pivot (ADR-007):** the **sole active goal** is `public-share-shortener` — the anonymous first-party share shortener (CF Worker + KV + Analytics Engine + PocketBase backend). **All other active changes below are POSTPONED** until it ships; their dependency graph is kept frozen for when planning resumes. Nothing in the postponed set blocks or gates `public-share-shortener`; its own gating fixes (C1, H16, C3, H8, C5-deletion) are scoped inside it.
+
 ```mermaid
 flowchart TD
     %% ── Nodes ──────────────────────────────────────────────────────────
-    C001["CHANGE-001\nCSV Bulk Import"]
-    C003["CHANGE-003\nAdvanced QR Branding"]
-    C007["CHANGE-007\nObservability Stack"]
-    C011["CHANGE-011\nBackup & Disaster Recovery"]
+    PSS["public-share-shortener\nNEXT GOAL — anonymous first-party\nshare shortener (ADR-007)"]
+    C001["CHANGE-001\nCSV Bulk Import\n(POSTPONED)"]
+    C003["CHANGE-003\nAdvanced QR Branding\n(POSTPONED)"]
+    C007["CHANGE-007\nObservability Stack\n(POSTPONED)"]
+    C011["CHANGE-011\nBackup & Disaster Recovery\n(POSTPONED)"]
     C012["CHANGE-012\nDistributed Rate Limiting\n(SUSPENDED)"]
-    C013["CHANGE-013\nRBAC & SSO"]
-    SSF["supabase-signup-flow\nServer-side Registration"]
-    UQ["usage-quotas\nUsage Quota Engine"]
-    MPD["multi-platform-deploy-templates\nRuntime Portability & Deploy Templates"]
+    C013["CHANGE-013\nRBAC & SSO\n(POSTPONED)"]
+    SSF["supabase-signup-flow\nServer-side Registration\n(POSTPONED)"]
+    UQ["usage-quotas\nUsage Quota Engine\n(POSTPONED)"]
+    MPD["multi-platform-deploy-templates\nRuntime Portability & Deploy Templates\n(POSTPONED)"]
 
-    %% ── Dependencies ───────────────────────────────────────────────────
+    %% ── Dependencies (frozen while postponed) ──────────────────────────
     SSF --> UQ
     UQ  --> C013
 
@@ -23,44 +26,30 @@ flowchart TD
     C012 -.->|Suspended| C007
 
     %% ── Styling ────────────────────────────────────────────────────────
-    classDef betaReady   fill:#1e3a5f,stroke:#4a90d9,color:#e0f0ff
-    classDef infra       fill:#2a1e3f,stroke:#9b59b6,color:#f0e6ff
-    classDef feature     fill:#1e3f2a,stroke:#27ae60,color:#e6fff0
-    classDef standalone  fill:#3f2a1e,stroke:#e67e22,color:#fff3e0
+    classDef active      fill:#1a3d2a,stroke:#27ae60,color:#e6fff0,stroke-width:3px
     classDef suspended   fill:#333333,stroke:#666666,color:#999999,stroke-dasharray: 5 5
 
-    class SSF,UQ,C013 betaReady
-    class C007,C011 infra
+    class PSS active
+    class SSF,UQ,C013,C007,C011,C003,C001,MPD suspended
     class C012 suspended
-    class C003,C001 feature
-    class MPD standalone
 ```
 
 ## Legend
 
 | Colour | Group | Rationale |
 |--------|-------|-----------|
-| 🔵 Blue | **Beta Readiness** | Must ship before / during public beta: signup gate → quota enforcement → RBAC |
-| 🟣 Purple | **Infrastructure** | Ops hardening: distributed rate limiting feeds observability; observability gates backup strategy |
-| 🟢 Green | **Feature Expansion** | Value-add features with no hard upstream deps (CSV bulk import, QR branding) |
-| 🟠 Orange | **Standalone** | Multi-platform deploy templates — infrastructure-adjacent but fully independent |
+| 🟢 Green (solid) | **Active goal** | `public-share-shortener` — the only change in execution; see ADR-007 and its `tasks.md` |
+| ⚫ Grey (dashed) | **Postponed / suspended** | All remaining changes: deferred by the 2026-09-30 pivot (or previously suspended). Dependency edges retained, frozen, for resumed planning |
 
 ## Dependency Notes
 
-### Beta Readiness chain (strict precedence)
-1. **`supabase-signup-flow`** — prerequisite for everything else in this chain; adds the server-side registration endpoint that quota and RBAC hooks attach to.
-2. **`usage-quotas`** — depends on `supabase-signup-flow` (Supabase stack) to wire quota checks at registration; can proceed in parallel for the PocketBase stack.
-3. **`CHANGE-013` (RBAC & SSO)** — logically follows quotas; once per-user limits exist, role-based permission boundaries are the next layer of access control.
+### Active goal (2026-09-30 → ship)
+1. **`public-share-shortener`** — anonymous first-party share shortener for the owner's apps. Supersedes all priorities. Owns its gating fixes: PocketBase C1/H16/C5-deletion, Worker C3/H8, host-keyed KV routing (sidesteps M19), read-through fallback, Turnstile/quota/circuit-breaker/expiry layers. Estimated ~7–10 focused days.
 
-### Infrastructure chain (loose precedence)
-1. **`CHANGE-012`** (Distributed Rate Limiting) — **[SUSPENDED]** Replaces in-memory limiters with Redis. Priority has shifted to admin usage limits.
-2. **`CHANGE-007`** (Observability Stack) — Best implemented after distributed rate limiting is in place (or if decided otherwise) so dashboards capture cross-instance metrics.
-3. **`CHANGE-011`** (Backup & DR) — depends on a stable, observable system; the backup health alerting plugs into the monitoring stack from CHANGE-007.
-
-### Independent changes
-- **`CHANGE-001`** (CSV Bulk Import) — admin UI feature, no upstream deps.
-- **`CHANGE-003`** (Advanced QR Branding) — UI/storage feature, no upstream deps.
-- **`multi-platform-deploy-templates`** — engine portability docs and new runtimes; touches no shared state with any other change.
+### Postponed chains (frozen; resume planning after the active goal ships)
+1. **Beta Readiness chain**: `supabase-signup-flow` → `usage-quotas` → `CHANGE-013` (RBAC & SSO) — belongs to the multi-tenant SaaS direction, which the pivot defers in full.
+2. **Infrastructure chain**: `CHANGE-012` (suspended) → `CHANGE-007` (observability) → `CHANGE-011` (backup & DR). Note: `public-share-shortener` carries its own minimal ops (PB ZIP backup cron, Analytics Engine dashboard, runbook) and does not wait on these.
+3. **Independent features**: `CHANGE-001` (CSV import), `CHANGE-003` (QR branding), `multi-platform-deploy-templates` — all deferred; the deploy-templates proposal additionally advised fixing the CF deploy path first, which the active goal now does.
 
 ## Review Log
 
