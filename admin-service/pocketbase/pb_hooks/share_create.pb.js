@@ -39,6 +39,30 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
+  // Task 2.5: global circuit breaker. Checked before any create work so a
+  // paused system rejects every well-formed request with 503 — including
+  // requests without a Turnstile token — while clicks never touch PocketBase
+  // and remain unaffected. The flag lives in a T0-locked system_config row;
+  // an absent row means "not paused" (seed default).
+  let breakerRaw = null
+  try {
+    const breakerRecord = $app.findFirstRecordByFilter(
+      "system_config",
+      "key = '" + share.BREAKER_FLAG_KEY + "'"
+    )
+    breakerRaw = breakerRecord.getString("value")
+  } catch {
+    // Absent row means "not configured" -> stays null (not paused).
+  }
+
+  const breaker = share.evaluateCircuitBreaker(breakerRaw)
+  if (!breaker.ok) {
+    return e.json(503, {
+      code: breaker.code,
+      message: breaker.message
+    })
+  }
+
   const turnstile = share.verifyTurnstileToken(share.extractTurnstileToken(body), {
     secret: $os.getenv("TURNSTILE_SECRET"),
     verifyUrl: $os.getenv("TURNSTILE_VERIFY_URL"),
@@ -185,8 +209,8 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.5-2.9): circuit breaker, slug, persist (with the hashed IP
-  // that task 2.4 already keys the quota on), KV publish.
+  // TODO(tasks 2.6-2.9): slug, persist (with the hashed IP that task 2.4
+  // already keys the quota on), KV publish.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"

@@ -33,6 +33,10 @@ const QUOTA_IP_2 = '198.51.100.78'
 const QUOTA_OWNER_EMAIL = 'ci-share-owner@example.com'
 const QUOTA_OWNER_PASSWORD = 'ci-share-owner-password'
 
+const BREAKER_MULTIPLIER = '2'
+const BREAKER_THRESHOLD = 2 * 10
+const BREAKER_SEEDED_LINKS = 30
+
 const VALID_REFERENCE = {
   appId: 'macrolattice',
   type: 'meal',
@@ -121,6 +125,30 @@ interface AuthResponse {
   token: string
 }
 
+interface SystemConfigRecord {
+  id: string
+  key: string
+  value: unknown
+}
+
+interface SystemConfigList {
+  items: SystemConfigRecord[]
+}
+
+interface CronJob {
+  id: string
+  expression: string
+}
+
+interface LogRecord {
+  id: string
+  message: string
+}
+
+interface LogList {
+  items: LogRecord[]
+}
+
 function resolveBinary(): string | null {
   const candidate = process.env['POCKETBASE_BIN']?.trim() || 'pocketbase'
   const probe = spawnSync(candidate, ['--version'], { encoding: 'utf8' })
@@ -164,7 +192,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.5)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -270,6 +298,68 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () =
     await readJsonBody<unknown>(response)
   }
 
+  const findBreakerRecord = async (): Promise<SystemConfigRecord> => {
+    const filter = encodeURIComponent("key='public_creation_paused'")
+    const response = await fetch(
+      `${baseUrl}/api/collections/system_config/records?perPage=1&filter=${filter}`,
+      { headers: { Authorization: superuserToken } }
+    )
+    const list = await readJsonBody<SystemConfigList>(response)
+    const record = list.items[0]
+    if (record === undefined) throw new Error('system_config breaker row was not seeded')
+    return record
+  }
+
+  const setBreakerFlag = async (value: unknown): Promise<void> => {
+    const record = await findBreakerRecord()
+    const response = await fetch(`${baseUrl}/api/collections/system_config/records/${record.id}`, {
+      method: 'PATCH',
+      headers: superuserHeaders(),
+      body: JSON.stringify({ value })
+    })
+    await readJsonBody<unknown>(response)
+  }
+
+  const latestBreakerRunId = async (): Promise<string | null> => {
+    const filter = encodeURIComponent("message ~ 'share circuit breaker job finished'")
+    const response = await fetch(
+      `${baseUrl}/api/logs?perPage=5&sort=-created&filter=${filter}`,
+      { headers: { Authorization: superuserToken } }
+    )
+    const list = await readJsonBody<LogList>(response)
+    return list.items[0]?.id ?? null
+  }
+
+  const runBreakerJob = async (): Promise<void> => {
+    // The /api/crons trigger returns immediately and runs the job on another
+    // goroutine, so wait for the job's own completion log entry instead of
+    // racing it (the log line is also the ops trail for the daily run).
+    const previousRunId = await latestBreakerRunId()
+    const response = await fetch(`${baseUrl}/api/crons/share_breaker_daily`, {
+      method: 'POST',
+      headers: { Authorization: superuserToken }
+    })
+    if (response.status !== 204) {
+      throw new Error(`Breaker cron run failed with HTTP ${response.status}`)
+    }
+
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      const currentRunId = await latestBreakerRunId()
+      if (currentRunId !== null && currentRunId !== previousRunId) return
+      await new Promise<void>((resolve) => setTimeout(resolve, 150))
+    }
+    throw new Error('Breaker baseline job did not report completion within 15s')
+  }
+
+  const countLinks = async (): Promise<number> => {
+    const response = await fetch(`${baseUrl}/api/collections/links/records?perPage=1`, {
+      headers: { Authorization: superuserToken }
+    })
+    const list = await readJsonBody<RecordList>(response)
+    return list.totalItems
+  }
+
   beforeAll(async () => {
     const pb = requireBinary()
 
@@ -308,7 +398,8 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () =
           ...process.env,
           TURNSTILE_SECRET,
           TURNSTILE_VERIFY_URL: siteverifyUrl,
-          IP_HASH_SALT
+          IP_HASH_SALT,
+          BREAKER_MULTIPLIER
         }
       }
     )
@@ -342,7 +433,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () =
     expect(response.status).toBe(501)
   })
 
-  it('fails closed with 501 until tasks 2.5-2.9 complete the pipeline', async () => {
+  it('fails closed with 501 until tasks 2.6-2.9 complete the pipeline', async () => {
     const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
 
     expect(response.status).toBe(501)
@@ -595,5 +686,97 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () =
     expect(response.status).toBe(503)
     const payload = await errorPayload(response)
     expect(payload.code).toBe('quota_unavailable')
+  })
+
+  it('seeds a locked system_config collection with the breaker flag off (task 2.5)', async () => {
+    const anonymous = await fetch(`${baseUrl}/api/collections/system_config/records?perPage=1`)
+    expect(anonymous.status).toBe(403)
+
+    const record = await findBreakerRecord()
+    expect(record.key).toBe('public_creation_paused')
+    expect(record.value).toBe(false)
+
+    const anonymousPatch = await fetch(
+      `${baseUrl}/api/collections/system_config/records/${record.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: true })
+      }
+    )
+    expect(anonymousPatch.status).toBe(403)
+  })
+
+  it('registers the daily breaker baseline job (task 2.5)', async () => {
+    const response = await fetch(`${baseUrl}/api/crons`, {
+      headers: { Authorization: superuserToken }
+    })
+    const jobs = await readJsonBody<CronJob[]>(response)
+
+    const job = jobs.find((entry) => entry.id === 'share_breaker_daily')
+    expect(job).toBeDefined()
+    expect(job?.expression).toBe('0 0 * * *')
+  })
+
+  it('trips the breaker above the baseline multiple and rejects creates with 503 (task 2.5)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+
+    // Below the floor-scaled threshold: the job must not trip.
+    await runBreakerJob()
+    expect((await findBreakerRecord()).value).toBe(false)
+
+    const hash = hashIp('203.0.113.250')
+    for (let i = 1; i <= BREAKER_SEEDED_LINKS; i++) {
+      await seedLink(app.id, ownerId, `breaker-seed-${i}`, hash)
+    }
+    expect(await countLinks()).toBeGreaterThan(BREAKER_THRESHOLD)
+
+    await runBreakerJob()
+    expect((await findBreakerRecord()).value).toBe(true)
+
+    const linksBefore = await countLinks()
+    siteverifyCalls.length = 0
+
+    const validToken = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
+    expect(validToken.status).toBe(503)
+    expect((await errorPayload(validToken)).code).toBe('creation_paused')
+    expect(validToken.headers.get('access-control-allow-origin')).toBe(APP_ORIGINS[0])
+    expect(validToken.headers.get('cache-control')).toBe('no-store')
+
+    // The kill switch runs before the Turnstile gate: a paused system sheds
+    // load without calling siteverify, and every request sees 503.
+    const missingToken = await postCreate(createBody(VALID_REFERENCE, null), APP_ORIGINS[0])
+    expect(missingToken.status).toBe(503)
+    expect((await errorPayload(missingToken)).code).toBe('creation_paused')
+    expect(siteverifyCalls).toHaveLength(0)
+
+    // The breaker also precedes the quota, so an exhausted IP sees 503.
+    const exhaustedIp = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0], {
+      'CF-Connecting-IP': QUOTA_IP
+    })
+    expect(exhaustedIp.status).toBe(503)
+
+    expect(await countLinks()).toBe(linksBefore)
+  }, 60_000)
+
+  it('fails closed while the flag value is malformed (task 2.5)', async () => {
+    await setBreakerFlag('paused')
+
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
+    expect(response.status).toBe(503)
+    expect((await errorPayload(response)).code).toBe('breaker_unavailable')
+
+    await setBreakerFlag(false)
+  })
+
+  it('lets the admin reset the breaker and creates resume (task 2.5)', async () => {
+    await setBreakerFlag(true)
+    expect((await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])).status).toBe(503)
+
+    await setBreakerFlag(false)
+    const resumed = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
+    expect(resumed.status).toBe(501)
+    expect((await findBreakerRecord()).value).toBe(false)
   })
 })

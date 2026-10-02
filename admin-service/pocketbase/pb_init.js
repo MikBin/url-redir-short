@@ -36,7 +36,7 @@ async function init() {
 
     // Order collections based on dependencies:
     // apps -> domains -> links -> sessions
-    const order = ['apps', 'domains', 'links', 'sessions'];
+    const order = ['apps', 'domains', 'links', 'sessions', 'system_config'];
 
     // Sort collections to match the dependency order
     const orderedCollections = [...collections].sort((a, b) => {

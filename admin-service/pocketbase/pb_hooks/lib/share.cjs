@@ -30,6 +30,16 @@ const IP_HASH_PATTERN = /^[0-9a-f]{64}$/
 const CLIENT_IP_PATTERN = /^[0-9a-fA-F:.]+$/
 const QUOTA_QUERY_EXPRESSION = 'app = {:app} AND created_from_ip = {:ip} AND created >= {:since}'
 
+const SYSTEM_CONFIG_COLLECTION = 'system_config'
+const BREAKER_FLAG_KEY = 'public_creation_paused'
+const DEFAULT_BREAKER_MULTIPLIER = 3
+const DEFAULT_BREAKER_BASELINE_DAYS = 7
+const DEFAULT_BREAKER_MIN_BASELINE = 10
+const MAX_BREAKER_BASELINE_DAYS = 365
+const TODAY_CREATES_QUERY_EXPRESSION = 'created >= {:since}'
+const BASELINE_CREATES_QUERY_EXPRESSION = 'created >= {:since} AND created < {:until}'
+const MILLISECONDS_PER_DAY = 86400000
+
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 const HOSTNAME_LABEL_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 const NUMERIC_HOST_PATTERN = /^\d+(\.\d+)*$/
@@ -568,17 +578,13 @@ function hashClientIp(ip, salt, hash) {
   return digest
 }
 
+function pbDay(date) {
+  return formatPbDateTime(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), 0, 0, 0, 0)
+}
+
 function utcDayStart(now) {
   if (!isDateLike(now)) return null
-  return formatPbDateTime(
-    now.getUTCFullYear(),
-    now.getUTCMonth() + 1,
-    now.getUTCDate(),
-    0,
-    0,
-    0,
-    0
-  )
+  return pbDay(now)
 }
 
 function nextUtcMidnight(now) {
@@ -640,6 +646,212 @@ function evaluateDailyQuota(input) {
   return { ok: true, used: used, limit: limit, remaining: limit - used }
 }
 
+// Task 2.5: global circuit breaker. The flag lives in a T0-locked
+// `system_config` row (`public_creation_paused`); the create hook checks it
+// before any create work and returns 503 while paused. `value` is a JSON field,
+// so the JSVM hands it back as raw text (`"true"`/`"false"`) via getString;
+// booleans are accepted too so the helpers stay pure and directly unit-testable.
+function parseBreakerFlag(value) {
+  if (value === true || value === false) return value
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === 'true') return true
+    if (trimmed === 'false') return false
+  }
+
+  return null
+}
+
+function evaluateCircuitBreaker(value) {
+  // An absent row (`undefined`/`null`) means the flag was never configured:
+  // default to not paused, mirroring the seeded `false`.
+  if (value === undefined || value === null) {
+    return { ok: true, paused: false }
+  }
+
+  const paused = parseBreakerFlag(value)
+  if (paused === null) {
+    return {
+      ok: false,
+      code: 'breaker_unavailable',
+      message: 'Circuit breaker flag is not a boolean'
+    }
+  }
+
+  if (paused) {
+    return {
+      ok: false,
+      code: 'creation_paused',
+      message: 'Public creation is paused by the circuit breaker'
+    }
+  }
+
+  return { ok: true, paused: false }
+}
+
+function parseBreakerMultiplier(value) {
+  let parsed = null
+  if (typeof value === 'number') {
+    parsed = value
+  } else if (typeof value === 'string' && value.trim().length > 0) {
+    parsed = Number(value)
+  }
+
+  if (parsed === null || !isFinite(parsed) || parsed <= 0) return null
+  return parsed
+}
+
+function breakerBaselineWindow(now, days) {
+  if (!isDateLike(now)) return null
+  if (!isInteger(days) || days < 1 || days > MAX_BREAKER_BASELINE_DAYS) return null
+
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0))
+  const start = new Date(end.getTime() - days * MILLISECONDS_PER_DAY)
+  return { since: pbDay(start), until: pbDay(end) }
+}
+
+function evaluateBreakerTrip(input) {
+  if (!isPlainObject(input)) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'breaker input must be an object' }
+  }
+
+  const todayCreates = input.todayCreates
+  const baselineTotal = input.baselineTotal
+  const baselineDays = input.baselineDays
+  const multiplier = input.multiplier
+  const minimumBaseline = input.minimumBaseline
+
+  if (!isInteger(todayCreates) || todayCreates < 0) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'todayCreates must be a non-negative integer' }
+  }
+  if (!isInteger(baselineTotal) || baselineTotal < 0) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'baselineTotal must be a non-negative integer' }
+  }
+  if (!isInteger(baselineDays) || baselineDays < 1 || baselineDays > MAX_BREAKER_BASELINE_DAYS) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'baselineDays must be a positive integer' }
+  }
+  if (typeof multiplier !== 'number' || !isFinite(multiplier) || multiplier <= 0) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'multiplier must be a positive number' }
+  }
+  if (!isInteger(minimumBaseline) || minimumBaseline < 0) {
+    return { ok: false, code: 'breaker_input_invalid', message: 'minimumBaseline must be a non-negative integer' }
+  }
+
+  const baselineDaily = baselineTotal / baselineDays
+  // The floor keeps a quiet (or brand-new) system from tripping on trivially
+  // small counts: multiplier is applied to max(trailing average, floor).
+  const effectiveBaseline = Math.max(baselineDaily, minimumBaseline)
+  const threshold = multiplier * effectiveBaseline
+
+  return {
+    ok: true,
+    trip: todayCreates > threshold,
+    todayCreates: todayCreates,
+    baselineTotal: baselineTotal,
+    baselineDays: baselineDays,
+    baselineDaily: baselineDaily,
+    effectiveBaseline: effectiveBaseline,
+    threshold: threshold
+  }
+}
+
+function runBreakerBaselineJob(input) {
+  const invalid = {
+    ok: false,
+    code: 'breaker_job_input_invalid',
+    message: 'breaker job input is invalid'
+  }
+
+  if (!isPlainObject(input)) return invalid
+  if (!isDateLike(input.now)) return invalid
+  if (typeof input.currentPaused !== 'boolean') return invalid
+  if (typeof input.countCreates !== 'function') return invalid
+  if (typeof input.trip !== 'function') return invalid
+  if (!isInteger(input.baselineDays) || input.baselineDays < 1 || input.baselineDays > MAX_BREAKER_BASELINE_DAYS) {
+    return invalid
+  }
+  if (typeof input.multiplier !== 'number' || !isFinite(input.multiplier) || input.multiplier <= 0) {
+    return invalid
+  }
+  if (!isInteger(input.minimumBaseline) || input.minimumBaseline < 0) return invalid
+
+  // Never auto-reset: the operator owns the reset via the admin UI.
+  if (input.currentPaused) {
+    return { ok: true, tripped: false, skipped: 'already_paused' }
+  }
+
+  const window = breakerBaselineWindow(input.now, input.baselineDays)
+  if (window === null) return invalid
+
+  let todayCreates = -1
+  let baselineTotal = -1
+  try {
+    todayCreates = input.countCreates(utcDayStart(input.now), null)
+    baselineTotal = input.countCreates(window.since, window.until)
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'breaker_job_count_failed',
+      message: 'Circuit breaker baseline could not be computed'
+    }
+  }
+
+  const decision = evaluateBreakerTrip({
+    todayCreates: todayCreates,
+    baselineTotal: baselineTotal,
+    baselineDays: input.baselineDays,
+    multiplier: input.multiplier,
+    minimumBaseline: input.minimumBaseline
+  })
+  if (!decision.ok) {
+    return {
+      ok: false,
+      code: 'breaker_job_count_failed',
+      message: 'Circuit breaker baseline could not be computed'
+    }
+  }
+  if (!decision.trip) {
+    return {
+      ok: true,
+      tripped: false,
+      todayCreates: decision.todayCreates,
+      baselineTotal: decision.baselineTotal,
+      baselineDaily: decision.baselineDaily,
+      effectiveBaseline: decision.effectiveBaseline,
+      threshold: decision.threshold
+    }
+  }
+
+  try {
+    input.trip({
+      todayCreates: decision.todayCreates,
+      baselineTotal: decision.baselineTotal,
+      baselineDays: decision.baselineDays,
+      baselineDaily: decision.baselineDaily,
+      effectiveBaseline: decision.effectiveBaseline,
+      threshold: decision.threshold,
+      multiplier: input.multiplier
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'breaker_job_trip_failed',
+      message: 'Circuit breaker flag could not be set'
+    }
+  }
+
+  return {
+    ok: true,
+    tripped: true,
+    todayCreates: decision.todayCreates,
+    baselineTotal: decision.baselineTotal,
+    baselineDaily: decision.baselineDaily,
+    effectiveBaseline: decision.effectiveBaseline,
+    threshold: decision.threshold
+  }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -662,5 +874,18 @@ module.exports = {
   utcDayStart: utcDayStart,
   nextUtcMidnight: nextUtcMidnight,
   dailyQuotaQuery: dailyQuotaQuery,
-  evaluateDailyQuota: evaluateDailyQuota
+  evaluateDailyQuota: evaluateDailyQuota,
+  SYSTEM_CONFIG_COLLECTION: SYSTEM_CONFIG_COLLECTION,
+  BREAKER_FLAG_KEY: BREAKER_FLAG_KEY,
+  DEFAULT_BREAKER_MULTIPLIER: DEFAULT_BREAKER_MULTIPLIER,
+  DEFAULT_BREAKER_BASELINE_DAYS: DEFAULT_BREAKER_BASELINE_DAYS,
+  DEFAULT_BREAKER_MIN_BASELINE: DEFAULT_BREAKER_MIN_BASELINE,
+  TODAY_CREATES_QUERY_EXPRESSION: TODAY_CREATES_QUERY_EXPRESSION,
+  BASELINE_CREATES_QUERY_EXPRESSION: BASELINE_CREATES_QUERY_EXPRESSION,
+  parseBreakerFlag: parseBreakerFlag,
+  evaluateCircuitBreaker: evaluateCircuitBreaker,
+  parseBreakerMultiplier: parseBreakerMultiplier,
+  breakerBaselineWindow: breakerBaselineWindow,
+  evaluateBreakerTrip: evaluateBreakerTrip,
+  runBreakerBaselineJob: runBreakerBaselineJob
 }

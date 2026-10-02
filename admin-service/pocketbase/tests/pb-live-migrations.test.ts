@@ -44,6 +44,15 @@ interface AuthResponse {
   token: string
 }
 
+interface SystemConfigRecord {
+  key: string
+  value: unknown
+}
+
+interface SystemConfigList {
+  items: SystemConfigRecord[]
+}
+
 function resolveBinary(): string | null {
   const candidate = process.env['POCKETBASE_BIN']?.trim() || 'pocketbase'
   const probe = spawnSync(candidate, ['--version'], { encoding: 'utf8' })
@@ -192,6 +201,33 @@ describe.skipIf(binary === null)('live PocketBase migration chain (task 1.6 beha
       expect(record.active).toBe(true)
       expect(record.daily_create_limit).toBe(100)
     }
+  })
+
+  it('creates the locked system_config collection with the breaker flag off (task 2.5)', async () => {
+    const collectionResponse = await fetch(`${baseUrl}/api/collections/system_config`, {
+      headers: { Authorization: authToken }
+    })
+    const collection = await readJsonBody<CollectionInfo>(collectionResponse)
+
+    for (const field of ['key', 'value', 'created', 'updated']) {
+      expect(collection.fields.map((entry) => entry.name), `system_config.${field}`).toContain(field)
+    }
+    expect(collection.listRule).toBeNull()
+    expect(collection.viewRule).toBeNull()
+    expect(collection.createRule).toBeNull()
+    expect(collection.updateRule).toBeNull()
+    expect(collection.deleteRule).toBeNull()
+
+    const recordsResponse = await fetch(`${baseUrl}/api/collections/system_config/records?perPage=50`, {
+      headers: { Authorization: authToken }
+    })
+    const records = await readJsonBody<SystemConfigList>(recordsResponse)
+    expect(records.items).toHaveLength(1)
+    expect(records.items[0]?.key).toBe('public_creation_paused')
+    expect(records.items[0]?.value).toBe(false)
+
+    const anonymous = await fetch(`${baseUrl}/api/collections/system_config/records?perPage=1`)
+    expect(anonymous.status).toBe(403)
   })
 
   it('rejects anonymous listing of links (locked rules, fail closed)', async () => {
