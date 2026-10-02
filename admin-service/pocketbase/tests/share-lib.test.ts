@@ -22,16 +22,50 @@ type OriginDecision =
 
 type UrlResult = { ok: true; destination: string } | { ok: false; code: string; message: string }
 
+type TurnstileResult =
+  | { ok: true }
+  | { ok: false; code: string; reason?: string; message: string }
+
+interface SiteverifyCall {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string
+  timeout: number
+}
+
+interface SiteverifyMock {
+  calls: SiteverifyCall[]
+  send: (config: SiteverifyCall) => unknown
+}
+
 interface ShareLib {
   CREATE_PATH: string
   MAX_DESTINATION_LENGTH: number
   KNOWN_SHORTENER_HOSTS: string[]
+  TURNSTILE_TOKEN_FIELD: string
+  DEFAULT_TURNSTILE_VERIFY_URL: string
+  MAX_TURNSTILE_TOKEN_LENGTH: number
   normalizeOrigin: (origin: unknown) => string
   parseContentReference: (body: unknown) => ParseResult
   resolveAllowedOrigins: (rows: unknown) => string[]
   decideOrigin: (origin: unknown, allowedOrigins: string[]) => OriginDecision
+  extractTurnstileToken: (body: unknown) => string | null
+  interpretSiteverify: (response: unknown) => TurnstileResult
+  verifyTurnstileToken: (token: unknown, deps: unknown) => TurnstileResult
   renderDestination: (template: unknown, reference: unknown) => UrlResult
   validateDestination: (destination: unknown, allowedHost: unknown) => UrlResult
+}
+
+function createSiteverifyMock(response: unknown): SiteverifyMock {
+  const calls: SiteverifyCall[] = []
+  return {
+    calls,
+    send: (config: SiteverifyCall) => {
+      calls.push(config)
+      return response
+    }
+  }
 }
 
 const nodeRequire = createRequire(import.meta.url)
@@ -484,5 +518,217 @@ describe('share hook lib: validateDestination (task 2.2)', () => {
     const result = share.validateDestination('https://macrolattice.com/meal/r_8f3k', 'bad host!')
     expect(result.ok).toBe(false)
     expect(codeOf(result)).toBe('invalid_allowed_host')
+  })
+})
+
+describe('share hook lib: extractTurnstileToken (task 2.3)', () => {
+  it('pins the client-contract field name and the Cloudflare siteverify endpoint', () => {
+    expect(share.TURNSTILE_TOKEN_FIELD).toBe('turnstileToken')
+    expect(share.DEFAULT_TURNSTILE_VERIFY_URL).toBe(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+    )
+  })
+
+  it('returns the trimmed token from the canonical field', () => {
+    expect(share.extractTurnstileToken({ turnstileToken: ' token-123 ' })).toBe('token-123')
+    expect(share.extractTurnstileToken({ turnstileToken: 'x'.repeat(share.MAX_TURNSTILE_TOKEN_LENGTH) })).toHaveLength(
+      share.MAX_TURNSTILE_TOKEN_LENGTH
+    )
+  })
+
+  it('returns null for missing, blank, oversized, or non-string tokens', () => {
+    const cases: unknown[] = [
+      null,
+      undefined,
+      'token-123',
+      [],
+      {},
+      { turnstileToken: '' },
+      { turnstileToken: '   ' },
+      { turnstileToken: 42 },
+      { turnstileToken: null },
+      { turnstileToken: 'x'.repeat(share.MAX_TURNSTILE_TOKEN_LENGTH + 1) }
+    ]
+
+    for (const body of cases) {
+      expect(share.extractTurnstileToken(body), JSON.stringify(body)).toBeNull()
+    }
+  })
+})
+
+describe('share hook lib: verifyTurnstileToken (task 2.3, mocked $http.send)', () => {
+  const successResponse = { statusCode: 200, json: { success: true, hostname: 'macrolattice.com' } }
+
+  it('rejects a missing token with turnstile_missing before calling siteverify', () => {
+    const mock = createSiteverifyMock(successResponse)
+    const result = share.verifyTurnstileToken(null, { secret: 'test-secret', send: mock.send })
+
+    expect(result).toEqual({ ok: false, code: 'turnstile_missing', message: expect.any(String) })
+    expect(mock.calls).toHaveLength(0)
+  })
+
+  it('fails closed with turnstile_not_configured when the secret or sender is missing', () => {
+    for (const secret of [undefined, '', '   ', 42]) {
+      const mock = createSiteverifyMock(successResponse)
+      const result = share.verifyTurnstileToken('token-123', { secret, send: mock.send })
+
+      expect(result.ok, String(secret)).toBe(false)
+      if (!result.ok) expect(result.code).toBe('turnstile_not_configured')
+      expect(mock.calls).toHaveLength(0)
+    }
+
+    const withoutSender = share.verifyTurnstileToken('token-123', { secret: 'test-secret' })
+    expect(withoutSender.ok).toBe(false)
+    if (!withoutSender.ok) expect(withoutSender.code).toBe('turnstile_not_configured')
+  })
+
+  it('posts the secret and token to the default endpoint with a bounded timeout', () => {
+    const mock = createSiteverifyMock(successResponse)
+    const result = share.verifyTurnstileToken('token-123', { secret: 'test-secret', send: mock.send })
+
+    expect(result).toEqual({ ok: true })
+    expect(mock.calls).toHaveLength(1)
+
+    const call = mock.calls[0]
+    expect(call).toBeDefined()
+    if (call === undefined) return
+
+    expect(call.url).toBe(share.DEFAULT_TURNSTILE_VERIFY_URL)
+    expect(call.method).toBe('POST')
+    expect(call.headers['content-type']).toBe('application/json')
+    expect(call.timeout).toBe(5)
+    expect(JSON.parse(call.body)).toEqual({ secret: 'test-secret', response: 'token-123' })
+  })
+
+  it('uses the configured endpoint and forwards remoteIp without emitting it when absent', () => {
+    const withIp = createSiteverifyMock(successResponse)
+    share.verifyTurnstileToken('token-123', {
+      secret: 'test-secret',
+      verifyUrl: 'http://127.0.0.1:9999/turnstile/v0/siteverify',
+      remoteIp: '203.0.113.7',
+      send: withIp.send
+    })
+
+    const call = withIp.calls[0]
+    expect(call).toBeDefined()
+    if (call !== undefined) {
+      expect(call.url).toBe('http://127.0.0.1:9999/turnstile/v0/siteverify')
+      expect(JSON.parse(call.body)).toEqual({
+        secret: 'test-secret',
+        response: 'token-123',
+        remoteip: '203.0.113.7'
+      })
+    }
+
+    const withoutIp = createSiteverifyMock(successResponse)
+    share.verifyTurnstileToken('token-123', { secret: 'test-secret', remoteIp: '', send: withoutIp.send })
+    const anonymousCall = withoutIp.calls[0]
+    expect(anonymousCall).toBeDefined()
+    if (anonymousCall !== undefined) {
+      expect(JSON.parse(anonymousCall.body)).toEqual({ secret: 'test-secret', response: 'token-123' })
+    }
+  })
+
+  it('defaults an empty verify URL to the Cloudflare endpoint', () => {
+    const mock = createSiteverifyMock(successResponse)
+    share.verifyTurnstileToken('token-123', { secret: 'test-secret', verifyUrl: '', send: mock.send })
+
+    expect(mock.calls[0]?.url).toBe(share.DEFAULT_TURNSTILE_VERIFY_URL)
+  })
+
+  it('clamps the siteverify timeout between 1 and 10 seconds', () => {
+    const cases: Array<[number | undefined, number]> = [
+      [undefined, 5],
+      [0, 5],
+      [-3, 5],
+      [Number.NaN, 5],
+      [1, 1],
+      [7, 7],
+      [999, 10]
+    ]
+
+    for (const [timeout, expected] of cases) {
+      const mock = createSiteverifyMock(successResponse)
+      share.verifyTurnstileToken('token-123', { secret: 'test-secret', timeout, send: mock.send })
+      expect(mock.calls[0]?.timeout, String(timeout)).toBe(expected)
+    }
+  })
+
+  it('rejects an invalid token with reason "invalid"', () => {
+    const mock = createSiteverifyMock({
+      statusCode: 200,
+      json: { success: false, 'error-codes': ['invalid-input-response'] }
+    })
+    const result = share.verifyTurnstileToken('bad-token', { secret: 'test-secret', send: mock.send })
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'turnstile_failed',
+      reason: 'invalid',
+      message: expect.any(String)
+    })
+  })
+
+  it('rejects a replayed or expired token with reason "expired_or_duplicate"', () => {
+    const mock = createSiteverifyMock({
+      statusCode: 200,
+      json: { success: false, 'error-codes': ['timeout-or-duplicate'] }
+    })
+    const result = share.verifyTurnstileToken('replayed-token', { secret: 'test-secret', send: mock.send })
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'turnstile_failed',
+      reason: 'expired_or_duplicate',
+      message: expect.any(String)
+    })
+  })
+
+  it('fails closed with turnstile_unavailable on HTTP errors, malformed payloads, and network failures', () => {
+    const responses: unknown[] = [
+      { statusCode: 500, json: { success: false } },
+      { statusCode: 429, json: {} },
+      { statusCode: 200 },
+      { statusCode: 200, json: null },
+      { statusCode: 200, json: 'not-an-object' },
+      { statusCode: 200, json: { success: 'true' } },
+      null,
+      'not-a-response'
+    ]
+
+    for (const response of responses) {
+      const mock = createSiteverifyMock(response)
+      const result = share.verifyTurnstileToken('token-123', { secret: 'test-secret', send: mock.send })
+
+      expect(result.ok, JSON.stringify(response)).toBe(false)
+      if (!result.ok) {
+        expect(result.code, JSON.stringify(response)).toBe('turnstile_unavailable')
+        expect(result.reason, JSON.stringify(response)).toBeUndefined()
+      }
+    }
+
+    const throwing = share.verifyTurnstileToken('token-123', {
+      secret: 'test-secret',
+      send: () => {
+        throw new Error('network down')
+      }
+    })
+    expect(throwing.ok).toBe(false)
+    if (!throwing.ok) expect(throwing.code).toBe('turnstile_unavailable')
+  })
+
+  it('exposes interpretSiteverify as the pure response mapper', () => {
+    expect(share.interpretSiteverify({ statusCode: 200, json: { success: true } })).toEqual({ ok: true })
+    expect(share.interpretSiteverify({ statusCode: 200, json: { success: false } })).toEqual({
+      ok: false,
+      code: 'turnstile_failed',
+      reason: 'invalid',
+      message: expect.any(String)
+    })
+    expect(share.interpretSiteverify(undefined)).toEqual({
+      ok: false,
+      code: 'turnstile_unavailable',
+      message: expect.any(String)
+    })
   })
 })

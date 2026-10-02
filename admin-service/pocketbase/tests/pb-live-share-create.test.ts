@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,12 +17,69 @@ const SUPERUSER_PASSWORD = 'ci-share-create-password'
 const APP_ORIGINS = ['https://macrolattice.com', 'https://supatrainer.com', 'https://azurechip.com']
 const DISALLOWED_ORIGIN = 'https://evil.example'
 
-const VALID_BODY = JSON.stringify({
+const TURNSTILE_SECRET = 'test-turnstile-secret'
+const VALID_TOKEN = 'test-valid-token'
+const INVALID_TOKEN = 'test-invalid-token'
+const REPLAY_TOKEN = 'test-replay-token'
+const UNAVAILABLE_TOKEN = 'test-unavailable-token'
+const REMOTE_IP_TOKEN = 'test-remote-ip-token'
+const REMOTE_IP = '203.0.113.7'
+
+const VALID_REFERENCE = {
   appId: 'macrolattice',
   type: 'meal',
   contentId: 'r_8f3k',
   params: { week: 3 }
+}
+
+interface SiteverifyPayload {
+  secret?: string
+  response?: string
+  remoteip?: string
+}
+
+const siteverifyCalls: SiteverifyPayload[] = []
+
+const siteverifyServer = createServer((request, response) => {
+  let body = ''
+  request.on('data', (chunk: Buffer) => {
+    body += chunk.toString('utf8')
+  })
+  request.on('end', () => {
+    let payload: SiteverifyPayload
+    try {
+      payload = JSON.parse(body) as SiteverifyPayload
+    } catch {
+      payload = {}
+    }
+    siteverifyCalls.push(payload)
+
+    response.setHeader('Content-Type', 'application/json')
+    if (payload.response === UNAVAILABLE_TOKEN) {
+      response.statusCode = 500
+      response.end(JSON.stringify({ error: 'upstream unavailable' }))
+      return
+    }
+    if (payload.response === VALID_TOKEN) {
+      response.statusCode = 200
+      response.end(JSON.stringify({ success: true, hostname: 'macrolattice.com' }))
+      return
+    }
+
+    response.statusCode = 200
+    response.end(
+      JSON.stringify({
+        success: false,
+        'error-codes': [payload.response === REPLAY_TOKEN ? 'timeout-or-duplicate' : 'invalid-input-response']
+      })
+    )
+  })
 })
+
+function createBody(reference: unknown, token: string | null = VALID_TOKEN): string {
+  if (token === null) return JSON.stringify(reference)
+  return JSON.stringify({ ...(reference as Record<string, unknown>), turnstileToken: token })
+}
 
 interface CommandResult {
   status: number | null
@@ -29,6 +88,7 @@ interface CommandResult {
 
 interface ErrorPayload {
   code?: string
+  reason?: string
   message?: string
   status?: number
   fields?: Array<{ field: string; message: string }>
@@ -85,7 +145,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -98,8 +158,12 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
 
   const serverLog = (): string => serverOutput
 
-  const postCreate = (body: string, origin?: string): Promise<Response> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const postCreate = (
+    body: string,
+    origin?: string,
+    extraHeaders: Record<string, string> = {}
+  ): Promise<Response> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders }
     if (origin !== undefined) headers['Origin'] = origin
     return fetch(`${baseUrl}/api/share/create`, { method: 'POST', headers, body })
   }
@@ -134,6 +198,10 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
     ])
     expect(superuser.status, superuser.output).toBe(0)
 
+    await new Promise<void>((resolve) => siteverifyServer.listen(0, '127.0.0.1', resolve))
+    const siteverifyAddress = siteverifyServer.address() as AddressInfo
+    const siteverifyUrl = `http://127.0.0.1:${siteverifyAddress.port}/turnstile/v0/siteverify`
+
     const port = 21000 + Math.floor(Math.random() * 10000)
     baseUrl = `http://127.0.0.1:${port}`
     serverProcess = spawn(
@@ -145,7 +213,14 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
         `--migrationsDir=${migrationsDir}`,
         `--hooksDir=${hooksDir}`
       ],
-      { stdio: ['ignore', 'pipe', 'pipe'] }
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          TURNSTILE_SECRET,
+          TURNSTILE_VERIFY_URL: siteverifyUrl
+        }
+      }
     )
     serverProcess.stdout?.on('data', trackServerOutput)
     serverProcess.stderr?.on('data', trackServerOutput)
@@ -161,23 +236,24 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
     superuserToken = auth.token
   }, 120_000)
 
-  afterAll(() => {
+  afterAll(async () => {
     serverProcess?.kill()
+    await new Promise<void>((resolve) => siteverifyServer.close(() => resolve()))
     if (dataDir.length > 0) {
       rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
     }
   })
 
   it('requires no authentication for the create route', async () => {
-    const response = await postCreate(VALID_BODY)
+    const response = await postCreate(createBody(VALID_REFERENCE))
 
     expect(response.status).not.toBe(401)
     expect(response.status).not.toBe(403)
     expect(response.status).toBe(501)
   })
 
-  it('fails closed with 501 until tasks 2.3-2.9 complete the pipeline', async () => {
-    const response = await postCreate(VALID_BODY, APP_ORIGINS[0])
+  it('fails closed with 501 until tasks 2.4-2.9 complete the pipeline', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
 
     expect(response.status).toBe(501)
     const payload = await errorPayload(response)
@@ -187,40 +263,99 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
 
   it('renders and allowlist-validates content references (task 2.2)', async () => {
     const unknownApp = await postCreate(
-      JSON.stringify({ appId: 'nosuchapp', type: 'meal', contentId: 'r_8f3k' }),
+      createBody({ appId: 'nosuchapp', type: 'meal', contentId: 'r_8f3k' }),
       APP_ORIGINS[0]
     )
     expect(unknownApp.status).toBe(400)
     expect((await errorPayload(unknownApp)).code).toBe('unknown_app')
 
     const unknownType = await postCreate(
-      JSON.stringify({ appId: 'macrolattice', type: 'workout', contentId: 'r_8f3k' }),
+      createBody({ appId: 'macrolattice', type: 'workout', contentId: 'r_8f3k' }),
       APP_ORIGINS[0]
     )
     expect(unknownType.status).toBe(400)
     expect((await errorPayload(unknownType)).code).toBe('unknown_type')
 
     for (const origin of APP_ORIGINS) {
-      const accepted = await postCreate(VALID_BODY, origin)
+      const accepted = await postCreate(createBody(VALID_REFERENCE), origin)
       expect(accepted.status, origin).toBe(501)
     }
   })
 
   it('echoes the exact first-party origin on create responses', async () => {
     for (const origin of APP_ORIGINS) {
-      const response = await postCreate(VALID_BODY, origin)
+      const response = await postCreate(createBody(VALID_REFERENCE), origin)
       expect(response.headers.get('access-control-allow-origin'), origin).toBe(origin)
     }
   })
 
   it('sends no CORS headers to non-browser clients without an Origin', async () => {
-    const response = await postCreate(VALID_BODY)
+    const response = await postCreate(createBody(VALID_REFERENCE))
 
     expect(response.headers.get('access-control-allow-origin')).toBeNull()
   })
 
+  it('verifies the Turnstile token against the configured siteverify endpoint', async () => {
+    siteverifyCalls.length = 0
+
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
+
+    expect(response.status).toBe(501)
+    expect(siteverifyCalls).toHaveLength(1)
+    expect(siteverifyCalls[0]?.secret).toBe(TURNSTILE_SECRET)
+    expect(siteverifyCalls[0]?.response).toBe(VALID_TOKEN)
+  })
+
+  it('rejects requests without a Turnstile token with 403 and no side effects', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE, null), APP_ORIGINS[0])
+
+    expect(response.status).toBe(403)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('turnstile_missing')
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP_ORIGINS[0])
+  })
+
+  it('rejects invalid Turnstile tokens with 403', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE, INVALID_TOKEN), APP_ORIGINS[0])
+
+    expect(response.status).toBe(403)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('turnstile_failed')
+    expect(payload.reason).toBe('invalid')
+  })
+
+  it('rejects replayed Turnstile tokens with 403', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE, REPLAY_TOKEN), APP_ORIGINS[0])
+
+    expect(response.status).toBe(403)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('turnstile_failed')
+    expect(payload.reason).toBe('expired_or_duplicate')
+  })
+
+  it('fails closed with 503 when siteverify is unavailable', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE, UNAVAILABLE_TOKEN), APP_ORIGINS[0])
+
+    expect(response.status).toBe(503)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('turnstile_unavailable')
+  })
+
+  it('forwards CF-Connecting-IP to siteverify as remoteip', async () => {
+    siteverifyCalls.length = 0
+
+    const response = await postCreate(createBody(VALID_REFERENCE, REMOTE_IP_TOKEN), APP_ORIGINS[0], {
+      'CF-Connecting-IP': REMOTE_IP
+    })
+
+    expect(response.status).toBe(403)
+    const call = siteverifyCalls.find((item) => item.response === REMOTE_IP_TOKEN)
+    expect(call).toBeDefined()
+    expect(call?.remoteip).toBe(REMOTE_IP)
+  })
+
   it('rejects disallowed origins on both the request and the preflight (no CORS headers)', async () => {
-    const request = await postCreate(VALID_BODY, DISALLOWED_ORIGIN)
+    const request = await postCreate(createBody(VALID_REFERENCE), DISALLOWED_ORIGIN)
     expect(request.status).toBe(403)
     expect(request.headers.get('access-control-allow-origin')).toBeNull()
     expect((await errorPayload(request)).code).toBe('origin_not_allowed')
@@ -254,7 +389,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
     ]
 
     for (const [body, field] of cases) {
-      const response = await postCreate(JSON.stringify(body), APP_ORIGINS[0])
+      const response = await postCreate(createBody(body), APP_ORIGINS[0])
       expect(response.status, JSON.stringify(body)).toBe(400)
 
       const payload = await errorPayload(response)
@@ -263,17 +398,17 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () =
     }
 
     const arrayBody = await postCreate(JSON.stringify([1, 2, 3]), APP_ORIGINS[0])
-    expect(arrayBody.status).toBe(400)
-    expect(((await errorPayload(arrayBody)).fields ?? []).map((item) => item.field)).toEqual(['body'])
+    expect(arrayBody.status).toBe(403)
+    expect((await errorPayload(arrayBody)).code).toBe('turnstile_missing')
   })
 
-  it('rejects invalid JSON and oversized bodies', async () => {
+  it('rejects invalid JSON and oversized bodies before Turnstile verification', async () => {
     const malformed = await postCreate('not-json', APP_ORIGINS[0])
     expect(malformed.status).toBe(400)
     expect((await errorPayload(malformed)).code).toBe('invalid_json')
 
     const oversized = await postCreate(
-      JSON.stringify({ appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: { pad: 'x'.repeat(8000) } }),
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: { pad: 'x'.repeat(8000) } }),
       APP_ORIGINS[0]
     )
     expect(oversized.status).toBe(413)

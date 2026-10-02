@@ -2,6 +2,12 @@
 
 const CREATE_PATH = '/api/share/create'
 
+const TURNSTILE_TOKEN_FIELD = 'turnstileToken'
+const DEFAULT_TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+const MAX_TURNSTILE_TOKEN_LENGTH = 2048
+const DEFAULT_TURNSTILE_TIMEOUT_SECONDS = 5
+const MAX_TURNSTILE_TIMEOUT_SECONDS = 10
+
 const APP_ID_PATTERN = /^[a-z][a-z0-9_]*$/
 const TYPE_PATTERN = /^[a-z][a-z0-9_-]*$/
 const CONTENT_ID_PATTERN = /^[A-Za-z0-9._~-]+$/
@@ -193,6 +199,121 @@ function decideOrigin(origin, allowedOrigins) {
   return { kind: 'denied', origin: normalized }
 }
 
+function extractTurnstileToken(body) {
+  if (!isPlainObject(body)) return null
+
+  const token = body[TURNSTILE_TOKEN_FIELD]
+  if (typeof token !== 'string') return null
+
+  const trimmed = token.trim()
+  if (trimmed.length === 0 || trimmed.length > MAX_TURNSTILE_TOKEN_LENGTH) return null
+
+  return trimmed
+}
+
+function clampTurnstileTimeout(seconds) {
+  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) {
+    return DEFAULT_TURNSTILE_TIMEOUT_SECONDS
+  }
+
+  const floored = Math.floor(seconds)
+  if (floored < 1) return 1
+  if (floored > MAX_TURNSTILE_TIMEOUT_SECONDS) return MAX_TURNSTILE_TIMEOUT_SECONDS
+  return floored
+}
+
+function interpretSiteverify(response) {
+  if (!isPlainObject(response)) {
+    return {
+      ok: false,
+      code: 'turnstile_unavailable',
+      message: 'Turnstile verification returned no usable response'
+    }
+  }
+
+  if (response.statusCode !== 200) {
+    return {
+      ok: false,
+      code: 'turnstile_unavailable',
+      message: 'Turnstile verification is temporarily unavailable'
+    }
+  }
+
+  const payload = response.json
+  if (!isPlainObject(payload) || typeof payload.success !== 'boolean') {
+    return {
+      ok: false,
+      code: 'turnstile_unavailable',
+      message: 'Turnstile verification returned an unexpected payload'
+    }
+  }
+
+  if (payload.success === true) {
+    return { ok: true }
+  }
+
+  const errorCodes = Array.isArray(payload['error-codes']) ? payload['error-codes'] : []
+  let reason = 'invalid'
+  for (let i = 0; i < errorCodes.length; i++) {
+    if (errorCodes[i] === 'timeout-or-duplicate') {
+      reason = 'expired_or_duplicate'
+      break
+    }
+  }
+
+  return {
+    ok: false,
+    code: 'turnstile_failed',
+    reason: reason,
+    message:
+      reason === 'expired_or_duplicate'
+        ? 'Turnstile token has expired or was already used'
+        : 'Turnstile token verification failed'
+  }
+}
+
+function verifyTurnstileToken(token, deps) {
+  if (typeof token !== 'string' || token.length === 0) {
+    return { ok: false, code: 'turnstile_missing', message: 'A Turnstile token is required' }
+  }
+
+  if (!isPlainObject(deps) || typeof deps.send !== 'function') {
+    return { ok: false, code: 'turnstile_not_configured', message: 'Turnstile verification is not configured' }
+  }
+
+  const secret = typeof deps.secret === 'string' ? deps.secret.trim() : ''
+  if (secret.length === 0) {
+    return { ok: false, code: 'turnstile_not_configured', message: 'Turnstile verification is not configured' }
+  }
+
+  const payload = { secret: secret, response: token }
+  if (typeof deps.remoteIp === 'string' && deps.remoteIp.length > 0) {
+    payload.remoteip = deps.remoteIp
+  }
+
+  let response
+  try {
+    response = deps.send({
+      url:
+        typeof deps.verifyUrl === 'string' && deps.verifyUrl.length > 0
+          ? deps.verifyUrl
+          : DEFAULT_TURNSTILE_VERIFY_URL,
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      timeout: clampTurnstileTimeout(deps.timeout)
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'turnstile_unavailable',
+      message: 'Turnstile verification is temporarily unavailable'
+    }
+  }
+
+  return interpretSiteverify(response)
+}
+
 function canonicalizeHost(host) {
   if (typeof host !== 'string') return null
   let value = host.trim().toLowerCase()
@@ -375,10 +496,16 @@ module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
   KNOWN_SHORTENER_HOSTS: KNOWN_SHORTENER_HOSTS,
+  TURNSTILE_TOKEN_FIELD: TURNSTILE_TOKEN_FIELD,
+  DEFAULT_TURNSTILE_VERIFY_URL: DEFAULT_TURNSTILE_VERIFY_URL,
+  MAX_TURNSTILE_TOKEN_LENGTH: MAX_TURNSTILE_TOKEN_LENGTH,
   normalizeOrigin: normalizeOrigin,
   parseContentReference: parseContentReference,
   resolveAllowedOrigins: resolveAllowedOrigins,
   decideOrigin: decideOrigin,
+  extractTurnstileToken: extractTurnstileToken,
+  interpretSiteverify: interpretSiteverify,
+  verifyTurnstileToken: verifyTurnstileToken,
   renderDestination: renderDestination,
   validateDestination: validateDestination
 }

@@ -39,6 +39,27 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
+  const turnstile = share.verifyTurnstileToken(share.extractTurnstileToken(body), {
+    secret: $os.getenv("TURNSTILE_SECRET"),
+    verifyUrl: $os.getenv("TURNSTILE_VERIFY_URL"),
+    remoteIp: e.request.header.get("CF-Connecting-IP"),
+    send: $http.send
+  })
+
+  if (!turnstile.ok) {
+    if (turnstile.code === "turnstile_missing" || turnstile.code === "turnstile_failed") {
+      return e.json(403, {
+        code: turnstile.code,
+        reason: turnstile.reason,
+        message: turnstile.message
+      })
+    }
+    return e.json(503, {
+      code: turnstile.code,
+      message: turnstile.message
+    })
+  }
+
   const parsed = share.parseContentReference(body)
   if (!parsed.ok) {
     return e.json(400, {
@@ -105,8 +126,8 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.3-2.9): verify Turnstile, enforce the per-IP quota and
-  // circuit breaker, generate the slug, persist, publish to KV.
+  // TODO(tasks 2.4-2.9): enforce the per-IP quota and circuit breaker,
+  // generate the slug, persist, publish to KV.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"
