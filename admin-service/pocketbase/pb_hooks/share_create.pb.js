@@ -48,8 +48,65 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.2-2.9): render the destination, verify Turnstile, enforce the
-  // per-IP quota and circuit breaker, generate the slug, persist, publish to KV.
+  let appRecord = null
+  try {
+    appRecord = $app.findFirstRecordByFilter(
+      "apps",
+      'app_id = "' + parsed.value.appId + '" && active = true'
+    )
+  } catch (err) {
+    appRecord = null
+  }
+  if (appRecord === null) {
+    return e.json(400, {
+      code: "unknown_app",
+      message: "Unknown or inactive app"
+    })
+  }
+
+  let templates = null
+  try {
+    templates = JSON.parse(appRecord.getString("url_template"))
+  } catch (err) {
+    templates = null
+  }
+  if (templates === null || typeof templates !== "object" || Array.isArray(templates)) {
+    return e.json(500, {
+      code: "template_error",
+      message: "App registry url_template is not a JSON object"
+    })
+  }
+
+  const template = Object.prototype.hasOwnProperty.call(templates, parsed.value.type)
+    ? templates[parsed.value.type]
+    : undefined
+  if (typeof template !== "string" || template.length === 0) {
+    return e.json(400, {
+      code: "unknown_type",
+      message: "Unknown share type for this app"
+    })
+  }
+
+  const rendered = share.renderDestination(template, parsed.value)
+  if (!rendered.ok) {
+    return e.json(500, {
+      code: "template_error",
+      reason: rendered.code,
+      message: rendered.message
+    })
+  }
+
+  const destination = share.validateDestination(rendered.destination, appRecord.get("allowed_host"))
+  if (!destination.ok) {
+    return e.json(400, {
+      code: "destination_not_allowed",
+      reason: destination.code,
+      message: destination.message
+    })
+  }
+
+  // TODO(tasks 2.3-2.9): verify Turnstile, enforce the per-IP quota and
+  // circuit breaker, generate the slug, persist, publish to KV.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"

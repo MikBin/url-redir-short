@@ -85,7 +85,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (task 2.1)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.2)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -176,13 +176,34 @@ describe.skipIf(binary === null)('live share/create route (task 2.1)', () => {
     expect(response.status).toBe(501)
   })
 
-  it('fails closed with 501 until tasks 2.2-2.9 complete the pipeline', async () => {
+  it('fails closed with 501 until tasks 2.3-2.9 complete the pipeline', async () => {
     const response = await postCreate(VALID_BODY, APP_ORIGINS[0])
 
     expect(response.status).toBe(501)
     const payload = await errorPayload(response)
     expect(payload.code).toBe('not_implemented')
     expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('renders and allowlist-validates content references (task 2.2)', async () => {
+    const unknownApp = await postCreate(
+      JSON.stringify({ appId: 'nosuchapp', type: 'meal', contentId: 'r_8f3k' }),
+      APP_ORIGINS[0]
+    )
+    expect(unknownApp.status).toBe(400)
+    expect((await errorPayload(unknownApp)).code).toBe('unknown_app')
+
+    const unknownType = await postCreate(
+      JSON.stringify({ appId: 'macrolattice', type: 'workout', contentId: 'r_8f3k' }),
+      APP_ORIGINS[0]
+    )
+    expect(unknownType.status).toBe(400)
+    expect((await errorPayload(unknownType)).code).toBe('unknown_type')
+
+    for (const origin of APP_ORIGINS) {
+      const accepted = await postCreate(VALID_BODY, origin)
+      expect(accepted.status, origin).toBe(501)
+    }
   })
 
   it('echoes the exact first-party origin on create responses', async () => {

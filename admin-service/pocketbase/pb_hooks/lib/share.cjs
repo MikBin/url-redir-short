@@ -13,6 +13,55 @@ const MAX_CONTENT_ID_LENGTH = 128
 const MAX_PARAM_KEYS = 16
 const MAX_PARAM_STRING_LENGTH = 256
 const MAX_PARAMS_JSON_LENGTH = 1024
+const MAX_DESTINATION_LENGTH = 2048
+const MAX_HOST_LENGTH = 253
+const MAX_LABEL_LENGTH = 63
+const DEFAULT_HTTPS_PORT = 443
+
+const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
+const HOSTNAME_LABEL_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+const NUMERIC_HOST_PATTERN = /^\d+(\.\d+)*$/
+const HEX_HOST_PATTERN = /^0x[0-9a-f]+$/i
+const URL_UNSAFE_PATTERN = /[^\x21-\x7e]/
+
+const KNOWN_SHORTENER_HOSTS = [
+  '1pt.co',
+  'adf.ly',
+  'b.link',
+  'bc.vc',
+  'bit.do',
+  'bit.ly',
+  'buff.ly',
+  'clck.ru',
+  'cutt.ly',
+  'goo.gl',
+  'is.gd',
+  'j.mp',
+  'lnkd.in',
+  'lnk.to',
+  'mcaf.ee',
+  'ow.ly',
+  'po.st',
+  'qps.ru',
+  'rb.gy',
+  'rebrand.ly',
+  's.id',
+  'short.io',
+  'shorte.st',
+  'shorturl.at',
+  'shrtco.de',
+  'soo.gd',
+  'surl.li',
+  't.co',
+  't.ly',
+  'tiny.cc',
+  'tinyurl.com',
+  'trib.al',
+  'u.to',
+  'v.gd',
+  'vk.cc',
+  'x.co'
+]
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -144,10 +193,192 @@ function decideOrigin(origin, allowedOrigins) {
   return { kind: 'denied', origin: normalized }
 }
 
+function canonicalizeHost(host) {
+  if (typeof host !== 'string') return null
+  let value = host.trim().toLowerCase()
+  if (value.length > MAX_HOST_LENGTH) return null
+  if (value.length > 0 && value.charAt(value.length - 1) === '.') {
+    value = value.slice(0, -1)
+  }
+  if (value.length === 0) return null
+  return value
+}
+
+function isValidHostname(host) {
+  const labels = host.split('.')
+  for (const label of labels) {
+    if (label.length === 0 || label.length > MAX_LABEL_LENGTH) return false
+    if (!HOSTNAME_LABEL_PATTERN.test(label)) return false
+  }
+  return true
+}
+
+function hasPunycodeLabel(host) {
+  const labels = host.split('.')
+  for (const label of labels) {
+    if (label.indexOf('xn--') === 0) return true
+  }
+  return false
+}
+
+function isKnownShortenerHost(host) {
+  for (const shortener of KNOWN_SHORTENER_HOSTS) {
+    if (host === shortener) return true
+    const suffix = '.' + shortener
+    if (host.length > suffix.length && host.slice(-suffix.length) === suffix) {
+      return true
+    }
+  }
+  return false
+}
+
+function renderDestination(template, reference) {
+  if (typeof template !== 'string' || template.length === 0) {
+    return { ok: false, code: 'invalid_template', message: 'url_template must be a non-empty string' }
+  }
+  if (template.indexOf('{contentId}') === -1) {
+    return { ok: false, code: 'invalid_template', message: 'url_template must contain the {contentId} placeholder' }
+  }
+  if (!isPlainObject(reference) || typeof reference.contentId !== 'string' || reference.contentId.length === 0) {
+    return { ok: false, code: 'invalid_reference', message: 'content reference must provide a non-empty contentId' }
+  }
+
+  const params = reference.params === undefined ? {} : reference.params
+  if (!isPlainObject(params)) {
+    return { ok: false, code: 'invalid_reference', message: 'content reference params must be a JSON object' }
+  }
+
+  let failure = null
+  const destination = template.replace(PLACEHOLDER_PATTERN, (match, name) => {
+    if (name === 'contentId') {
+      return encodeURIComponent(reference.contentId)
+    }
+    if (Object.prototype.hasOwnProperty.call(params, name)) {
+      const value = params[name]
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return encodeURIComponent(String(value))
+      }
+    }
+    if (failure === null) {
+      failure = {
+        ok: false,
+        code: 'missing_placeholder_value',
+        message: 'url_template placeholder {' + name + '} has no value'
+      }
+    }
+    return match
+  })
+  if (failure !== null) return failure
+
+  return { ok: true, destination: destination }
+}
+
+function parseDestination(destination) {
+  if (typeof destination !== 'string') {
+    return { ok: false, code: 'invalid_destination', message: 'destination must be a string' }
+  }
+
+  const value = destination.trim()
+  if (value.length === 0) {
+    return { ok: false, code: 'invalid_destination', message: 'destination must not be empty' }
+  }
+  if (value.length > MAX_DESTINATION_LENGTH) {
+    return {
+      ok: false,
+      code: 'destination_too_long',
+      message: 'destination must be at most ' + MAX_DESTINATION_LENGTH + ' characters'
+    }
+  }
+  if (URL_UNSAFE_PATTERN.test(value) || value.indexOf('\\') !== -1) {
+    return {
+      ok: false,
+      code: 'invalid_characters',
+      message: 'destination must not contain whitespace, control characters, or backslashes'
+    }
+  }
+  if (!/^https:\/\//i.test(value)) {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+      return { ok: false, code: 'insecure_scheme', message: 'destination must use the https scheme' }
+    }
+    return { ok: false, code: 'missing_scheme', message: 'destination must be an absolute URL' }
+  }
+
+  return { ok: true, value: value }
+}
+
+function validateDestination(destination, allowedHost) {
+  const parsed = parseDestination(destination)
+  if (!parsed.ok) return parsed
+
+  const allowed = canonicalizeHost(allowedHost)
+  if (allowed === null || !isValidHostname(allowed)) {
+    return { ok: false, code: 'invalid_allowed_host', message: 'allowed_host is not a valid hostname' }
+  }
+
+  const rest = parsed.value.slice(8)
+  let authorityEnd = rest.length
+  for (const terminator of ['/', '?', '#']) {
+    const index = rest.indexOf(terminator)
+    if (index !== -1 && index < authorityEnd) authorityEnd = index
+  }
+  const authority = rest.slice(0, authorityEnd)
+  const remainder = rest.slice(authorityEnd)
+
+  if (authority.length === 0) {
+    return { ok: false, code: 'invalid_host', message: 'destination must include a hostname' }
+  }
+  if (authority.indexOf('@') !== -1) {
+    return { ok: false, code: 'userinfo_not_allowed', message: 'destination must not include userinfo' }
+  }
+  if (authority.indexOf('[') !== -1 || authority.indexOf(']') !== -1) {
+    return { ok: false, code: 'ip_literal_not_allowed', message: 'destination must not use an IP-literal host' }
+  }
+
+  const colon = authority.indexOf(':')
+  if (colon !== -1 && colon !== authority.lastIndexOf(':')) {
+    return { ok: false, code: 'invalid_host', message: 'destination host is malformed' }
+  }
+
+  let hostPart = authority
+  if (colon !== -1) {
+    hostPart = authority.slice(0, colon)
+    const port = authority.slice(colon + 1)
+    if (!/^\d+$/.test(port) || port !== String(DEFAULT_HTTPS_PORT)) {
+      return { ok: false, code: 'port_not_allowed', message: 'destination must use the default https port' }
+    }
+  }
+
+  const host = canonicalizeHost(hostPart)
+  if (host === null) {
+    return { ok: false, code: 'invalid_host', message: 'destination host is malformed' }
+  }
+  if (NUMERIC_HOST_PATTERN.test(host) || HEX_HOST_PATTERN.test(host)) {
+    return { ok: false, code: 'ip_literal_not_allowed', message: 'destination must not use an IP-literal host' }
+  }
+  if (!isValidHostname(host)) {
+    return { ok: false, code: 'invalid_host', message: 'destination host is malformed' }
+  }
+  if (hasPunycodeLabel(host)) {
+    return { ok: false, code: 'punycode_not_allowed', message: 'destination must not use a punycode or IDN host' }
+  }
+  if (isKnownShortenerHost(host)) {
+    return { ok: false, code: 'shortener_not_allowed', message: 'destination must not be another URL shortener' }
+  }
+  if (host !== allowed) {
+    return { ok: false, code: 'host_not_allowed', message: 'destination host is not on the app allowlist' }
+  }
+
+  return { ok: true, destination: 'https://' + host + remainder }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
+  MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
+  KNOWN_SHORTENER_HOSTS: KNOWN_SHORTENER_HOSTS,
   normalizeOrigin: normalizeOrigin,
   parseContentReference: parseContentReference,
   resolveAllowedOrigins: resolveAllowedOrigins,
-  decideOrigin: decideOrigin
+  decideOrigin: decideOrigin,
+  renderDestination: renderDestination,
+  validateDestination: validateDestination
 }
