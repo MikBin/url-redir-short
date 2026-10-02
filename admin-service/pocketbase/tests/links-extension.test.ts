@@ -46,8 +46,15 @@ describe('links extension (task 1.5)', () => {
   it('is idempotent — fields and index are only added when absent', () => {
     const source = migrationSource(UPDATED_LINKS_FILE)
 
-    expect(source).toContain('collection.fields.getByName(name)')
+    expect(source).toContain('Boolean(collection.fields.getByName(name))')
     expect(source).toContain('!collection.indexes.includes(appSlugIndex)')
+  })
+
+  it('declares the autodate created field the §4.1 purge window needs', () => {
+    const source = migrationSource(UPDATED_LINKS_FILE)
+
+    expect(source).toContain('"name": "created"')
+    expect(source).toContain('"type": "autodate"')
   })
 
   it('registers the new fields in pb_schema.json with nullable expiry/click dates', () => {

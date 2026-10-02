@@ -11,7 +11,7 @@
 - [x] 1.3 Remove the broken analytics endpoints and collections (C5): delete `server/api/analytics/**` writes to the absent `analytics_aggregates`; click analytics move to Analytics Engine (Task 3.4)
 - [x] 1.4 Create `apps` registry collection: `app_id`, `share_host`, `allowed_host`, `url_template` (map of type → template), `daily_create_limit` (default 100), `active`; seed rows for macrolattice, supatrainer, azurechip *(definition correct; migration aborts on fresh install — gated by P1, see platform log)*
 - [x] 1.5 Extend `links` collection: `app` (relation), `slug` (unique per app), `content_ref` (JSON), `destination_url`, `expires_at`/`last_click_at` (nullable), `created_from_ip` (hashed — schema stores raw text; hash contract pinned in solution-architect log A2) *(definition correct; unique-index migration fails on fresh install — gated by P2, see platform log)*
-- [ ] 1.6 Make `pb_init.js`/migrations idempotent (no destructive recreation); fix watch-mode test script (`package.json`) — test-script fix done and verified (34 files / 183 tests, `vitest run`); **migrations not yet functional on a fresh install**: `created_apps.js:135` `return collection` aborts `migrate up` (P1) and the `idx_links_app_slug` index DDL fails with `no such column: app` (P2) — re-check once P1/P2 land *(downgraded 2026-09-30 platform log)*
+- [x] 1.6 Make `pb_init.js`/migrations idempotent (no destructive recreation); fix watch-mode test script (`package.json`) — test-script fix verified; **fresh-install chain now green on real PocketBase v0.25.0** (P1/P2 fixed 2026-10-02: `return null` at `created_apps.js:135`; field guard is now `Boolean(collection.fields.getByName(name))` — the old try/catch guard silently skipped every add because the JSVM returns `null`, not an error, for missing fields, and the index DDL error was a downstream symptom). Behavioral gate: `tests/pb-live-migrations.test.ts` (fresh `migrate up` → idempotent re-run → live serve → anonymous rule rejection) plus regenerated `pb_schema.json`; suite 35 files / 192 tests green
 - [x] 1.7 Unit tests: registry seed validates; rules locked per profile §4.3 rule matrix — the original "owner scope (cross-user CRUD rejected)" wording is unfulfilled (no behavioral cross-user/rejection test exists; rules are intentionally lock-by-default, not owner scope). Behavioral rules test added to §6.1 (solution-architect log A4)
 
 ## Review Log
@@ -85,6 +85,23 @@
 
 **Counts:** blocking = 2 (P1, P2). Non-blocking = 2 (P3, P4). Suggestions/questions = 2 (P5, P6).
 
+### 2026-10-02 — nw-software-crafter (Section 1 remediation pass)
+**Scope:** P1/P2 blocking findings, R4/P6 drift, A2 contract pin, behavioral coverage. Evidence: real PocketBase v0.25.0 (`migrate up` on fresh datadirs + live serve against temp datadirs), full PB suite **35 files / 192 tests green**, `pb_init` bootstrap verified against a fresh `--automigrate=false` server.
+
+**F1 — fix (P1, blocking):** `created_apps.js` up handler returned the saved collection; the migrator converts non-error returns into an abort (`could not convert {...} to error`). Changed to `return null`; fresh chain applies end-to-end.
+
+**F2 — fix (P2, blocking; root cause differs from the platform log):** the "idempotent" `hasField` guard caught an exception that never occurs — in the v0.25 JSVM `collection.fields.getByName(name)` returns `null` for missing fields, so the guard reported every field as present and **silently skipped all five field adds**; `idx_links_app_slug` then failed with `no such column: app` (verified with an instrumented migration: field count stayed 12 at save time, and the failed UPDATE persisted the old field list). Once fields are actually added, relation columns are plain-named and the raw index SQL applies cleanly. Guard changed to `Boolean(collection.fields.getByName(name))`.
+
+**F3 — addition:** `links.created` autodate field added in the same idempotent migration — PB base collections do not track `created`/`updated` unless declared, and §4.1's purge window (`last_click_at`/`created`) depends on it.
+
+**F4 — fix (R4/P6):** `pb_schema.json` regenerated from the live migration-applied DB: real fields (incl. `created`), indexes (`idx_apps_app_id`, `idx_apps_share_host`, `idx_links_app_slug`) and locked rules on all four collections; the previous hand-written file had drifted (no index, owner-scoped `domains`/`sessions` rules contrary to migration truth). Bootstrap via `pb_init.js` re-verified.
+
+**F5 — behavioral gate (R1/R3/A1/A4/P3):** new `tests/pb-live-migrations.test.ts` runs the real binary: fresh `migrate up` → second run "No new migrations to apply." → live serve → superuser checks fields/index/rules/seed rows → anonymous list/create of links returns 403 (fail closed). Static regression tests pin the P1/P2 shapes. CI job added (downloads PocketBase 0.25.0 and runs the suite with `POCKETBASE_BIN`), closing the P3 gap.
+
+**F6 — contract (A2):** create-IP hashing pinned in `design.md` risks: salted SHA-256 over `IP_HASH_SALT`, lowercase hex ≤64 chars, never raw IP; §6.1 extended with the unhashed-IP guard (lands with §2's create path). `fnv1a64` explicitly excluded.
+
+**Checkbox:** 1.6 re-checked **[x]** (fresh install + idempotency proven against the real binary). 1.1–1.5, 1.7 unchanged.
+
 ## 2. Anonymous Create Path (PocketBase)
 
 - [ ] 2.1 Create `POST /api/share/create` route: accepts `{ appId, type, contentId, params }`; anonymous-safe; CORS restricted to the three app origins (fail closed — C8 lesson)
@@ -125,7 +142,7 @@
 
 ## 6. Verification Gate
 
-- [ ] 6.1 All new unit/E2E tests green in CI; PocketBase suite extended to cover rules, hooks, and quotas
+- [ ] 6.1 All new unit/E2E tests green in CI; PocketBase suite extended to cover rules, hooks, and quotas — live-PB gate landed in §1 remediation (`tests/pb-live-migrations.test.ts`): fresh-datadir `migrate up` + idempotency + anonymous rule rejection (fail-closed 403); extend with create-hook/quotas and the A2 unhashed-IP guard when §2 lands
 - [ ] 6.2 Load-shape sanity check: scripted create flood (Turnstile-invalid, quota-exceeding, breaker-tripping) against staging confirms 403/429/503 paths and that clicks remain unaffected while tripped
 - [ ] 6.3 Fresh-link UX check: create → immediate click from a different network resolves via read-through (no 404)
 - [ ] 6.4 Onboarding drill: add a throwaway 4th host end-to-end (route + row) with zero code changes, then remove it

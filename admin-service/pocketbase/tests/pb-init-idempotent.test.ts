@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -39,10 +39,29 @@ describe('idempotent PocketBase setup (task 1.6)', () => {
     expect(createdApps).toContain('app.findFirstRecordByFilter')
 
     const updatedLinks = read('pb_migrations/1790784887_updated_links.js')
-    expect(updatedLinks).toContain('collection.fields.getByName(name)')
+    expect(updatedLinks).toContain('Boolean(collection.fields.getByName(name))')
     expect(updatedLinks).toContain('!collection.indexes.includes(appSlugIndex)')
 
     const deletedAnalytics = read('pb_migrations/1790783575_deleted_analytics_events.js')
     expect(deletedAnalytics).toContain('} catch {')
+  })
+
+  it('never returns a non-error value from a migration up handler (P1 regression)', () => {
+    const files = readdirSync(`${root}/pb_migrations`).filter((file) => file.endsWith('.js'))
+
+    expect(files.length).toBeGreaterThan(0)
+    for (const file of files) {
+      const source = read(`pb_migrations/${file}`)
+      expect(source, `${file} must return null/error-valued helpers from up handlers`).not.toMatch(
+        /^\s*return collection\s*$/m
+      )
+    }
+  })
+
+  it('keeps the field-existence guard behavioral (P2 regression)', () => {
+    const updatedLinks = read('pb_migrations/1790784887_updated_links.js')
+
+    expect(updatedLinks).toContain('const hasField = (name) => Boolean(collection.fields.getByName(name))')
+    expect(updatedLinks).not.toContain('collection.fields.getByName(name)\n      return true')
   })
 })

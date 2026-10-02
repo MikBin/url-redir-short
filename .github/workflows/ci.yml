@@ -59,3 +59,33 @@ jobs:
       - name: Run Tests (Admin Service)
         working-directory: admin-service/supabase
         run: npm run test
+
+  pocketbase-test:
+    name: PocketBase Migration & Rules Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+          cache: 'npm'
+          cache-dependency-path: 'admin-service/pocketbase/package-lock.json'
+
+      - name: Install PocketBase 0.25.0
+        run: |
+          curl -sL -o pocketbase.zip https://github.com/pocketbase/pocketbase/releases/download/v0.25.0/pocketbase_0.25.0_linux_amd64.zip
+          unzip -q pocketbase.zip -d "$RUNNER_TEMP/pocketbase"
+          chmod +x "$RUNNER_TEMP/pocketbase/pocketbase"
+          echo "POCKETBASE_BIN=$RUNNER_TEMP/pocketbase/pocketbase" >> "$GITHUB_ENV"
+
+      - name: Install Dependencies (PocketBase)
+        working-directory: admin-service/pocketbase
+        run: npm install
+
+      - name: Run Tests (PocketBase)
+        working-directory: admin-service/pocketbase
+        run: npm test

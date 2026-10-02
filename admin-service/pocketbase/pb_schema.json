@@ -4,58 +4,364 @@
     "name": "apps",
     "type": "base",
     "fields": [
-      { "name": "app_id", "type": "text", "required": true },
-      { "name": "share_host", "type": "text", "required": true },
-      { "name": "allowed_host", "type": "text", "required": true },
-      { "name": "url_template", "type": "json", "required": true },
-      { "name": "daily_create_limit", "type": "number" },
-      { "name": "active", "type": "bool" }
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text3901000001",
+        "max": 64,
+        "min": 1,
+        "name": "app_id",
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "presentable": true,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text3901000002",
+        "max": 253,
+        "min": 1,
+        "name": "share_host",
+        "pattern": "^[a-z0-9.-]+$",
+        "presentable": true,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text3901000003",
+        "max": 253,
+        "min": 1,
+        "name": "allowed_host",
+        "pattern": "^[a-z0-9.-]+$",
+        "presentable": true,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "json3901000004",
+        "maxSize": 0,
+        "name": "url_template",
+        "presentable": false,
+        "required": true,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "number3901000005",
+        "max": null,
+        "min": 1,
+        "name": "daily_create_limit",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "bool3901000006",
+        "name": "active",
+        "presentable": false,
+        "required": false,
+        "type": "bool"
+      }
     ],
-    "listRule": null, "viewRule": null, "createRule": null, "updateRule": null, "deleteRule": null
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_apps_app_id` ON `apps` (`app_id`)",
+      "CREATE UNIQUE INDEX `idx_apps_share_host` ON `apps` (`share_host`)"
+    ],
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   },
   {
     "id": "pbc_domains",
     "name": "domains",
     "type": "base",
     "fields": [
-      { "name": "domain", "type": "text", "required": true },
-      { "name": "owner_id", "type": "relation", "required": true, "collectionId": "_pb_users_auth_", "options": { "maxSelect": 1 } }
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text2812878347",
+        "max": 0,
+        "min": 0,
+        "name": "domain",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "relation2117886457",
+        "maxSelect": 0,
+        "minSelect": 0,
+        "name": "owner_id",
+        "presentable": false,
+        "required": true,
+        "type": "relation"
+      }
     ],
-    "listRule": "@request.auth.id = owner_id", "viewRule": "@request.auth.id = owner_id", "createRule": "@request.auth.id != \"\"", "updateRule": "@request.auth.id = owner_id", "deleteRule": "@request.auth.id = owner_id"
+    "indexes": [],
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   },
   {
     "id": "pbc_links",
     "name": "links",
     "type": "base",
     "fields": [
-      { "name": "slug", "type": "text", "required": true },
-      { "name": "destination", "type": "text", "required": true },
-      { "name": "owner_id", "type": "relation", "required": true, "collectionId": "_pb_users_auth_", "options": { "maxSelect": 1 } },
-      { "name": "domain_id", "type": "relation", "required": false, "collectionId": "pbc_domains", "options": { "maxSelect": 1 } },
-      { "name": "app", "type": "relation", "required": false, "collectionId": "pbc_apps", "options": { "maxSelect": 1 } },
-      { "name": "content_ref", "type": "json" },
-      { "name": "destination_url", "type": "text" },
-      { "name": "last_click_at", "type": "date" },
-      { "name": "created_from_ip", "type": "text" },
-      { "name": "is_active", "type": "bool" },
-      { "name": "targeting", "type": "json" },
-      { "name": "ab_testing", "type": "json" },
-      { "name": "hsts", "type": "json" },
-      { "name": "password_protection", "type": "json" },
-      { "name": "expires_at", "type": "date" },
-      { "name": "max_clicks", "type": "number" }
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text2560465762",
+        "max": 0,
+        "min": 0,
+        "name": "slug",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text1053179562",
+        "max": 0,
+        "min": 0,
+        "name": "destination",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "relation2117886457",
+        "maxSelect": 0,
+        "minSelect": 0,
+        "name": "owner_id",
+        "presentable": false,
+        "required": true,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_domains",
+        "hidden": false,
+        "id": "relation291442405",
+        "maxSelect": 0,
+        "minSelect": 0,
+        "name": "domain_id",
+        "presentable": false,
+        "required": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "bool458715613",
+        "name": "is_active",
+        "presentable": false,
+        "required": false,
+        "type": "bool"
+      },
+      {
+        "hidden": false,
+        "id": "json3810547001",
+        "maxSize": 0,
+        "name": "targeting",
+        "presentable": false,
+        "required": false,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "json1453574664",
+        "maxSize": 0,
+        "name": "ab_testing",
+        "presentable": false,
+        "required": false,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "json188631693",
+        "maxSize": 0,
+        "name": "hsts",
+        "presentable": false,
+        "required": false,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "json1646172676",
+        "maxSize": 0,
+        "name": "password_protection",
+        "presentable": false,
+        "required": false,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "date261981154",
+        "max": "",
+        "min": "",
+        "name": "expires_at",
+        "presentable": false,
+        "required": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "number3082541448",
+        "max": null,
+        "min": null,
+        "name": "max_clicks",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "type": "number"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_apps",
+        "hidden": false,
+        "id": "relation3901000007",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "app",
+        "presentable": false,
+        "required": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "json3901000008",
+        "maxSize": 0,
+        "name": "content_ref",
+        "presentable": false,
+        "required": false,
+        "type": "json"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text3901000009",
+        "max": 2048,
+        "min": 0,
+        "name": "destination_url",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "date3901000010",
+        "max": "",
+        "min": "",
+        "name": "last_click_at",
+        "presentable": false,
+        "required": false,
+        "type": "date"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text3901000011",
+        "max": 64,
+        "min": 0,
+        "name": "created_from_ip",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3901000012",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "type": "autodate"
+      }
     ],
-    "listRule": null, "viewRule": null, "createRule": null, "updateRule": null, "deleteRule": null
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_links_app_slug` ON `links` (`app`, `slug`)"
+    ],
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   },
   {
     "id": "pbc_sessions",
     "name": "sessions",
     "type": "base",
     "fields": [
-      { "name": "session_id", "type": "text", "required": true },
-      { "name": "user_id", "type": "relation", "collectionId": "_pb_users_auth_", "options": { "maxSelect": 1 } },
-      { "name": "expires_at", "type": "date", "required": true }
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text1631579359",
+        "max": 0,
+        "min": 0,
+        "name": "session_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "relation2809058197",
+        "maxSelect": 0,
+        "minSelect": 0,
+        "name": "user_id",
+        "presentable": false,
+        "required": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "date261981154",
+        "max": "",
+        "min": "",
+        "name": "expires_at",
+        "presentable": false,
+        "required": true,
+        "type": "date"
+      }
     ],
-    "listRule": "@request.auth.id = user_id", "viewRule": "@request.auth.id = user_id", "createRule": "@request.auth.id != \"\"", "updateRule": "@request.auth.id = user_id", "deleteRule": "@request.auth.id = user_id"
+    "indexes": [],
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   }
 ]

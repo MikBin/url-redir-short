@@ -53,6 +53,7 @@ Constraint set from the decision series (`docs/analysis/cloudflare-vs-vps.md` an
 - **PocketBase single-node** → create-path ceiling and an ops box to run (ZIP backup cron, patching); acceptable because creates are rare human actions and clicks never touch PocketBase.
 - **Turnstile needs a web context** → trivial for web/Capacitor, requires an embedded WebView in React Native; documented in the client contract.
 - **Registry templates become runtime-critical config** → a bad `url_template` breaks sharing for that app at create time; mitigate with template validation tests on registry save.
+- **Create-IP handling is contract-pinned (A2)** → `links.created_from_ip` stores a salted SHA-256 hash (lowercase hex, ≤64 chars) of the client IP keyed by the stored `IP_HASH_SALT`, never the raw IP. PocketBase migrations cannot hash, so the create-path hook (§2.1/§2.4) owns the write and the §6.1 gate asserts that no unhashed value lands; `fnv1a64` (cache-key hashing) is explicitly not acceptable for this field.
 - **Postponed-path defects remain open** → C2/C4/C9/H12 etc. stay unfixed while the SaaS direction is frozen; re-scope on resume.
 
 ## Migration Plan

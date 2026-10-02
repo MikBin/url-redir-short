@@ -132,7 +132,7 @@ migrate((app) => {
     }
   }
 
-  return collection
+  return null
 }, (app) => {
   const collection = app.findCollectionByNameOrId("pbc_apps")
 
