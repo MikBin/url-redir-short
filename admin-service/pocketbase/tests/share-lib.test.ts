@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, randomInt } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 
@@ -80,7 +80,19 @@ interface ShareLib {
   nextUtcMidnight: (now: unknown) => Date | null
   dailyQuotaQuery: (input: unknown) => QuotaQuery | null
   evaluateDailyQuota: (input: unknown) => QuotaDecision
+  SLUG_ALPHABET: string
+  SLUG_LENGTH: number
+  MAX_SLUG_COLLISION_RETRIES: number
+  SLUG_PATTERN: RegExp
+  SLUG_COLLISION_QUERY_EXPRESSION: string
+  generateSlug: (random: unknown) => string | null
+  generateSlugWithCollisionRetry: (input: unknown) => SlugGenerationResult
+  slugCollisionQuery: (appRecordId: unknown, slug: unknown) => QuotaQuery | null
 }
+
+type SlugGenerationResult =
+  | { ok: true; slug: string; attempts: number }
+  | { ok: false; code: string; message: string }
 
 function createSiteverifyMock(response: unknown): SiteverifyMock {
   const calls: SiteverifyCall[] = []
@@ -951,5 +963,259 @@ describe('share hook lib: per-IP daily quota (task 2.4)', () => {
         expect(result.code, JSON.stringify(input)).toBe('quota_input_invalid')
       }
     }
+  })
+})
+
+describe('share hook lib: slug generator (task 2.6)', () => {
+  const ALPHABET_CHARS = new Set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
+
+  describe('constants and entropy budget', () => {
+    it('uses a 62-character unique alphanumeric alphabet', () => {
+      expect(share.SLUG_ALPHABET).toHaveLength(62)
+      expect(new Set(share.SLUG_ALPHABET.split(''))).toEqual(ALPHABET_CHARS)
+      expect(share.SLUG_ALPHABET).toMatch(/^[A-Za-z0-9]+$/)
+    })
+
+    it('meets the spec entropy budget: at least 7 chars and 62^7 >= 2^41', () => {
+      expect(share.SLUG_LENGTH).toBeGreaterThanOrEqual(7)
+      const keyspace = Math.pow(share.SLUG_ALPHABET.length, share.SLUG_LENGTH)
+      expect(keyspace).toBeGreaterThanOrEqual(Math.pow(2, 41))
+      expect(keyspace).toBe(3_521_614_606_208)
+    })
+
+    it('pins the slug pattern and a positive collision-retry budget', () => {
+      expect(share.SLUG_PATTERN).toEqual(new RegExp(`^[A-Za-z0-9]{${share.SLUG_LENGTH}}$`))
+      expect(Number.isInteger(share.MAX_SLUG_COLLISION_RETRIES)).toBe(true)
+      expect(share.MAX_SLUG_COLLISION_RETRIES).toBeGreaterThan(0)
+    })
+  })
+
+  describe('generateSlug', () => {
+    it('builds the slug from the injected random source with the fixed length and alphabet', () => {
+      const calls: Array<[number, string]> = []
+      const slug = share.generateSlug((length: number, alphabet: string) => {
+        calls.push([length, alphabet])
+        return 'Ab3xK9z'
+      })
+
+      expect(slug).toBe('Ab3xK9z')
+      expect(calls).toEqual([[share.SLUG_LENGTH, share.SLUG_ALPHABET]])
+    })
+
+    it('rejects generator output with a wrong length or characters outside the alphabet', () => {
+      const badOutputs: unknown[] = [
+        'Ab3xK9',
+        'Ab3xK9zz',
+        '',
+        'Ab3xK9!',
+        'áb3xK9z',
+        'Ab3xK9 ',
+        123,
+        null,
+        undefined
+      ]
+
+      for (const output of badOutputs) {
+        expect(share.generateSlug(() => output), String(output)).toBeNull()
+      }
+    })
+
+    it('fails closed on a missing, non-function, or throwing random source', () => {
+      expect(share.generateSlug(undefined)).toBeNull()
+      expect(share.generateSlug('random')).toBeNull()
+      expect(
+        share.generateSlug(() => {
+          throw new Error('crypto unavailable')
+        })
+      ).toBeNull()
+    })
+  })
+
+  describe('generateSlugWithCollisionRetry', () => {
+    it('accepts the first collision-free candidate with one attempt', () => {
+      const generated: string[] = []
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => {
+          const slug = 'firstok'
+          generated.push(slug)
+          return slug
+        },
+        exists: () => false,
+        maxRetries: share.MAX_SLUG_COLLISION_RETRIES
+      })
+
+      expect(result).toEqual({ ok: true, slug: 'firstok', attempts: 1 })
+      expect(generated).toEqual(['firstok'])
+    })
+
+    it('retries past collisions and returns the first free candidate in order', () => {
+      const queue = ['taken1', 'taken2', 'freeabc']
+      const checked: string[] = []
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => queue.shift() ?? 'never',
+        exists: (slug: string) => {
+          checked.push(slug)
+          return slug.startsWith('taken')
+        },
+        maxRetries: share.MAX_SLUG_COLLISION_RETRIES
+      })
+
+      expect(result).toEqual({ ok: true, slug: 'freeabc', attempts: 3 })
+      expect(checked).toEqual(['taken1', 'taken2', 'freeabc'])
+    })
+
+    it('fails closed after exhausting the retry budget with every candidate taken', () => {
+      let generated = 0
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => {
+          generated += 1
+          return 'alltaken'
+        },
+        exists: () => true,
+        maxRetries: 4
+      })
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.code).toBe('slug_generation_failed')
+      }
+      expect(generated).toBe(5)
+    })
+
+    it('fails immediately without retrying when the random source is broken', () => {
+      let generated = 0
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => {
+          generated += 1
+          return null
+        },
+        exists: () => false,
+        maxRetries: share.MAX_SLUG_COLLISION_RETRIES
+      })
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.code).toBe('slug_generation_failed')
+      }
+      expect(generated).toBe(1)
+    })
+
+    it('fails closed when the collision check throws', () => {
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => 'candidate',
+        exists: () => {
+          throw new Error('database unavailable')
+        },
+        maxRetries: share.MAX_SLUG_COLLISION_RETRIES
+      })
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.code).toBe('slug_collision_check_failed')
+      }
+    })
+
+    it('rejects invalid input shapes', () => {
+      const invalid: unknown[] = [
+        undefined,
+        null,
+        'slugs',
+        { exists: () => false, maxRetries: 1 },
+        { generate: () => 'x', maxRetries: 1 },
+        { generate: 'gen', exists: () => false, maxRetries: 1 },
+        { generate: () => 'x', exists: 'yes', maxRetries: 1 },
+        { generate: () => 'x', exists: () => false, maxRetries: -1 },
+        { generate: () => 'x', exists: () => false, maxRetries: 1.5 }
+      ]
+
+      for (const input of invalid) {
+        const result = share.generateSlugWithCollisionRetry(input)
+        expect(result.ok, JSON.stringify(input) ?? String(input)).toBe(false)
+        if (!result.ok) {
+          expect(result.code, JSON.stringify(input) ?? String(input)).toBe('slug_input_invalid')
+        }
+      }
+    })
+
+    it('still performs one attempt with zero retries', () => {
+      const result = share.generateSlugWithCollisionRetry({
+        generate: () => 'single1',
+        exists: () => false,
+        maxRetries: 0
+      })
+
+      expect(result).toEqual({ ok: true, slug: 'single1', attempts: 1 })
+    })
+  })
+
+  describe('entropy and collision sampling', () => {
+    it('produces unique in-alphabet slugs across a large uniform sample', () => {
+      const sampleSize = 20_000
+      const seen = new Set<string>()
+      const charCounts = new Map<string, number>()
+
+      for (let i = 0; i < sampleSize; i++) {
+        const slug = share.generateSlug(
+          (length: number, alphabet: string) =>
+            Array.from({ length }, () => alphabet[randomInt(0, alphabet.length)]).join('')
+        )
+        expect(slug).not.toBeNull()
+        if (slug === null) continue
+        expect(slug).toMatch(share.SLUG_PATTERN)
+
+        seen.add(slug)
+        for (const char of slug) {
+          charCounts.set(char, (charCounts.get(char) ?? 0) + 1)
+        }
+      }
+
+      // Keyspace is 62^7 ≈ 3.5e12, so 20k draws must not collide.
+      expect(seen.size).toBe(sampleSize)
+      // Every alphabet character must occur (expected ≈ 2258 per char).
+      expect(charCounts.size).toBe(62)
+      for (const char of ALPHABET_CHARS) {
+        const count = charCounts.get(char) ?? 0
+        expect(count, `character ${char}`).toBeGreaterThan(1200)
+        expect(count, `character ${char}`).toBeLessThan(3400)
+      }
+    })
+  })
+
+  describe('slugCollisionQuery', () => {
+    it('builds a parameterized per-app collision query', () => {
+      expect(share.SLUG_COLLISION_QUERY_EXPRESSION).toBe('app = {:app} AND slug = {:slug}')
+      expect(share.slugCollisionQuery('abc123def456ghi', 'Ab3xK9z')).toEqual({
+        expression: 'app = {:app} AND slug = {:slug}',
+        params: { app: 'abc123def456ghi', slug: 'Ab3xK9z' }
+      })
+    })
+
+    it('rejects invalid app ids or slug candidates', () => {
+      expect(share.slugCollisionQuery('', 'Ab3xK9z')).toBeNull()
+      expect(share.slugCollisionQuery(123, 'Ab3xK9z')).toBeNull()
+      expect(share.slugCollisionQuery('a'.repeat(65), 'Ab3xK9z')).toBeNull()
+      expect(share.slugCollisionQuery('abc123', 'Ab3xK9')).toBeNull()
+      expect(share.slugCollisionQuery('abc123', 'Ab3xK9z!')).toBeNull()
+      expect(share.slugCollisionQuery('abc123', '')).toBeNull()
+      expect(share.slugCollisionQuery('abc123', null)).toBeNull()
+    })
+  })
+
+  describe('client-supplied slug handling', () => {
+    it('ignores client slug and url fields when parsing the content reference', () => {
+      const result = share.parseContentReference({
+        ...validBody,
+        slug: 'my-custom-slug',
+        url: 'https://macrolattice.com/override',
+        customSlug: 'brand'
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(Object.keys(result.value).sort()).toEqual(['appId', 'contentId', 'params', 'type'])
+        expect('slug' in result.value).toBe(false)
+        expect('url' in result.value).toBe(false)
+      }
+    })
   })
 })

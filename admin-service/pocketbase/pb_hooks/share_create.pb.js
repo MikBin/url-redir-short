@@ -209,8 +209,31 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.6-2.9): slug, persist (with the hashed IP that task 2.4
-  // already keys the quota on), KV publish.
+  // Task 2.6: random slug — client-supplied slug/url fields are never read
+  // (parseContentReference drops unknown fields), so custom slugs are
+  // impossible by construction. Collision scope is per app, matching the
+  // idx_links_app_slug unique index and host-keyed KV namespace.
+  const slug = share.generateSlugWithCollisionRetry({
+    generate: () =>
+      share.generateSlug((length, alphabet) => $security.randomStringWithAlphabet(length, alphabet)),
+    exists: (candidate) => {
+      const collisionQuery = share.slugCollisionQuery(appRecord.id, candidate)
+      if (collisionQuery === null) {
+        throw new Error("invalid slug collision query")
+      }
+      return $app.countRecords("links", $dbx.exp(collisionQuery.expression, collisionQuery.params)) > 0
+    },
+    maxRetries: share.MAX_SLUG_COLLISION_RETRIES
+  })
+  if (!slug.ok) {
+    return e.json(500, {
+      code: slug.code,
+      message: slug.message
+    })
+  }
+
+  // TODO(tasks 2.7-2.9): persist (with the hashed IP that task 2.4 already
+  // keys the quota on), KV publish, idempotency.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"

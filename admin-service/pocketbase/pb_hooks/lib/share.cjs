@@ -30,6 +30,12 @@ const IP_HASH_PATTERN = /^[0-9a-f]{64}$/
 const CLIENT_IP_PATTERN = /^[0-9a-fA-F:.]+$/
 const QUOTA_QUERY_EXPRESSION = 'app = {:app} AND created_from_ip = {:ip} AND created >= {:since}'
 
+const SLUG_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+const SLUG_LENGTH = 7
+const MAX_SLUG_COLLISION_RETRIES = 5
+const SLUG_PATTERN = new RegExp('^[A-Za-z0-9]{' + SLUG_LENGTH + '}$')
+const SLUG_COLLISION_QUERY_EXPRESSION = 'app = {:app} AND slug = {:slug}'
+
 const SYSTEM_CONFIG_COLLECTION = 'system_config'
 const BREAKER_FLAG_KEY = 'public_creation_paused'
 const DEFAULT_BREAKER_MULTIPLIER = 3
@@ -852,6 +858,89 @@ function runBreakerBaselineJob(input) {
   }
 }
 
+// Task 2.6: random unguessable slugs. 62-char alphabet × 7 characters gives a
+// 62^7 ≈ 2^41.7 keyspace (spec: ≥ 2^41), so slugs cannot be enumerated or
+// chosen by the client — `parseContentReference` never reads a client slug and
+// the create route only ever consumes generator output. `random` is injected
+// (the hook passes $security.randomStringWithAlphabet, crypto/rand-backed with
+// rejection-sampled unbiased indices) so the helpers stay pure and testable.
+function isValidGeneratedSlug(value) {
+  return typeof value === 'string' && SLUG_PATTERN.test(value)
+}
+
+function generateSlug(random) {
+  if (typeof random !== 'function') return null
+
+  let candidate = null
+  try {
+    candidate = random(SLUG_LENGTH, SLUG_ALPHABET)
+  } catch (err) {
+    return null
+  }
+
+  if (!isValidGeneratedSlug(candidate)) return null
+  return candidate
+}
+
+function generateSlugWithCollisionRetry(input) {
+  const invalid = {
+    ok: false,
+    code: 'slug_input_invalid',
+    message: 'slug generation input is invalid'
+  }
+
+  if (!isPlainObject(input)) return invalid
+  if (typeof input.generate !== 'function') return invalid
+  if (typeof input.exists !== 'function') return invalid
+  if (!isInteger(input.maxRetries) || input.maxRetries < 0) return invalid
+
+  for (let attempt = 1; attempt <= input.maxRetries + 1; attempt++) {
+    const slug = input.generate()
+    // A broken random source will not heal by retrying: fail immediately.
+    if (slug === null) {
+      return {
+        ok: false,
+        code: 'slug_generation_failed',
+        message: 'Slug generator returned no usable value'
+      }
+    }
+
+    let exists
+    try {
+      exists = input.exists(slug)
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'slug_collision_check_failed',
+        message: 'Slug collision could not be checked'
+      }
+    }
+
+    if (exists !== true) {
+      return { ok: true, slug: slug, attempts: attempt }
+    }
+  }
+
+  return {
+    ok: false,
+    code: 'slug_generation_failed',
+    message: 'No collision-free slug found after retries'
+  }
+}
+
+// Task 2.6: collision scope is per app (unique index idx_links_app_slug), so
+// the same slug may exist on two share hosts — the KV key namespace
+// `${share_host}:${path}` keeps them independent (spec: host-keyed routing).
+function slugCollisionQuery(appRecordId, slug) {
+  if (typeof appRecordId !== 'string' || appRecordId.length === 0 || appRecordId.length > MAX_APP_ID_LENGTH) return null
+  if (!isValidGeneratedSlug(slug)) return null
+
+  return {
+    expression: SLUG_COLLISION_QUERY_EXPRESSION,
+    params: { app: appRecordId, slug: slug }
+  }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -887,5 +976,13 @@ module.exports = {
   parseBreakerMultiplier: parseBreakerMultiplier,
   breakerBaselineWindow: breakerBaselineWindow,
   evaluateBreakerTrip: evaluateBreakerTrip,
-  runBreakerBaselineJob: runBreakerBaselineJob
+  runBreakerBaselineJob: runBreakerBaselineJob,
+  SLUG_ALPHABET: SLUG_ALPHABET,
+  SLUG_LENGTH: SLUG_LENGTH,
+  MAX_SLUG_COLLISION_RETRIES: MAX_SLUG_COLLISION_RETRIES,
+  SLUG_PATTERN: SLUG_PATTERN,
+  SLUG_COLLISION_QUERY_EXPRESSION: SLUG_COLLISION_QUERY_EXPRESSION,
+  generateSlug: generateSlug,
+  generateSlugWithCollisionRetry: generateSlugWithCollisionRetry,
+  slugCollisionQuery: slugCollisionQuery
 }

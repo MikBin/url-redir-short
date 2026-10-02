@@ -192,7 +192,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.5)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -461,6 +461,24 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.5)', () =
       const accepted = await postCreate(createBody(VALID_REFERENCE), origin)
       expect(accepted.status, origin).toBe(501)
     }
+  })
+
+  it('ignores client-supplied slug and url fields (task 2.6)', async () => {
+    const response = await postCreate(
+      createBody({
+        ...VALID_REFERENCE,
+        slug: 'my-custom-slug',
+        url: 'https://macrolattice.com/override',
+        customSlug: 'brand'
+      }),
+      APP_ORIGINS[0]
+    )
+
+    // The slug is server-generated from crypto randomness; the pipeline still
+    // holds at the interim 501 and nothing is persisted.
+    expect(response.status).toBe(501)
+    expect((await errorPayload(response)).code).toBe('not_implemented')
+    expect(await countLinks()).toBe(0)
   })
 
   it('echoes the exact first-party origin on create responses', async () => {
