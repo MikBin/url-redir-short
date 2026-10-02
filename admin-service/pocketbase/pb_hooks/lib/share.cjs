@@ -24,6 +24,12 @@ const MAX_HOST_LENGTH = 253
 const MAX_LABEL_LENGTH = 63
 const DEFAULT_HTTPS_PORT = 443
 
+const DEFAULT_DAILY_CREATE_LIMIT = 100
+const MAX_CLIENT_IP_LENGTH = 64
+const IP_HASH_PATTERN = /^[0-9a-f]{64}$/
+const CLIENT_IP_PATTERN = /^[0-9a-fA-F:.]+$/
+const QUOTA_QUERY_EXPRESSION = 'app = {:app} AND created_from_ip = {:ip} AND created >= {:since}'
+
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 const HOSTNAME_LABEL_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 const NUMERIC_HOST_PATTERN = /^\d+(\.\d+)*$/
@@ -492,6 +498,148 @@ function validateDestination(destination, allowedHost) {
   return { ok: true, destination: 'https://' + host + remainder }
 }
 
+// Task 2.4: per-IP daily quota. Bucket key is (app, HMAC(clientIp)) over the
+// UTC day. The client IP is trusted only because L1 (CF proxy + firewall)
+// guarantees it; shape checks below exist to fail closed on absent/garbage
+// values, not as the trust boundary. Hashing follows the A2 contract pinned in
+// design.md: HMAC-SHA256 with the stored IP_HASH_SALT, lowercase hex (64 chars),
+// never a raw IP (`hash` is injected so this stays pure/testable).
+function isDateLike(value) {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof value.getTime === 'function' &&
+    isFinite(value.getTime())
+  )
+}
+
+function isInteger(value) {
+  return typeof value === 'number' && isFinite(value) && Math.floor(value) === value
+}
+
+function formatPbDateTime(year, month, day, hours, minutes, seconds, milliseconds) {
+  const pad2 = (value) => (value < 10 ? '0' + value : String(value))
+  const pad3 = (value) => (value < 10 ? '00' + value : value < 100 ? '0' + value : String(value))
+  return (
+    String(year) +
+    '-' +
+    pad2(month) +
+    '-' +
+    pad2(day) +
+    ' ' +
+    pad2(hours) +
+    ':' +
+    pad2(minutes) +
+    ':' +
+    pad2(seconds) +
+    '.' +
+    pad3(milliseconds) +
+    'Z'
+  )
+}
+
+function normalizeClientIp(value) {
+  if (typeof value !== 'string') return null
+
+  let trimmed = value.trim()
+  if (trimmed.length > 1 && trimmed.charAt(0) === '[' && trimmed.charAt(trimmed.length - 1) === ']') {
+    trimmed = trimmed.slice(1, -1)
+  }
+  if (trimmed.length === 0 || trimmed.length > MAX_CLIENT_IP_LENGTH) return null
+  if (!CLIENT_IP_PATTERN.test(trimmed)) return null
+  if (trimmed.indexOf(':') === -1 && trimmed.indexOf('.') === -1) return null
+
+  return trimmed.toLowerCase()
+}
+
+function hashClientIp(ip, salt, hash) {
+  if (typeof ip !== 'string' || ip.length === 0) return null
+  if (typeof salt !== 'string' || salt.length === 0) return null
+  if (typeof hash !== 'function') return null
+
+  let digest = null
+  try {
+    digest = hash(ip, salt)
+  } catch (err) {
+    return null
+  }
+
+  if (typeof digest !== 'string' || !IP_HASH_PATTERN.test(digest)) return null
+  return digest
+}
+
+function utcDayStart(now) {
+  if (!isDateLike(now)) return null
+  return formatPbDateTime(
+    now.getUTCFullYear(),
+    now.getUTCMonth() + 1,
+    now.getUTCDate(),
+    0,
+    0,
+    0,
+    0
+  )
+}
+
+function nextUtcMidnight(now) {
+  if (!isDateLike(now)) return null
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0))
+}
+
+function dailyQuotaQuery(input) {
+  if (!isPlainObject(input)) return null
+
+  const appId = input.appId
+  if (typeof appId !== 'string' || appId.length === 0 || appId.length > MAX_APP_ID_LENGTH) return null
+
+  const ipHash = input.ipHash
+  if (typeof ipHash !== 'string' || !IP_HASH_PATTERN.test(ipHash)) return null
+
+  const since = utcDayStart(input.now)
+  if (since === null) return null
+
+  return {
+    expression: QUOTA_QUERY_EXPRESSION,
+    params: { app: appId, ip: ipHash, since: since }
+  }
+}
+
+function evaluateDailyQuota(input) {
+  if (!isPlainObject(input)) {
+    return { ok: false, code: 'quota_input_invalid', message: 'quota input must be an object' }
+  }
+
+  const used = input.used
+  const limit = input.limit
+  const now = input.now
+
+  if (!isInteger(used) || used < 0) {
+    return { ok: false, code: 'quota_input_invalid', message: 'used must be a non-negative integer' }
+  }
+  if (!isInteger(limit) || limit < 1) {
+    return { ok: false, code: 'quota_input_invalid', message: 'limit must be a positive integer' }
+  }
+
+  const resetAt = nextUtcMidnight(now)
+  if (resetAt === null) {
+    return { ok: false, code: 'quota_input_invalid', message: 'now must be a valid date' }
+  }
+
+  if (used >= limit) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((resetAt.getTime() - now.getTime()) / 1000))
+    return {
+      ok: false,
+      code: 'quota_exceeded',
+      used: used,
+      limit: limit,
+      resetAt: resetAt.toISOString(),
+      retryAfterSeconds: retryAfterSeconds
+    }
+  }
+
+  return { ok: true, used: used, limit: limit, remaining: limit - used }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -499,6 +647,7 @@ module.exports = {
   TURNSTILE_TOKEN_FIELD: TURNSTILE_TOKEN_FIELD,
   DEFAULT_TURNSTILE_VERIFY_URL: DEFAULT_TURNSTILE_VERIFY_URL,
   MAX_TURNSTILE_TOKEN_LENGTH: MAX_TURNSTILE_TOKEN_LENGTH,
+  DEFAULT_DAILY_CREATE_LIMIT: DEFAULT_DAILY_CREATE_LIMIT,
   normalizeOrigin: normalizeOrigin,
   parseContentReference: parseContentReference,
   resolveAllowedOrigins: resolveAllowedOrigins,
@@ -507,5 +656,11 @@ module.exports = {
   interpretSiteverify: interpretSiteverify,
   verifyTurnstileToken: verifyTurnstileToken,
   renderDestination: renderDestination,
-  validateDestination: validateDestination
+  validateDestination: validateDestination,
+  normalizeClientIp: normalizeClientIp,
+  hashClientIp: hashClientIp,
+  utcDayStart: utcDayStart,
+  nextUtcMidnight: nextUtcMidnight,
+  dailyQuotaQuery: dailyQuotaQuery,
+  evaluateDailyQuota: evaluateDailyQuota
 }

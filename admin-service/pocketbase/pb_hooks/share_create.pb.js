@@ -85,6 +85,65 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
+  // Task 2.4: per-IP daily quota, keyed by CF-Connecting-IP + app. Turnstile
+  // already ran, so bots pay before touching the quota query.
+  const clientIp = share.normalizeClientIp(e.request.header.get("CF-Connecting-IP"))
+  const ipHash = share.hashClientIp(clientIp, $os.getenv("IP_HASH_SALT"), $security.hs256)
+  if (ipHash === null) {
+    return e.json(503, {
+      code: "quota_unavailable",
+      message: "Daily quota could not be evaluated"
+    })
+  }
+
+  const now = new Date()
+  const quotaQuery = share.dailyQuotaQuery({
+    appId: appRecord.id,
+    ipHash: ipHash,
+    now: now
+  })
+  if (quotaQuery === null) {
+    return e.json(503, {
+      code: "quota_unavailable",
+      message: "Daily quota could not be evaluated"
+    })
+  }
+
+  let used = -1
+  try {
+    used = $app.countRecords("links", $dbx.exp(quotaQuery.expression, quotaQuery.params))
+  } catch (err) {
+    used = -1
+  }
+  if (used < 0) {
+    return e.json(503, {
+      code: "quota_unavailable",
+      message: "Daily quota could not be evaluated"
+    })
+  }
+
+  const quota = share.evaluateDailyQuota({
+    used: used,
+    limit: appRecord.getInt("daily_create_limit") || share.DEFAULT_DAILY_CREATE_LIMIT,
+    now: now
+  })
+  if (!quota.ok) {
+    if (quota.code === "quota_exceeded") {
+      e.response.header().set("Retry-After", String(quota.retryAfterSeconds))
+      return e.json(429, {
+        code: "quota_exceeded",
+        message: "Daily creation quota exceeded for this app",
+        limit: quota.limit,
+        used: quota.used,
+        resetAt: quota.resetAt
+      })
+    }
+    return e.json(503, {
+      code: "quota_unavailable",
+      message: "Daily quota could not be evaluated"
+    })
+  }
+
   let templates = null
   try {
     templates = JSON.parse(appRecord.getString("url_template"))
@@ -126,8 +185,8 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.4-2.9): enforce the per-IP quota and circuit breaker,
-  // generate the slug, persist, publish to KV.
+  // TODO(tasks 2.5-2.9): circuit breaker, slug, persist (with the hashed IP
+  // that task 2.4 already keys the quota on), KV publish.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"

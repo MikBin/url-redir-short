@@ -171,6 +171,7 @@ T2's "no writes, structurally" invariant is satisfied by construction: this rout
 | `services` credentials / impersonate tokens | One per app backend (T1) | Data-plane writes per §4.3 | Long-lived; rotate on off-boarding or suspicion |
 | `WORKER_RESOLVE_SECRET` | PocketBase env + Worker secret (T2) | Resolve endpoint auth | On demand (two-line change: PB setting + Worker secret) |
 | Turnstile secret key | PocketBase settings | Create-endpoint bot gate | Rare (Cloudflare-managed) |
+| `IP_HASH_SALT` | PocketBase env | HMAC key for hashed create IPs (quota keying 2.4, create analytics 3.6); never raw IPs | Rare; rotating resets per-IP quota buckets |
 | Cloudflare KV API token | PocketBase settings | KV publisher hook (task 2.7) | Rare; scope to the one namespace |
 | CF Access service token (if §3.3) | Worker secret + Access policy | Resolve path edge auth | On demand |
 

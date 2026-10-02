@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 
@@ -39,6 +40,23 @@ interface SiteverifyMock {
   send: (config: SiteverifyCall) => unknown
 }
 
+interface QuotaQuery {
+  expression: string
+  params: Record<string, string>
+}
+
+type QuotaDecision =
+  | { ok: true; used: number; limit: number; remaining: number }
+  | {
+      ok: false
+      code: 'quota_exceeded'
+      used: number
+      limit: number
+      resetAt: string
+      retryAfterSeconds: number
+    }
+  | { ok: false; code: 'quota_input_invalid'; message: string }
+
 interface ShareLib {
   CREATE_PATH: string
   MAX_DESTINATION_LENGTH: number
@@ -46,6 +64,7 @@ interface ShareLib {
   TURNSTILE_TOKEN_FIELD: string
   DEFAULT_TURNSTILE_VERIFY_URL: string
   MAX_TURNSTILE_TOKEN_LENGTH: number
+  DEFAULT_DAILY_CREATE_LIMIT: number
   normalizeOrigin: (origin: unknown) => string
   parseContentReference: (body: unknown) => ParseResult
   resolveAllowedOrigins: (rows: unknown) => string[]
@@ -55,6 +74,12 @@ interface ShareLib {
   verifyTurnstileToken: (token: unknown, deps: unknown) => TurnstileResult
   renderDestination: (template: unknown, reference: unknown) => UrlResult
   validateDestination: (destination: unknown, allowedHost: unknown) => UrlResult
+  normalizeClientIp: (value: unknown) => string | null
+  hashClientIp: (ip: unknown, salt: unknown, hash: unknown) => string | null
+  utcDayStart: (now: unknown) => string | null
+  nextUtcMidnight: (now: unknown) => Date | null
+  dailyQuotaQuery: (input: unknown) => QuotaQuery | null
+  evaluateDailyQuota: (input: unknown) => QuotaDecision
 }
 
 function createSiteverifyMock(response: unknown): SiteverifyMock {
@@ -730,5 +755,201 @@ describe('share hook lib: verifyTurnstileToken (task 2.3, mocked $http.send)', (
       code: 'turnstile_unavailable',
       message: expect.any(String)
     })
+  })
+})
+
+describe('share hook lib: per-IP daily quota (task 2.4)', () => {
+  const SALT = 'unit-test-ip-hash-salt'
+  const hmac = (text: string, secret: string): string =>
+    createHmac('sha256', secret).update(text).digest('hex')
+
+  it('normalizes trustworthy client IPs and rejects absent or malformed values', () => {
+    expect(share.normalizeClientIp('203.0.113.7')).toBe('203.0.113.7')
+    expect(share.normalizeClientIp('  2001:DB8::1  ')).toBe('2001:db8::1')
+    expect(share.normalizeClientIp('[2001:db8::1]')).toBe('2001:db8::1')
+    expect(share.normalizeClientIp('198.51.100.10')).toBe('198.51.100.10')
+
+    const rejected: unknown[] = [
+      undefined,
+      null,
+      42,
+      '',
+      '   ',
+      'hello',
+      'deadbeef',
+      '1.2.3.4, 5.6.7.8',
+      '1.2.3.4 5.6.7.8',
+      'x'.repeat(65)
+    ]
+    for (const value of rejected) {
+      expect(share.normalizeClientIp(value), JSON.stringify(value)).toBeNull()
+    }
+  })
+
+  it('hashes the client IP with HMAC-SHA256 and the configured salt (A2 contract)', () => {
+    const expected = hmac('203.0.113.7', SALT)
+    const digest = share.hashClientIp('203.0.113.7', SALT, hmac)
+
+    expect(digest).toBe(expected)
+    expect(digest).toMatch(/^[0-9a-f]{64}$/)
+    expect(share.hashClientIp('203.0.113.7', SALT, hmac)).toBe(digest)
+    expect(share.hashClientIp('203.0.113.8', SALT, hmac)).not.toBe(digest)
+    expect(share.hashClientIp('203.0.113.7', 'another-salt', hmac)).not.toBe(digest)
+  })
+
+  it('fails closed when the IP, salt, or hasher is missing or unusable', () => {
+    const invalid: Array<[unknown, unknown, unknown]> = [
+      [null, SALT, hmac],
+      ['', SALT, hmac],
+      ['203.0.113.7', '', hmac],
+      ['203.0.113.7', null, hmac],
+      ['203.0.113.7', SALT, null],
+      ['203.0.113.7', SALT, undefined],
+      ['203.0.113.7', SALT, () => 'not-a-hex-digest'],
+      ['203.0.113.7', SALT, () => 'A'.repeat(64)],
+      [
+        '203.0.113.7',
+        SALT,
+        () => {
+          throw new Error('hash failure')
+        }
+      ]
+    ]
+
+    for (const [ip, salt, hash] of invalid) {
+      expect(share.hashClientIp(ip, salt, hash)).toBeNull()
+    }
+  })
+
+  it('computes the UTC day start and the next UTC midnight reset', () => {
+    const now = new Date('2026-10-02T13:37:05.250Z')
+
+    expect(share.utcDayStart(now)).toBe('2026-10-02 00:00:00.000Z')
+    expect(share.nextUtcMidnight(now)?.toISOString()).toBe('2026-10-03T00:00:00.000Z')
+    expect(share.utcDayStart(new Date('2026-10-02T00:00:00.000Z'))).toBe('2026-10-02 00:00:00.000Z')
+    expect(share.nextUtcMidnight(new Date('2026-12-31T23:59:59.999Z'))?.toISOString()).toBe(
+      '2027-01-01T00:00:00.000Z'
+    )
+    expect(share.utcDayStart('not-a-date')).toBeNull()
+    expect(share.nextUtcMidnight(null)).toBeNull()
+  })
+
+  it('builds an app + hashed-IP + UTC-day scoped count query', () => {
+    const now = new Date('2026-10-02T13:37:05.250Z')
+    const ipHash = hmac('203.0.113.7', SALT)
+    const query = share.dailyQuotaQuery({ appId: 'pbc_apps_record', ipHash, now })
+
+    expect(query).not.toBeNull()
+    if (query !== null) {
+      expect(query.expression).toContain('app = {:app}')
+      expect(query.expression).toContain('created_from_ip = {:ip}')
+      expect(query.expression).toContain('created >= {:since}')
+      expect(query.params).toEqual({
+        app: 'pbc_apps_record',
+        ip: ipHash,
+        since: '2026-10-02 00:00:00.000Z'
+      })
+    }
+
+    expect(share.dailyQuotaQuery(null)).toBeNull()
+    expect(share.dailyQuotaQuery({ appId: '', ipHash, now })).toBeNull()
+    expect(share.dailyQuotaQuery({ appId: 'pbc_apps_record', ipHash: 'deadbeef', now })).toBeNull()
+    expect(share.dailyQuotaQuery({ appId: 'pbc_apps_record', ipHash, now: 'yesterday' })).toBeNull()
+
+    const otherApp = share.dailyQuotaQuery({ appId: 'other_app_record', ipHash, now })
+    expect(otherApp?.params).toEqual({
+      app: 'other_app_record',
+      ip: ipHash,
+      since: '2026-10-02 00:00:00.000Z'
+    })
+  })
+
+  it('allows requests below the per-app limit and reports the remaining budget', () => {
+    const now = new Date('2026-10-02T13:37:05.250Z')
+
+    expect(share.evaluateDailyQuota({ used: 0, limit: 100, now })).toEqual({
+      ok: true,
+      used: 0,
+      limit: 100,
+      remaining: 100
+    })
+    expect(share.evaluateDailyQuota({ used: 99, limit: 100, now })).toEqual({
+      ok: true,
+      used: 99,
+      limit: 100,
+      remaining: 1
+    })
+    expect(share.evaluateDailyQuota({ used: 1, limit: 2, now })).toEqual({
+      ok: true,
+      used: 1,
+      limit: 2,
+      remaining: 1
+    })
+  })
+
+  it('rejects requests at or above the limit with the reset time and retry hint', () => {
+    const now = new Date('2026-10-02T13:37:05.250Z')
+
+    expect(share.evaluateDailyQuota({ used: 100, limit: 100, now })).toEqual({
+      ok: false,
+      code: 'quota_exceeded',
+      used: 100,
+      limit: 100,
+      resetAt: '2026-10-03T00:00:00.000Z',
+      retryAfterSeconds: 37375
+    })
+    expect(share.evaluateDailyQuota({ used: 101, limit: 100, now })).toEqual({
+      ok: false,
+      code: 'quota_exceeded',
+      used: 101,
+      limit: 100,
+      resetAt: '2026-10-03T00:00:00.000Z',
+      retryAfterSeconds: 37375
+    })
+
+    const atMidnight = new Date('2026-10-02T00:00:00.000Z')
+    expect(share.evaluateDailyQuota({ used: 1, limit: 1, now: atMidnight })).toEqual({
+      ok: false,
+      code: 'quota_exceeded',
+      used: 1,
+      limit: 1,
+      resetAt: '2026-10-03T00:00:00.000Z',
+      retryAfterSeconds: 86400
+    })
+
+    const newYearsEve = new Date('2026-12-31T23:00:00.000Z')
+    expect(share.evaluateDailyQuota({ used: 5, limit: 5, now: newYearsEve })).toEqual({
+      ok: false,
+      code: 'quota_exceeded',
+      used: 5,
+      limit: 5,
+      resetAt: '2027-01-01T00:00:00.000Z',
+      retryAfterSeconds: 3600
+    })
+  })
+
+  it('fails closed on invalid quota inputs', () => {
+    const now = new Date('2026-10-02T13:37:05.250Z')
+    const invalid: unknown[] = [
+      undefined,
+      null,
+      'quota',
+      { used: -1, limit: 2, now },
+      { used: 1.5, limit: 2, now },
+      { used: Number.NaN, limit: 2, now },
+      { used: '1', limit: 2, now },
+      { used: 0, limit: 0, now },
+      { used: 0, limit: -5, now },
+      { used: 0, limit: 2, now: 'yesterday' },
+      { used: 0, limit: 2, now: null }
+    ]
+
+    for (const input of invalid) {
+      const result = share.evaluateDailyQuota(input)
+      expect(result.ok, JSON.stringify(input)).toBe(false)
+      if (!result.ok) {
+        expect(result.code, JSON.stringify(input)).toBe('quota_input_invalid')
+      }
+    }
   })
 })

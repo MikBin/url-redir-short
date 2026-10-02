@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { createHmac } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -24,6 +25,13 @@ const REPLAY_TOKEN = 'test-replay-token'
 const UNAVAILABLE_TOKEN = 'test-unavailable-token'
 const REMOTE_IP_TOKEN = 'test-remote-ip-token'
 const REMOTE_IP = '203.0.113.7'
+
+const IP_HASH_SALT = 'ci-share-quota-salt'
+const DEFAULT_IP = '198.51.100.10'
+const QUOTA_IP = '198.51.100.77'
+const QUOTA_IP_2 = '198.51.100.78'
+const QUOTA_OWNER_EMAIL = 'ci-share-owner@example.com'
+const QUOTA_OWNER_PASSWORD = 'ci-share-owner-password'
 
 const VALID_REFERENCE = {
   appId: 'macrolattice',
@@ -92,10 +100,21 @@ interface ErrorPayload {
   message?: string
   status?: number
   fields?: Array<{ field: string; message: string }>
+  limit?: number
+  used?: number
+  resetAt?: string
 }
 
 interface RecordList {
   totalItems: number
+}
+
+interface AppList {
+  items: Array<{ id: string; daily_create_limit: number }>
+}
+
+interface IdResponse {
+  id: string
 }
 
 interface AuthResponse {
@@ -145,10 +164,11 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.4)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
+  let quotaOwnerId: string | null = null
   let serverProcess: ReturnType<typeof spawn> | null = null
   let serverOutput = ''
 
@@ -163,7 +183,11 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () =
     origin?: string,
     extraHeaders: Record<string, string> = {}
   ): Promise<Response> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'CF-Connecting-IP': DEFAULT_IP,
+      ...extraHeaders
+    }
     if (origin !== undefined) headers['Origin'] = origin
     return fetch(`${baseUrl}/api/share/create`, { method: 'POST', headers, body })
   }
@@ -180,6 +204,71 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () =
 
   const errorPayload = async (response: Response): Promise<ErrorPayload> =>
     (await response.json()) as ErrorPayload
+
+  const hashIp = (ip: string): string => createHmac('sha256', IP_HASH_SALT).update(ip).digest('hex')
+
+  const superuserHeaders = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    Authorization: superuserToken
+  })
+
+  const findApp = async (appId: string): Promise<{ id: string; daily_create_limit: number }> => {
+    const filter = encodeURIComponent(`app_id='${appId}'`)
+    const response = await fetch(
+      `${baseUrl}/api/collections/apps/records?perPage=1&filter=${filter}`,
+      { headers: { Authorization: superuserToken } }
+    )
+    const list = await readJsonBody<AppList>(response)
+    const app = list.items[0]
+    if (app === undefined) throw new Error(`App ${appId} was not seeded`)
+    return app
+  }
+
+  const setDailyCreateLimit = async (appRecordId: string, limit: number): Promise<void> => {
+    const response = await fetch(`${baseUrl}/api/collections/apps/records/${appRecordId}`, {
+      method: 'PATCH',
+      headers: superuserHeaders(),
+      body: JSON.stringify({ daily_create_limit: limit })
+    })
+    await readJsonBody<unknown>(response)
+  }
+
+  const ensureQuotaOwner = async (): Promise<string> => {
+    if (quotaOwnerId !== null) return quotaOwnerId
+
+    const response = await fetch(`${baseUrl}/api/collections/users/records`, {
+      method: 'POST',
+      headers: superuserHeaders(),
+      body: JSON.stringify({
+        email: QUOTA_OWNER_EMAIL,
+        password: QUOTA_OWNER_PASSWORD,
+        passwordConfirm: QUOTA_OWNER_PASSWORD
+      })
+    })
+    const user = await readJsonBody<IdResponse>(response)
+    quotaOwnerId = user.id
+    return quotaOwnerId
+  }
+
+  const seedLink = async (
+    appRecordId: string,
+    ownerId: string,
+    slug: string,
+    ipHash: string
+  ): Promise<void> => {
+    const response = await fetch(`${baseUrl}/api/collections/links/records`, {
+      method: 'POST',
+      headers: superuserHeaders(),
+      body: JSON.stringify({
+        slug,
+        destination: `https://macrolattice.com/meal/${slug}`,
+        owner_id: ownerId,
+        app: appRecordId,
+        created_from_ip: ipHash
+      })
+    })
+    await readJsonBody<unknown>(response)
+  }
 
   beforeAll(async () => {
     const pb = requireBinary()
@@ -218,7 +307,8 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () =
         env: {
           ...process.env,
           TURNSTILE_SECRET,
-          TURNSTILE_VERIFY_URL: siteverifyUrl
+          TURNSTILE_VERIFY_URL: siteverifyUrl,
+          IP_HASH_SALT
         }
       }
     )
@@ -252,7 +342,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () =
     expect(response.status).toBe(501)
   })
 
-  it('fails closed with 501 until tasks 2.4-2.9 complete the pipeline', async () => {
+  it('fails closed with 501 until tasks 2.5-2.9 complete the pipeline', async () => {
     const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
 
     expect(response.status).toBe(501)
@@ -431,5 +521,79 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.3)', () =
 
     const anonymous = await fetch(`${baseUrl}/api/collections/links/records?perPage=1`)
     expect(anonymous.status).toBe(403)
+  })
+
+  it('enforces the per-IP daily quota at the limit with 429 and reset metadata (task 2.4)', async () => {
+    const app = await findApp('macrolattice')
+    await setDailyCreateLimit(app.id, 2)
+    const ownerId = await ensureQuotaOwner()
+    const ipHash = hashIp(QUOTA_IP)
+    await seedLink(app.id, ownerId, 'quota-seed-1', ipHash)
+    await seedLink(app.id, ownerId, 'quota-seed-2', ipHash)
+
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0], {
+      'CF-Connecting-IP': QUOTA_IP
+    })
+
+    expect(response.status).toBe(429)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('quota_exceeded')
+    expect(payload.limit).toBe(2)
+    expect(payload.used).toBe(2)
+    expect(payload.resetAt).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/)
+
+    const retryAfter = Number(response.headers.get('retry-after'))
+    expect(Number.isInteger(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThan(0)
+    expect(retryAfter).toBeLessThanOrEqual(86_400)
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP_ORIGINS[0])
+    expect(response.headers.get('cache-control')).toBe('no-store')
+
+    const links = await fetch(`${baseUrl}/api/collections/links/records?perPage=1`, {
+      headers: { Authorization: superuserToken }
+    })
+    const list = await readJsonBody<RecordList>(links)
+    expect(list.totalItems).toBe(2)
+  })
+
+  it('allows requests below the per-IP quota and keys the counter by IP (task 2.4)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    await seedLink(app.id, ownerId, 'quota-seed-3', hashIp(QUOTA_IP_2))
+
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0], {
+      'CF-Connecting-IP': QUOTA_IP_2
+    })
+
+    expect(response.status).toBe(501)
+  })
+
+  it('keys the quota per app: an exhausted app does not block other apps (task 2.4)', async () => {
+    const response = await postCreate(
+      createBody({ appId: 'supatrainer', type: 'workout', contentId: 'w_42' }),
+      APP_ORIGINS[1],
+      { 'CF-Connecting-IP': QUOTA_IP }
+    )
+
+    expect(response.status).toBe(501)
+  })
+
+  it('verifies Turnstile before evaluating the quota (task 2.4)', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE, INVALID_TOKEN), APP_ORIGINS[0], {
+      'CF-Connecting-IP': QUOTA_IP
+    })
+
+    expect(response.status).toBe(403)
+    expect((await errorPayload(response)).code).toBe('turnstile_failed')
+  })
+
+  it('fails closed with 503 when CF-Connecting-IP is absent (task 2.4)', async () => {
+    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0], {
+      'CF-Connecting-IP': ''
+    })
+
+    expect(response.status).toBe(503)
+    const payload = await errorPayload(response)
+    expect(payload.code).toBe('quota_unavailable')
   })
 })
