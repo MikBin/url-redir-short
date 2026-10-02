@@ -88,7 +88,61 @@ interface ShareLib {
   generateSlug: (random: unknown) => string | null
   generateSlugWithCollisionRetry: (input: unknown) => SlugGenerationResult
   slugCollisionQuery: (appRecordId: unknown, slug: unknown) => QuotaQuery | null
+  KV_API_BASE_URL: string
+  KV_ENV_ACCOUNT_ID: string
+  KV_ENV_NAMESPACE_ID: string
+  KV_ENV_API_TOKEN: string
+  KV_ENV_API_URL: string
+  KV_REDIRECT_CODE: number
+  KV_MAX_KEY_LENGTH: number
+  kvConfigFromEnv: (getenv: unknown) => KVConfig | null
+  kvLinkKey: (shareHost: unknown, path: unknown) => string | null
+  kvSlugPath: (slug: unknown) => string | null
+  kvValuesUrl: (config: unknown, key: unknown) => string | null
+  interpretKVResponse: (response: unknown) => KVOutcome
+  clampKVTimeout: (seconds: unknown) => number
+  createKVPublishMetrics: () => KVMetrics
+  kvPublishMetrics: () => KVMetrics
+  publishShareLinkToKV: (input: unknown, deps: unknown) => KVResult
+  deleteShareLinkFromKV: (input: unknown, deps: unknown) => KVResult
 }
+
+interface KVConfig {
+  accountId: string
+  namespaceId: string
+  apiToken: string
+  apiUrl: string
+}
+
+interface KVCall {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body?: string
+  timeout: number
+}
+
+interface KVMetricsSnapshot {
+  publishAttempts: number
+  publishFailures: number
+  deleteAttempts: number
+  deleteFailures: number
+  failureCodes: Record<string, number>
+}
+
+interface KVMetrics {
+  recordPublishSuccess: () => void
+  recordPublishFailure: (code: unknown) => void
+  recordDeleteSuccess: () => void
+  recordDeleteFailure: (code: unknown) => void
+  snapshot: () => KVMetricsSnapshot
+}
+
+type KVOutcome = { ok: true; status: number } | { ok: false; code: string; status: number | null }
+
+type KVResult =
+  | { ok: true; key: string; status: number }
+  | { ok: false; code: string; status: number | null; skipped?: boolean }
 
 type SlugGenerationResult =
   | { ok: true; slug: string; attempts: number }
@@ -1216,6 +1270,416 @@ describe('share hook lib: slug generator (task 2.6)', () => {
         expect('slug' in result.value).toBe(false)
         expect('url' in result.value).toBe(false)
       }
+    })
+  })
+})
+
+interface KVServerMock {
+  calls: KVCall[]
+  send: (config: KVCall) => unknown
+}
+
+function createKVMock(response: unknown, throwOnCall = false): KVServerMock {
+  const calls: KVCall[] = []
+  return {
+    calls,
+    send: (config: KVCall) => {
+      calls.push(config)
+      if (throwOnCall) throw new Error('network down')
+      return response
+    }
+  }
+}
+
+const kvEnv = {
+  [share.KV_ENV_ACCOUNT_ID]: 'ci-account',
+  [share.KV_ENV_NAMESPACE_ID]: 'ci-namespace',
+  [share.KV_ENV_API_TOKEN]: 'ci-kv-token'
+}
+
+describe('share hook lib: KV publisher (task 2.7)', () => {
+  const baseConfig = {
+    accountId: 'ci-account',
+    namespaceId: 'ci-namespace',
+    apiToken: 'ci-kv-token',
+    apiUrl: share.KV_API_BASE_URL
+  }
+
+  describe('kvConfigFromEnv', () => {
+    it('builds the publisher config from the CF env with the default API base URL', () => {
+      expect(share.kvConfigFromEnv((name: string) => kvEnv[name] ?? null)).toEqual(baseConfig)
+    })
+
+    it('honors the CF_KV_API_URL override and strips trailing slashes', () => {
+      const config = share.kvConfigFromEnv((name: string) =>
+        name === share.KV_ENV_API_URL ? 'http://127.0.0.1:9/client/v4///' : kvEnv[name] ?? null
+      )
+      expect(config).toEqual({ ...baseConfig, apiUrl: 'http://127.0.0.1:9/client/v4' })
+    })
+
+    it('returns null when any required variable is missing or blank', () => {
+      for (const missing of [share.KV_ENV_ACCOUNT_ID, share.KV_ENV_NAMESPACE_ID, share.KV_ENV_API_TOKEN]) {
+        const env: Record<string, string | null> = { ...kvEnv }
+        env[missing] = null
+        expect(share.kvConfigFromEnv((name: string) => env[name] ?? null), `missing ${missing}`).toBeNull()
+
+        env[missing] = '   '
+        expect(share.kvConfigFromEnv((name: string) => env[name] ?? null), `blank ${missing}`).toBeNull()
+      }
+    })
+
+    it('returns null for a non-function getter or a throwing getter', () => {
+      expect(share.kvConfigFromEnv(null)).toBeNull()
+      expect(share.kvConfigFromEnv('env')).toBeNull()
+      expect(
+        share.kvConfigFromEnv(() => {
+          throw new Error('no os module')
+        })
+      ).toBeNull()
+    })
+  })
+
+  describe('kvLinkKey / kvSlugPath', () => {
+    it('composes the host-keyed namespace key from share host and path', () => {
+      expect(share.kvLinkKey('sh.macrolattice.com', '/Ab3xK9z')).toBe('sh.macrolattice.com:/Ab3xK9z')
+    })
+
+    it('canonicalizes the share host (case, trailing dot)', () => {
+      expect(share.kvLinkKey('SH.Macrolattice.COM.', '/Ab3xK9z')).toBe('sh.macrolattice.com:/Ab3xK9z')
+    })
+
+    it('rejects invalid share hosts', () => {
+      for (const host of ['', 'sh .host', 'sh_host.com', '-bad.com', 'a..b', 42, null, undefined]) {
+        expect(share.kvLinkKey(host, '/Ab3xK9z'), `host ${String(host)}`).toBeNull()
+      }
+    })
+
+    it('rejects paths without a leading slash or with unsafe characters', () => {
+      for (const path of ['', 'Ab3xK9z', '/a b', '/a\tb', '/a\\b', '/a\nb', 42, null]) {
+        expect(share.kvLinkKey('sh.macrolattice.com', path), `path ${String(path)}`).toBeNull()
+      }
+    })
+
+    it('rejects keys that exceed the length cap', () => {
+      const longPath = `/${'a'.repeat(share.KV_MAX_KEY_LENGTH)}`
+      expect(share.kvLinkKey('sh.macrolattice.com', longPath)).toBeNull()
+    })
+
+    it('builds the slug path and validates transport safety only', () => {
+      expect(share.kvSlugPath('Ab3xK9z')).toBe('/Ab3xK9z')
+      // Transport-safe non-generator slugs still publish (legacy/operator rows).
+      expect(share.kvSlugPath('quota-seed-1')).toBe('/quota-seed-1')
+    })
+
+    it('rejects unsafe slug paths', () => {
+      for (const slug of ['', 'a/b', 'a\\b', 'a b', 'a\tb', 'a'.repeat(129), 42, null]) {
+        expect(share.kvSlugPath(slug), `slug ${String(slug)}`).toBeNull()
+      }
+    })
+  })
+
+  describe('kvValuesUrl', () => {
+    it('builds the KV values REST URL with an encoded key', () => {
+      expect(share.kvValuesUrl(baseConfig, 'sh.macrolattice.com:/Ab3xK9z')).toBe(
+        'https://api.cloudflare.com/client/v4/accounts/ci-account/storage/kv/namespaces/ci-namespace/values/sh.macrolattice.com%3A%2FAb3xK9z'
+      )
+    })
+
+    it('rejects incomplete configs or keys', () => {
+      expect(share.kvValuesUrl(null, 'k')).toBeNull()
+      expect(share.kvValuesUrl({ ...baseConfig, namespaceId: '' }, 'k')).toBeNull()
+      expect(share.kvValuesUrl(baseConfig, '')).toBeNull()
+      expect(share.kvValuesUrl(baseConfig, null)).toBeNull()
+    })
+  })
+
+  describe('interpretKVResponse', () => {
+    it('accepts a 200 KV API response', () => {
+      expect(share.interpretKVResponse({ statusCode: 200, json: { success: true } })).toEqual({
+        ok: true,
+        status: 200
+      })
+    })
+
+    it('maps failure statuses to stable codes', () => {
+      expect(share.interpretKVResponse({ statusCode: 401 })).toEqual({
+        ok: false,
+        code: 'kv_auth_failed',
+        status: 401
+      })
+      expect(share.interpretKVResponse({ statusCode: 403 }).code).toBe('kv_auth_failed')
+      expect(share.interpretKVResponse({ statusCode: 429 }).code).toBe('kv_rate_limited')
+      expect(share.interpretKVResponse({ statusCode: 500 }).code).toBe('kv_unavailable')
+      expect(share.interpretKVResponse({ statusCode: 503 }).code).toBe('kv_unavailable')
+      expect(share.interpretKVResponse({ statusCode: 400 }).code).toBe('kv_request_rejected')
+      expect(share.interpretKVResponse({ statusCode: 418 }).code).toBe('kv_request_rejected')
+    })
+
+    it('treats malformed sender output as unavailable', () => {
+      for (const response of [null, undefined, 'text', 42, {}, { statusCode: '200' }]) {
+        const outcome = share.interpretKVResponse(response)
+        expect(outcome.ok, JSON.stringify(response) ?? String(response)).toBe(false)
+        if (!outcome.ok) {
+          expect(outcome.code).toBe('kv_unavailable')
+          expect(outcome.status).toBeNull()
+        }
+      }
+    })
+  })
+
+  describe('clampKVTimeout', () => {
+    it('mirrors the shared 5s default / 10s cap', () => {
+      expect(share.clampKVTimeout(undefined)).toBe(5)
+      expect(share.clampKVTimeout(0)).toBe(5)
+      expect(share.clampKVTimeout(-3)).toBe(5)
+      expect(share.clampKVTimeout(1.9)).toBe(1)
+      expect(share.clampKVTimeout(5)).toBe(5)
+      expect(share.clampKVTimeout(99)).toBe(10)
+    })
+  })
+
+  describe('createKVPublishMetrics', () => {
+    it('starts at zero and records successes, failures, and failure codes', () => {
+      const metrics = share.createKVPublishMetrics()
+      expect(metrics.snapshot()).toEqual({
+        publishAttempts: 0,
+        publishFailures: 0,
+        deleteAttempts: 0,
+        deleteFailures: 0,
+        failureCodes: {}
+      })
+
+      metrics.recordPublishSuccess()
+      metrics.recordPublishFailure('kv_unavailable')
+      metrics.recordPublishFailure('kv_unavailable')
+      metrics.recordPublishFailure('kv_auth_failed')
+      metrics.recordDeleteSuccess()
+      metrics.recordDeleteFailure('kv_network_error')
+
+      const snapshot = metrics.snapshot()
+      expect(snapshot.publishAttempts).toBe(4)
+      expect(snapshot.publishFailures).toBe(3)
+      expect(snapshot.deleteAttempts).toBe(2)
+      expect(snapshot.deleteFailures).toBe(1)
+      expect(snapshot.failureCodes).toEqual({ kv_unavailable: 2, kv_auth_failed: 1, kv_network_error: 1 })
+    })
+
+    it('returns snapshots that do not alias internal state', () => {
+      const metrics = share.createKVPublishMetrics()
+      const snapshot = metrics.snapshot()
+      snapshot.failureCodes.kv_unavailable = 99
+      metrics.recordPublishFailure('kv_unavailable')
+      expect(metrics.snapshot().failureCodes).toEqual({ kv_unavailable: 1 })
+    })
+
+    it('exposes one process-wide singleton for the record hooks', () => {
+      const first = share.kvPublishMetrics()
+      first.recordDeleteSuccess()
+      expect(share.kvPublishMetrics()).toBe(first)
+      expect(share.kvPublishMetrics().snapshot().deleteAttempts).toBe(1)
+    })
+  })
+
+  describe('publishShareLinkToKV', () => {
+    const publishInput = {
+      shareHost: 'sh.macrolattice.com',
+      path: '/Ab3xK9z',
+      id: 'rec123',
+      destination: 'https://macrolattice.com/meal/r_8f3k',
+      isActive: true
+    }
+
+    it('PUTs the RedirectRule-shaped value to the encoded key with bearer auth', () => {
+      const mock = createKVMock({ statusCode: 200 })
+      const metrics = share.createKVPublishMetrics()
+
+      const result = share.publishShareLinkToKV(publishInput, {
+        send: mock.send,
+        config: baseConfig,
+        metrics
+      })
+
+      expect(result).toEqual({ ok: true, key: 'sh.macrolattice.com:/Ab3xK9z', status: 200 })
+      expect(mock.calls).toHaveLength(1)
+      const call = mock.calls[0]
+      expect(call.method).toBe('PUT')
+      expect(call.url).toBe(share.kvValuesUrl(baseConfig, 'sh.macrolattice.com:/Ab3xK9z'))
+      expect(call.headers['Authorization']).toBe('Bearer ci-kv-token')
+      expect(call.headers['Content-Type']).toBe('application/json')
+      expect(call.timeout).toBe(5)
+      expect(JSON.parse(call.body ?? '{}')).toEqual({
+        id: 'rec123',
+        path: '/Ab3xK9z',
+        destination: 'https://macrolattice.com/meal/r_8f3k',
+        code: share.KV_REDIRECT_CODE,
+        isActive: true
+      })
+      expect(metrics.snapshot()).toEqual({
+        publishAttempts: 1,
+        publishFailures: 0,
+        deleteAttempts: 0,
+        deleteFailures: 0,
+        failureCodes: {}
+      })
+    })
+
+    it('publishes inactive records with isActive false and tolerates a missing id', () => {
+      const mock = createKVMock({ statusCode: 200 })
+
+      share.publishShareLinkToKV(
+        { ...publishInput, id: undefined, isActive: false },
+        { send: mock.send, config: baseConfig }
+      )
+
+      expect(JSON.parse(mock.calls[0]?.body ?? '{}')).toMatchObject({ id: '', isActive: false })
+    })
+
+    it('skips without counting a failure when the publisher is unconfigured', () => {
+      const mock = createKVMock({ statusCode: 200 })
+      const metrics = share.createKVPublishMetrics()
+
+      const withoutConfig = share.publishShareLinkToKV(publishInput, { send: mock.send, metrics })
+      const withoutSend = share.publishShareLinkToKV(publishInput, { config: baseConfig, metrics })
+
+      expect(withoutConfig).toEqual({ ok: false, code: 'kv_not_configured', status: null, skipped: true })
+      expect(withoutSend).toEqual({ ok: false, code: 'kv_not_configured', status: null, skipped: true })
+      expect(mock.calls).toHaveLength(0)
+      expect(metrics.snapshot().publishFailures).toBe(0)
+      expect(metrics.snapshot().publishAttempts).toBe(0)
+    })
+
+    it('counts and reports API failures without throwing', () => {
+      const metrics = share.createKVPublishMetrics()
+      for (const [status, expectedCode] of [
+        [500, 'kv_unavailable'],
+        [401, 'kv_auth_failed'],
+        [429, 'kv_rate_limited'],
+        [400, 'kv_request_rejected']
+      ] as Array<[number, string]>) {
+        const mock = createKVMock({ statusCode: status })
+        const result = share.publishShareLinkToKV(publishInput, { send: mock.send, config: baseConfig, metrics })
+        expect(result.ok).toBe(false)
+        if (!result.ok) {
+          expect(result.code).toBe(expectedCode)
+          expect(result.status).toBe(status)
+        }
+      }
+
+      const snapshot = metrics.snapshot()
+      expect(snapshot.publishAttempts).toBe(4)
+      expect(snapshot.publishFailures).toBe(4)
+      expect(snapshot.failureCodes).toEqual({
+        kv_unavailable: 1,
+        kv_auth_failed: 1,
+        kv_rate_limited: 1,
+        kv_request_rejected: 1
+      })
+    })
+
+    it('counts network errors from a throwing sender', () => {
+      const mock = createKVMock(null, true)
+      const metrics = share.createKVPublishMetrics()
+
+      const result = share.publishShareLinkToKV(publishInput, { send: mock.send, config: baseConfig, metrics })
+
+      expect(result).toEqual({ ok: false, code: 'kv_network_error', status: null })
+      expect(metrics.snapshot().publishFailures).toBe(1)
+      expect(metrics.snapshot().failureCodes).toEqual({ kv_network_error: 1 })
+    })
+
+    it('fails closed with kv_input_invalid on malformed input, without calling send', () => {
+      const mock = createKVMock({ statusCode: 200 })
+      const metrics = share.createKVPublishMetrics()
+
+      const invalidInputs = [
+        null,
+        {},
+        { ...publishInput, shareHost: 'bad host' },
+        { ...publishInput, path: 'Ab3xK9z' },
+        { ...publishInput, destination: '' },
+        { ...publishInput, destination: 'x'.repeat(2049) }
+      ]
+      for (const input of invalidInputs) {
+        const result = share.publishShareLinkToKV(input, { send: mock.send, config: baseConfig, metrics })
+        expect(result.ok, JSON.stringify(input) ?? String(input)).toBe(false)
+        if (!result.ok) {
+          expect(result.code).toBe('kv_input_invalid')
+        }
+      }
+
+      expect(mock.calls).toHaveLength(0)
+      expect(metrics.snapshot().publishFailures).toBe(invalidInputs.length)
+      expect(metrics.snapshot().failureCodes).toEqual({ kv_input_invalid: invalidInputs.length })
+    })
+
+    it('clamps the configured timeout into the request', () => {
+      const mock = createKVMock({ statusCode: 200 })
+      share.publishShareLinkToKV(publishInput, { send: mock.send, config: baseConfig, timeout: 99 })
+      expect(mock.calls[0]?.timeout).toBe(10)
+    })
+  })
+
+  describe('deleteShareLinkFromKV', () => {
+    it('DELETEs the encoded key with bearer auth and no body', () => {
+      const mock = createKVMock({ statusCode: 200 })
+      const metrics = share.createKVPublishMetrics()
+
+      const result = share.deleteShareLinkFromKV(
+        { shareHost: 'sh.macrolattice.com', path: '/Ab3xK9z' },
+        { send: mock.send, config: baseConfig, metrics }
+      )
+
+      expect(result).toEqual({ ok: true, key: 'sh.macrolattice.com:/Ab3xK9z', status: 200 })
+      expect(mock.calls).toHaveLength(1)
+      expect(mock.calls[0]?.method).toBe('DELETE')
+      expect(mock.calls[0]?.body).toBeUndefined()
+      expect(mock.calls[0]?.headers['Authorization']).toBe('Bearer ci-kv-token')
+      expect(metrics.snapshot()).toEqual({
+        publishAttempts: 0,
+        publishFailures: 0,
+        deleteAttempts: 1,
+        deleteFailures: 0,
+        failureCodes: {}
+      })
+    })
+
+    it('skips when unconfigured, counts failures, and validates the key', () => {
+      const okMock = createKVMock({ statusCode: 200 })
+      const failingMock = createKVMock({ statusCode: 500 })
+      const metrics = share.createKVPublishMetrics()
+
+      const skipped = share.deleteShareLinkFromKV(
+        { shareHost: 'sh.macrolattice.com', path: '/Ab3xK9z' },
+        { send: okMock.send }
+      )
+      expect(skipped).toEqual({ ok: false, code: 'kv_not_configured', status: null, skipped: true })
+      expect(okMock.calls).toHaveLength(0)
+
+      const rejected = share.deleteShareLinkFromKV(
+        { shareHost: 'sh.macrolattice.com', path: '/Ab3xK9z' },
+        { send: failingMock.send, config: baseConfig, metrics }
+      )
+      expect(rejected).toEqual({ ok: false, code: 'kv_unavailable', status: 500 })
+
+      const invalid = share.deleteShareLinkFromKV(
+        { shareHost: 'sh.macrolattice.com', path: 'no-slash' },
+        { send: failingMock.send, config: baseConfig, metrics }
+      )
+      expect(invalid).toEqual({ ok: false, code: 'kv_input_invalid', status: null })
+
+      const throwing = share.deleteShareLinkFromKV(
+        { shareHost: 'sh.macrolattice.com', path: '/Ab3xK9z' },
+        { send: createKVMock(null, true).send, config: baseConfig, metrics }
+      )
+      expect(throwing).toEqual({ ok: false, code: 'kv_network_error', status: null })
+
+      expect(metrics.snapshot().deleteAttempts).toBe(3)
+      expect(metrics.snapshot().deleteFailures).toBe(3)
+      expect(metrics.snapshot().failureCodes).toEqual({
+        kv_unavailable: 1,
+        kv_input_invalid: 1,
+        kv_network_error: 1
+      })
     })
   })
 })

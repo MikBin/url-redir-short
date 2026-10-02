@@ -232,8 +232,10 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(tasks 2.7-2.9): persist (with the hashed IP that task 2.4 already
-  // keys the quota on), KV publish, idempotency.
+  // TODO(task 2.9): persist the record (with the hashed IP that task 2.4
+  // already keys the quota on) and apply create idempotency. The KV publish
+  // is handled by the pb_hooks/share_kv.pb.js record hooks, so persisting is
+  // all that remains before the response can carry the short URL.
   return e.json(501, {
     code: "not_implemented",
     message: "Create pipeline is not implemented yet"

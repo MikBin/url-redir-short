@@ -88,6 +88,45 @@ const siteverifyServer = createServer((request, response) => {
   })
 })
 
+// Task 2.7: hermetic KV API mock. Keys containing `kvfail` fail with a 500 so
+// the failure path (warn log + counter, record survives) is provable locally.
+const CF_ACCOUNT_ID = 'ci-account'
+const CF_NAMESPACE_ID = 'ci-namespace'
+const CF_API_TOKEN = 'ci-kv-token'
+
+interface KVApiCall {
+  method: string
+  url: string
+  authorization: string | null
+  body: string | null
+}
+
+const kvCalls: KVApiCall[] = []
+
+const kvApiServer = createServer((request, response) => {
+  let body: string | null = null
+  request.on('data', (chunk: Buffer) => {
+    body = `${body ?? ''}${chunk.toString('utf8')}`
+  })
+  request.on('end', () => {
+    kvCalls.push({
+      method: request.method ?? '',
+      url: request.url ?? '',
+      authorization: request.headers.authorization ?? null,
+      body
+    })
+
+    response.setHeader('Content-Type', 'application/json')
+    if (request.method === 'PUT' && (request.url ?? '').includes('kvfail')) {
+      response.statusCode = 500
+      response.end(JSON.stringify({ errors: [{ code: 10000, message: 'injected KV failure' }] }))
+      return
+    }
+    response.statusCode = 200
+    response.end(JSON.stringify({ success: true }))
+  })
+})
+
 function createBody(reference: unknown, token: string | null = VALID_TOKEN): string {
   if (token === null) return JSON.stringify(reference)
   return JSON.stringify({ ...(reference as Record<string, unknown>), turnstileToken: token })
@@ -149,6 +188,28 @@ interface LogList {
   items: LogRecord[]
 }
 
+interface KVFailureLogData {
+  code?: string
+  status?: string | number
+  contextId?: string
+  metrics?: string
+}
+
+interface KVFailureLogRecord {
+  id: string
+  message: string
+  data?: KVFailureLogData
+}
+
+interface KVFailureLogList {
+  items: KVFailureLogRecord[]
+}
+
+interface LinkRecord {
+  id: string
+  slug: string
+}
+
 function resolveBinary(): string | null {
   const candidate = process.env['POCKETBASE_BIN']?.trim() || 'pocketbase'
   const probe = spawnSync(candidate, ['--version'], { encoding: 'utf8' })
@@ -192,7 +253,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -283,7 +344,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
     ownerId: string,
     slug: string,
     ipHash: string
-  ): Promise<void> => {
+  ): Promise<LinkRecord> => {
     const response = await fetch(`${baseUrl}/api/collections/links/records`, {
       method: 'POST',
       headers: superuserHeaders(),
@@ -292,10 +353,11 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
         destination: `https://macrolattice.com/meal/${slug}`,
         owner_id: ownerId,
         app: appRecordId,
-        created_from_ip: ipHash
+        created_from_ip: ipHash,
+        is_active: true
       })
     })
-    await readJsonBody<unknown>(response)
+    return readJsonBody<LinkRecord>(response)
   }
 
   const findBreakerRecord = async (): Promise<SystemConfigRecord> => {
@@ -328,6 +390,28 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
     )
     const list = await readJsonBody<LogList>(response)
     return list.items[0]?.id ?? null
+  }
+
+  const latestKvFailureLog = async (): Promise<KVFailureLogRecord | null> => {
+    const filter = encodeURIComponent("message ~ 'share KV publish failed'")
+    const response = await fetch(
+      `${baseUrl}/api/logs?perPage=1&sort=-created&filter=${filter}`,
+      { headers: { Authorization: superuserToken } }
+    )
+    const list = await readJsonBody<KVFailureLogList>(response)
+    return list.items[0] ?? null
+  }
+
+  // PB batches log writes, so a freshly emitted entry needs a short wait
+  // before the /api/logs query can see it (same as the breaker job gate).
+  const waitForKvFailureLog = async (previousId: string | null): Promise<KVFailureLogRecord> => {
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      const entry = await latestKvFailureLog()
+      if (entry !== null && entry.id !== previousId) return entry
+      await new Promise<void>((resolve) => setTimeout(resolve, 150))
+    }
+    throw new Error('share KV publish failure was not logged within 15s')
   }
 
   const runBreakerJob = async (): Promise<void> => {
@@ -381,6 +465,10 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
     const siteverifyAddress = siteverifyServer.address() as AddressInfo
     const siteverifyUrl = `http://127.0.0.1:${siteverifyAddress.port}/turnstile/v0/siteverify`
 
+    await new Promise<void>((resolve) => kvApiServer.listen(0, '127.0.0.1', resolve))
+    const kvApiAddress = kvApiServer.address() as AddressInfo
+    const kvApiUrl = `http://127.0.0.1:${kvApiAddress.port}/client/v4`
+
     const port = 21000 + Math.floor(Math.random() * 10000)
     baseUrl = `http://127.0.0.1:${port}`
     serverProcess = spawn(
@@ -399,7 +487,11 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
           TURNSTILE_SECRET,
           TURNSTILE_VERIFY_URL: siteverifyUrl,
           IP_HASH_SALT,
-          BREAKER_MULTIPLIER
+          BREAKER_MULTIPLIER,
+          CF_ACCOUNT_ID,
+          CF_KV_NAMESPACE_ID: CF_NAMESPACE_ID,
+          CF_API_TOKEN,
+          CF_KV_API_URL: kvApiUrl
         }
       }
     )
@@ -420,6 +512,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
   afterAll(async () => {
     serverProcess?.kill()
     await new Promise<void>((resolve) => siteverifyServer.close(() => resolve()))
+    await new Promise<void>((resolve) => kvApiServer.close(() => resolve()))
     if (dataDir.length > 0) {
       rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
     }
@@ -796,5 +889,75 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.6)', () =
     const resumed = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
     expect(resumed.status).toBe(501)
     expect((await findBreakerRecord()).value).toBe(false)
+  })
+
+  it('publishes a created share link to the host-keyed KV namespace (task 2.7)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    kvCalls.length = 0
+
+    await seedLink(app.id, ownerId, 'kvpubab', hashIp('203.0.113.60'))
+
+    const expectedKey = 'sh.macrolattice.com:/kvpubab'
+    const call = kvCalls.find(
+      (item) => item.method === 'PUT' && item.url.includes(encodeURIComponent(expectedKey))
+    )
+    expect(call).toBeDefined()
+    expect(call?.url).toContain('/accounts/ci-account/storage/kv/namespaces/ci-namespace/values/')
+    expect(call?.authorization).toBe(`Bearer ${CF_API_TOKEN}`)
+
+    const value = JSON.parse(call?.body ?? '{}') as Record<string, unknown>
+    expect(value.id).toEqual(expect.any(String))
+    expect(value.path).toBe('/kvpubab')
+    expect(value.destination).toBe('https://macrolattice.com/meal/kvpubab')
+    expect(value.code).toBe(302)
+    expect(value.isActive).toBe(true)
+  })
+
+  it('removes the KV key when a share link record is deleted (task 2.7)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    const record = await seedLink(app.id, ownerId, 'kvdelab', hashIp('203.0.113.61'))
+    kvCalls.length = 0
+
+    const response = await fetch(`${baseUrl}/api/collections/links/records/${record.id}`, {
+      method: 'DELETE',
+      headers: superuserHeaders()
+    })
+    expect(response.status).toBe(204)
+
+    const expectedKey = 'sh.macrolattice.com:/kvdelab'
+    const call = kvCalls.find(
+      (item) => item.method === 'DELETE' && item.url.includes(encodeURIComponent(expectedKey))
+    )
+    expect(call).toBeDefined()
+    expect(call?.authorization).toBe(`Bearer ${CF_API_TOKEN}`)
+  })
+
+  it('isolates KV publish failures: the record persists and the failure is warn-logged with counters (task 2.7)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    const previousFailure = await latestKvFailureLog()
+
+    await seedLink(app.id, ownerId, 'kvfail11', hashIp('203.0.113.62'))
+
+    // KV is a cache: a failed publish must never fail the record operation,
+    // and the read-through fallback (2.8/3.5) covers the missed key.
+    const filter = encodeURIComponent("slug='kvfail11'")
+    const lookup = await fetch(`${baseUrl}/api/collections/links/records?perPage=1&filter=${filter}`, {
+      headers: { Authorization: superuserToken }
+    })
+    const list = await readJsonBody<RecordList>(lookup)
+    expect(list.totalItems).toBe(1)
+
+    // Not silent: the failure lands in the ops log trail with running counters.
+    const failure = await waitForKvFailureLog(previousFailure?.id ?? null)
+    expect(failure.data?.code).toBe('kv_unavailable')
+    const metrics = JSON.parse(failure.data?.metrics ?? '{}') as {
+      publishFailures?: number
+      failureCodes?: Record<string, number>
+    }
+    expect(metrics.publishFailures ?? 0).toBeGreaterThan(0)
+    expect(metrics.failureCodes?.kv_unavailable ?? 0).toBeGreaterThan(0)
   })
 })

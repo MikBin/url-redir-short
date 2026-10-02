@@ -36,6 +36,19 @@ const MAX_SLUG_COLLISION_RETRIES = 5
 const SLUG_PATTERN = new RegExp('^[A-Za-z0-9]{' + SLUG_LENGTH + '}$')
 const SLUG_COLLISION_QUERY_EXPRESSION = 'app = {:app} AND slug = {:slug}'
 
+// Task 2.7: KV publisher (ported from admin-service/supabase cloudflare-kv.ts).
+// Keys are `${share_host}:${path}` (spec: `sh.<host>:/<slug>`) so the Worker's
+// host-keyed lookup and idx_links_app_slug's per-app slug scope share one
+// namespace. CF_KV_API_URL exists so tests can point the publisher at a local
+// mock instead of api.cloudflare.com.
+const KV_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
+const KV_ENV_ACCOUNT_ID = 'CF_ACCOUNT_ID'
+const KV_ENV_NAMESPACE_ID = 'CF_KV_NAMESPACE_ID'
+const KV_ENV_API_TOKEN = 'CF_API_TOKEN'
+const KV_ENV_API_URL = 'CF_KV_API_URL'
+const KV_REDIRECT_CODE = 302
+const KV_MAX_KEY_LENGTH = 512
+
 const SYSTEM_CONFIG_COLLECTION = 'system_config'
 const BREAKER_FLAG_KEY = 'public_creation_paused'
 const DEFAULT_BREAKER_MULTIPLIER = 3
@@ -941,6 +954,267 @@ function slugCollisionQuery(appRecordId, slug) {
   }
 }
 
+// Task 2.7: KV publisher. The Supabase variant was fire-and-forget with
+// warn-only logging (review.md durability finding); this port keeps
+// fire-and-forget semantics (KV is a cache; read-through 2.8/3.5 covers
+// misses) but every real failure is counted — not silent — and the running
+// counters ride along in each failure log line. Unset CF env is the documented
+// local-dev default (publisher off), so it is a skip, never a failure.
+function kvConfigFromEnv(getenv) {
+  if (typeof getenv !== 'function') return null
+
+  let accountId = null
+  let namespaceId = null
+  let apiToken = null
+  let apiUrl = null
+  try {
+    accountId = getenv(KV_ENV_ACCOUNT_ID)
+    namespaceId = getenv(KV_ENV_NAMESPACE_ID)
+    apiToken = getenv(KV_ENV_API_TOKEN)
+    apiUrl = getenv(KV_ENV_API_URL)
+  } catch (err) {
+    return null
+  }
+
+  if (typeof accountId !== 'string' || accountId.trim().length === 0) return null
+  if (typeof namespaceId !== 'string' || namespaceId.trim().length === 0) return null
+  if (typeof apiToken !== 'string' || apiToken.trim().length === 0) return null
+
+  return {
+    accountId: accountId,
+    namespaceId: namespaceId,
+    apiToken: apiToken,
+    apiUrl:
+      typeof apiUrl === 'string' && apiUrl.trim().length > 0
+        ? apiUrl.trim().replace(/\/+$/, '')
+        : KV_API_BASE_URL
+  }
+}
+
+function kvLinkKey(shareHost, path) {
+  const host = canonicalizeHost(shareHost)
+  if (host === null || !isValidHostname(host)) return null
+  if (typeof path !== 'string' || path.length === 0 || path.charAt(0) !== '/') return null
+  if (URL_UNSAFE_PATTERN.test(path) || path.indexOf('\\') !== -1) return null
+  if (host.length + 1 + path.length > KV_MAX_KEY_LENGTH) return null
+
+  return host + ':' + path
+}
+
+// The path half of the key is transport-validated only (leading slash,
+// printable-ASCII, no separators/backslash): the publisher mirrors whatever
+// slug the links row carries, and slug *shape* is the generator's contract
+// (task 2.6), not the publisher's.
+function kvSlugPath(slug) {
+  if (typeof slug !== 'string') return null
+  if (slug.length === 0 || slug.length > MAX_CONTENT_ID_LENGTH) return null
+  if (URL_UNSAFE_PATTERN.test(slug) || slug.indexOf('/') !== -1 || slug.indexOf('\\') !== -1) return null
+
+  return '/' + slug
+}
+
+function kvValuesUrl(config, key) {
+  if (!isPlainObject(config)) return null
+  if (typeof config.accountId !== 'string' || config.accountId.length === 0) return null
+  if (typeof config.namespaceId !== 'string' || config.namespaceId.length === 0) return null
+  if (typeof key !== 'string' || key.length === 0) return null
+
+  const base = typeof config.apiUrl === 'string' && config.apiUrl.length > 0 ? config.apiUrl : KV_API_BASE_URL
+  return (
+    base.replace(/\/+$/, '') +
+    '/accounts/' + encodeURIComponent(config.accountId) +
+    '/storage/kv/namespaces/' + encodeURIComponent(config.namespaceId) +
+    '/values/' + encodeURIComponent(key)
+  )
+}
+
+function kvAuthHeaders(config) {
+  return {
+    'Authorization': 'Bearer ' + config.apiToken,
+    'Content-Type': 'application/json'
+  }
+}
+
+function interpretKVResponse(response) {
+  if (!isPlainObject(response) || typeof response.statusCode !== 'number') {
+    return { ok: false, code: 'kv_unavailable', status: null }
+  }
+
+  const status = response.statusCode
+  if (status === 200) return { ok: true, status: status }
+  if (status === 401 || status === 403) return { ok: false, code: 'kv_auth_failed', status: status }
+  if (status === 429) return { ok: false, code: 'kv_rate_limited', status: status }
+  if (status >= 500) return { ok: false, code: 'kv_unavailable', status: status }
+  return { ok: false, code: 'kv_request_rejected', status: status }
+}
+
+function clampKVTimeout(seconds) {
+  return clampTurnstileTimeout(seconds)
+}
+
+function createKVPublishMetrics() {
+  const counters = {
+    publishAttempts: 0,
+    publishFailures: 0,
+    deleteAttempts: 0,
+    deleteFailures: 0
+  }
+  const failureCodes = {}
+
+  const bumpFailure = (code) => {
+    const key = typeof code === 'string' && code.length > 0 ? code : 'unknown'
+    failureCodes[key] = (Object.prototype.hasOwnProperty.call(failureCodes, key) ? failureCodes[key] : 0) + 1
+  }
+
+  return {
+    recordPublishSuccess() {
+      counters.publishAttempts += 1
+    },
+    recordPublishFailure(code) {
+      counters.publishAttempts += 1
+      counters.publishFailures += 1
+      bumpFailure(code)
+    },
+    recordDeleteSuccess() {
+      counters.deleteAttempts += 1
+    },
+    recordDeleteFailure(code) {
+      counters.deleteAttempts += 1
+      counters.deleteFailures += 1
+      bumpFailure(code)
+    },
+    snapshot() {
+      const codes = {}
+      for (const code of Object.keys(failureCodes)) {
+        codes[code] = failureCodes[code]
+      }
+      return {
+        publishAttempts: counters.publishAttempts,
+        publishFailures: counters.publishFailures,
+        deleteAttempts: counters.deleteAttempts,
+        deleteFailures: counters.deleteFailures,
+        failureCodes: codes
+      }
+    }
+  }
+}
+
+// Process-wide failure counter for the KV record hooks. The singleton lives in
+// this module (CommonJS cache) because PocketBase's JSVM does not keep hook
+// file top-level bindings alive inside registered callbacks.
+let sharedKVPublishMetrics = null
+function kvPublishMetrics() {
+  if (sharedKVPublishMetrics === null) {
+    sharedKVPublishMetrics = createKVPublishMetrics()
+  }
+  return sharedKVPublishMetrics
+}
+
+function recordKVOutcome(deps, operation, outcome) {
+  if (!isPlainObject(deps) || !isPlainObject(deps.metrics)) return
+
+  const metrics = deps.metrics
+  const succeeded = outcome.ok === true
+  if (operation === 'publish') {
+    if (succeeded && typeof metrics.recordPublishSuccess === 'function') metrics.recordPublishSuccess()
+    if (!succeeded && typeof metrics.recordPublishFailure === 'function') metrics.recordPublishFailure(outcome.code)
+  }
+  if (operation === 'delete') {
+    if (succeeded && typeof metrics.recordDeleteSuccess === 'function') metrics.recordDeleteSuccess()
+    if (!succeeded && typeof metrics.recordDeleteFailure === 'function') metrics.recordDeleteFailure(outcome.code)
+  }
+}
+
+// The value shape is the engine's RedirectRule contract (redir-engine
+// CloudflareKVStore JSON-parses KV values): path/destination/code are the
+// fields the Worker's hot path consumes. 302 (not 301) so browser caches
+// cannot outlive an expired or taken-down link (§4.6).
+function shareLinkValue(input) {
+  return {
+    id: typeof input.id === 'string' ? input.id : '',
+    path: input.path,
+    destination: input.destination,
+    code: KV_REDIRECT_CODE,
+    isActive: input.isActive !== false
+  }
+}
+
+function publishShareLinkToKV(input, deps) {
+  if (!isPlainObject(deps) || !isPlainObject(deps.config) || typeof deps.send !== 'function') {
+    return { ok: false, code: 'kv_not_configured', status: null, skipped: true }
+  }
+
+  const key = isPlainObject(input) ? kvLinkKey(input.shareHost, input.path) : null
+  const destination = isPlainObject(input) && typeof input.destination === 'string' ? input.destination : ''
+  if (key === null || destination.length === 0 || destination.length > MAX_DESTINATION_LENGTH) {
+    recordKVOutcome(deps, 'publish', { ok: false, code: 'kv_input_invalid' })
+    return { ok: false, code: 'kv_input_invalid', status: null }
+  }
+
+  const url = kvValuesUrl(deps.config, key)
+  if (url === null) {
+    recordKVOutcome(deps, 'publish', { ok: false, code: 'kv_input_invalid' })
+    return { ok: false, code: 'kv_input_invalid', status: null }
+  }
+
+  let response = null
+  try {
+    response = deps.send({
+      url: url,
+      method: 'PUT',
+      headers: kvAuthHeaders(deps.config),
+      body: JSON.stringify(shareLinkValue(input)),
+      timeout: clampKVTimeout(deps.timeout)
+    })
+  } catch (err) {
+    recordKVOutcome(deps, 'publish', { ok: false, code: 'kv_network_error' })
+    return { ok: false, code: 'kv_network_error', status: null }
+  }
+
+  const outcome = interpretKVResponse(response)
+  recordKVOutcome(deps, 'publish', outcome)
+  if (!outcome.ok) return outcome
+
+  return { ok: true, key: key, status: outcome.status }
+}
+
+function deleteShareLinkFromKV(input, deps) {
+  if (!isPlainObject(deps) || !isPlainObject(deps.config) || typeof deps.send !== 'function') {
+    return { ok: false, code: 'kv_not_configured', status: null, skipped: true }
+  }
+
+  const key = isPlainObject(input) ? kvLinkKey(input.shareHost, input.path) : null
+  if (key === null) {
+    recordKVOutcome(deps, 'delete', { ok: false, code: 'kv_input_invalid' })
+    return { ok: false, code: 'kv_input_invalid', status: null }
+  }
+
+  const url = kvValuesUrl(deps.config, key)
+  if (url === null) {
+    recordKVOutcome(deps, 'delete', { ok: false, code: 'kv_input_invalid' })
+    return { ok: false, code: 'kv_input_invalid', status: null }
+  }
+
+  let response = null
+  try {
+    response = deps.send({
+      url: url,
+      method: 'DELETE',
+      headers: kvAuthHeaders(deps.config),
+      timeout: clampKVTimeout(deps.timeout)
+    })
+  } catch (err) {
+    recordKVOutcome(deps, 'delete', { ok: false, code: 'kv_network_error' })
+    return { ok: false, code: 'kv_network_error', status: null }
+  }
+
+  const outcome = interpretKVResponse(response)
+  recordKVOutcome(deps, 'delete', outcome)
+  if (!outcome.ok) return outcome
+
+  return { ok: true, key: key, status: outcome.status }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -984,5 +1258,22 @@ module.exports = {
   SLUG_COLLISION_QUERY_EXPRESSION: SLUG_COLLISION_QUERY_EXPRESSION,
   generateSlug: generateSlug,
   generateSlugWithCollisionRetry: generateSlugWithCollisionRetry,
-  slugCollisionQuery: slugCollisionQuery
+  slugCollisionQuery: slugCollisionQuery,
+  KV_API_BASE_URL: KV_API_BASE_URL,
+  KV_ENV_ACCOUNT_ID: KV_ENV_ACCOUNT_ID,
+  KV_ENV_NAMESPACE_ID: KV_ENV_NAMESPACE_ID,
+  KV_ENV_API_TOKEN: KV_ENV_API_TOKEN,
+  KV_ENV_API_URL: KV_ENV_API_URL,
+  KV_REDIRECT_CODE: KV_REDIRECT_CODE,
+  KV_MAX_KEY_LENGTH: KV_MAX_KEY_LENGTH,
+  kvConfigFromEnv: kvConfigFromEnv,
+  kvLinkKey: kvLinkKey,
+  kvSlugPath: kvSlugPath,
+  kvValuesUrl: kvValuesUrl,
+  interpretKVResponse: interpretKVResponse,
+  clampKVTimeout: clampKVTimeout,
+  createKVPublishMetrics: createKVPublishMetrics,
+  kvPublishMetrics: kvPublishMetrics,
+  publishShareLinkToKV: publishShareLinkToKV,
+  deleteShareLinkFromKV: deleteShareLinkFromKV
 }
