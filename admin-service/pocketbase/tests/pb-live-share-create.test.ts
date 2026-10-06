@@ -37,6 +37,21 @@ const BREAKER_MULTIPLIER = '2'
 const BREAKER_THRESHOLD = 2 * 10
 const BREAKER_SEEDED_LINKS = 30
 
+// Task 2.8: resolve endpoint fixtures. The per-minute limit is set low so the
+// live gate can prove the 429 path; every test uses its own CF-Connecting-IP
+// so the process-wide fixed-window limiter buckets stay isolated per test.
+const RESOLVE_SECRET = 'ci-resolve-secret'
+const RESOLVE_RATE_LIMIT_PER_MINUTE = '6'
+const RESOLVE_IP_AUTH = '198.51.100.201'
+const RESOLVE_IP_QUERY = '198.51.100.202'
+const RESOLVE_IP_HIT = '198.51.100.203'
+const RESOLVE_IP_DUP = '198.51.100.204'
+const RESOLVE_IP_MISS = '198.51.100.205'
+const RESOLVE_IP_STATE = '198.51.100.206'
+const RESOLVE_IP_RATE = '198.51.100.207'
+const RESOLVE_IP_RATE_OTHER = '198.51.100.208'
+const RESOLVE_IP_METHOD = '198.51.100.209'
+
 const VALID_REFERENCE = {
   appId: 'macrolattice',
   type: 'meal',
@@ -146,6 +161,7 @@ interface ErrorPayload {
   limit?: number
   used?: number
   resetAt?: string
+  retryAfterSeconds?: number
 }
 
 interface RecordList {
@@ -210,6 +226,22 @@ interface LinkRecord {
   slug: string
 }
 
+interface SeedOverrides {
+  destination?: string
+  isActive?: boolean
+  expiresAt?: string
+}
+
+interface ResolveResponse {
+  destination?: string
+  code?: number
+}
+
+interface ResolveOptions {
+  auth?: string
+  ip?: string
+}
+
 function resolveBinary(): string | null {
   const candidate = process.env['POCKETBASE_BIN']?.trim() || 'pocketbase'
   const probe = spawnSync(candidate, ['--version'], { encoding: 'utf8' })
@@ -253,7 +285,7 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
@@ -290,6 +322,23 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () =
         'Access-Control-Request-Headers': 'content-type'
       }
     })
+
+  const getResolve = (
+    host: string | undefined,
+    path: string | undefined,
+    options: ResolveOptions = {}
+  ): Promise<Response> => {
+    const params = new URLSearchParams()
+    if (host !== undefined) params.set('host', host)
+    if (path !== undefined) params.set('path', path)
+    const headers: Record<string, string> = {
+      'CF-Connecting-IP': options.ip ?? RESOLVE_IP_HIT
+    }
+    if (options.auth !== undefined) headers['Authorization'] = options.auth
+    return fetch(`${baseUrl}/api/share/resolve?${params.toString()}`, { headers })
+  }
+
+  const resolveAuth = `Bearer ${RESOLVE_SECRET}`
 
   const errorPayload = async (response: Response): Promise<ErrorPayload> =>
     (await response.json()) as ErrorPayload
@@ -343,18 +392,20 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () =
     appRecordId: string,
     ownerId: string,
     slug: string,
-    ipHash: string
+    ipHash: string,
+    overrides: SeedOverrides = {}
   ): Promise<LinkRecord> => {
     const response = await fetch(`${baseUrl}/api/collections/links/records`, {
       method: 'POST',
       headers: superuserHeaders(),
       body: JSON.stringify({
         slug,
-        destination: `https://macrolattice.com/meal/${slug}`,
+        destination: overrides.destination ?? `https://macrolattice.com/meal/${slug}`,
         owner_id: ownerId,
         app: appRecordId,
         created_from_ip: ipHash,
-        is_active: true
+        is_active: overrides.isActive ?? true,
+        ...(overrides.expiresAt !== undefined ? { expires_at: overrides.expiresAt } : {})
       })
     })
     return readJsonBody<LinkRecord>(response)
@@ -491,7 +542,9 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () =
           CF_ACCOUNT_ID,
           CF_KV_NAMESPACE_ID: CF_NAMESPACE_ID,
           CF_API_TOKEN,
-          CF_KV_API_URL: kvApiUrl
+          CF_KV_API_URL: kvApiUrl,
+          WORKER_RESOLVE_SECRET: RESOLVE_SECRET,
+          RESOLVE_RATE_LIMIT_PER_MINUTE: RESOLVE_RATE_LIMIT_PER_MINUTE
         }
       }
     )
@@ -959,5 +1012,202 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.7)', () =
     }
     expect(metrics.publishFailures ?? 0).toBeGreaterThan(0)
     expect(metrics.failureCodes?.kv_unavailable ?? 0).toBeGreaterThan(0)
+  })
+
+  it('rejects resolve requests without a valid bearer secret with 401 (task 2.8)', async () => {
+    const missing = await getResolve('sh.macrolattice.com', '/resolve01', {
+      ip: RESOLVE_IP_AUTH
+    })
+    expect(missing.status).toBe(401)
+    expect((await errorPayload(missing)).code).toBe('unauthorized')
+    expect(missing.headers.get('cache-control')).toBe('no-store')
+
+    const wrong = await getResolve('sh.macrolattice.com', '/resolve01', {
+      auth: 'Bearer wrong-secret',
+      ip: RESOLVE_IP_AUTH
+    })
+    expect(wrong.status).toBe(401)
+    expect((await errorPayload(wrong)).code).toBe('unauthorized')
+
+    const nonBearer = await getResolve('sh.macrolattice.com', '/resolve01', {
+      auth: 'Basic ci-resolve-secret',
+      ip: RESOLVE_IP_AUTH
+    })
+    expect(nonBearer.status).toBe(401)
+    expect((await errorPayload(nonBearer)).code).toBe('unauthorized')
+  })
+
+  it('rejects malformed resolve queries with 400 and per-field details (task 2.8)', async () => {
+    const cases: Array<[string | undefined, string | undefined, string]> = [
+      [undefined, '/Ab3xK9z', 'host'],
+      ['sh.macrolattice.com', undefined, 'path'],
+      ['sh.macrolattice.com', 'Ab3xK9z', 'path'],
+      ['sh.macrolattice.com', '/a/b', 'path'],
+      ['not_a_host', '/Ab3xK9z', 'host']
+    ]
+
+    for (const [host, path, field] of cases) {
+      const response = await getResolve(host, path, { auth: resolveAuth, ip: RESOLVE_IP_QUERY })
+      expect(response.status, `${host} ${path}`).toBe(400)
+
+      const payload = await errorPayload(response)
+      expect(payload.code).toBe('invalid_request')
+      expect((payload.fields ?? []).map((item) => item.field)).toContain(field)
+    }
+  })
+
+  it('resolves an existing slug to its destination and redirect code (task 2.8)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    await seedLink(app.id, ownerId, 'resolve01', hashIp('203.0.113.70'))
+
+    const response = await getResolve('sh.macrolattice.com', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_HIT
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const payload = (await response.json()) as ResolveResponse
+    expect(payload.destination).toBe('https://macrolattice.com/meal/resolve01')
+    expect(payload.code).toBe(302)
+
+    // The host is canonicalized exactly like the KV key half.
+    const upperCase = await getResolve('SH.Macrolattice.COM', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_HIT
+    })
+    expect(upperCase.status).toBe(200)
+
+    const trailingDot = await getResolve('sh.macrolattice.com.', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_HIT
+    })
+    expect(trailingDot.status).toBe(200)
+  })
+
+  it('keeps the same slug independent per share host (task 2.8)', async () => {
+    const macro = await findApp('macrolattice')
+    const supra = await findApp('supatrainer')
+    const ownerId = await ensureQuotaOwner()
+    await seedLink(macro.id, ownerId, 'dupslug', hashIp('203.0.113.71'))
+    await seedLink(
+      supra.id,
+      ownerId,
+      'dupslug',
+      hashIp('203.0.113.71'),
+      { destination: 'https://supatrainer.com/workout/dupslug' }
+    )
+
+    const macroHit = await getResolve('sh.macrolattice.com', '/dupslug', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_DUP
+    })
+    expect(macroHit.status).toBe(200)
+    expect(((await macroHit.json()) as ResolveResponse).destination).toBe(
+      'https://macrolattice.com/meal/dupslug'
+    )
+
+    const supraHit = await getResolve('sh.supatrainer.com', '/dupslug', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_DUP
+    })
+    expect(supraHit.status).toBe(200)
+    expect(((await supraHit.json()) as ResolveResponse).destination).toBe(
+      'https://supatrainer.com/workout/dupslug'
+    )
+  })
+
+  it('returns an indistinguishable 404 for unknown hosts and unknown slugs (task 2.8)', async () => {
+    const unknownHost = await getResolve('sh.nosuch.example', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_MISS
+    })
+    expect(unknownHost.status).toBe(404)
+    const unknownHostPayload = await unknownHost.json()
+
+    const unknownSlug = await getResolve('sh.macrolattice.com', '/nosuchslug', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_MISS
+    })
+    expect(unknownSlug.status).toBe(404)
+    expect(await unknownSlug.json()).toEqual(unknownHostPayload)
+  })
+
+  it('does not resolve inactive or expired links (task 2.8)', async () => {
+    const app = await findApp('macrolattice')
+    const ownerId = await ensureQuotaOwner()
+    await seedLink(app.id, ownerId, 'resolveoff', hashIp('203.0.113.72'), { isActive: false })
+    await seedLink(app.id, ownerId, 'resolveold', hashIp('203.0.113.72'), {
+      expiresAt: '2020-01-01 00:00:00.000Z'
+    })
+    await seedLink(app.id, ownerId, 'resolvenew', hashIp('203.0.113.72'), {
+      expiresAt: '2099-01-01 00:00:00.000Z'
+    })
+
+    const inactive = await getResolve('sh.macrolattice.com', '/resolveoff', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_STATE
+    })
+    expect(inactive.status).toBe(404)
+
+    const expired = await getResolve('sh.macrolattice.com', '/resolveold', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_STATE
+    })
+    expect(expired.status).toBe(404)
+
+    const unexpired = await getResolve('sh.macrolattice.com', '/resolvenew', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_STATE
+    })
+    expect(unexpired.status).toBe(200)
+    expect(((await unexpired.json()) as ResolveResponse).destination).toBe(
+      'https://macrolattice.com/meal/resolvenew'
+    )
+  })
+
+  it('rate-limits resolve calls per IP with 429 before the auth gate (task 2.8)', async () => {
+    // Six unauthenticated requests exhaust the bucket (limit 6/min): the rate
+    // gate passes and auth fails with 401...
+    for (let i = 0; i < 6; i++) {
+      const response = await getResolve('sh.macrolattice.com', '/resolve01', {
+        ip: RESOLVE_IP_RATE
+      })
+      expect(response.status).toBe(401)
+    }
+
+    // ...the seventh is shed by the limiter itself, proving rate-before-auth.
+    const denied = await getResolve('sh.macrolattice.com', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_RATE
+    })
+    expect(denied.status).toBe(429)
+    const payload = await errorPayload(denied)
+    expect(payload.code).toBe('rate_limited')
+    expect(payload.retryAfterSeconds ?? 0).toBeGreaterThanOrEqual(1)
+    const retryAfter = Number(denied.headers.get('retry-after'))
+    expect(Number.isInteger(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThan(0)
+    expect(retryAfter).toBeLessThanOrEqual(60)
+
+    // Buckets are per IP: another caller is unaffected.
+    const other = await getResolve('sh.macrolattice.com', '/resolve01', {
+      auth: resolveAuth,
+      ip: RESOLVE_IP_RATE_OTHER
+    })
+    expect(other.status).toBe(200)
+  })
+
+  it('exposes resolve as GET-only (task 2.8)', async () => {
+    const response = await fetch(`${baseUrl}/api/share/resolve?host=sh.macrolattice.com&path=/resolve01`, {
+      method: 'POST',
+      headers: {
+        Authorization: resolveAuth,
+        'CF-Connecting-IP': RESOLVE_IP_METHOD
+      }
+    })
+
+    expect([404, 405]).toContain(response.status)
   })
 })

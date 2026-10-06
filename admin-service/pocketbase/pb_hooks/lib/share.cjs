@@ -59,6 +59,22 @@ const TODAY_CREATES_QUERY_EXPRESSION = 'created >= {:since}'
 const BASELINE_CREATES_QUERY_EXPRESSION = 'created >= {:since} AND created < {:until}'
 const MILLISECONDS_PER_DAY = 86400000
 
+// Task 2.8: read-through resolve endpoint (profile §5.2, GET /api/share/resolve).
+// The Worker calls this on a KV miss (task 3.5); the response carries the
+// minimum (destination + redirect code) so the edge can kv.put and redirect.
+// The endpoint is Bearer-secret gated (WORKER_RESOLVE_SECRET), rate-limited
+// locally per CF-Connecting-IP, and only ever exposes exact existing slugs —
+// no listing, no filtering, indistinguishable 404s.
+const RESOLVE_PATH = '/api/share/resolve'
+const RESOLVE_SECRET_ENV = 'WORKER_RESOLVE_SECRET'
+const RESOLVE_RATE_LIMIT_ENV = 'RESOLVE_RATE_LIMIT_PER_MINUTE'
+const DEFAULT_RESOLVE_RATE_LIMIT_PER_MINUTE = 300
+const MAX_RESOLVE_RATE_LIMIT_PER_MINUTE = 100000
+const RESOLVE_RATE_WINDOW_MS = 60000
+const MAX_RESOLVE_RATE_KEYS = 10000
+const RESOLVE_APP_QUERY_EXPRESSION = 'share_host = {:host} && active = true'
+const RESOLVE_LINK_QUERY_EXPRESSION = 'app = {:app} && slug = {:slug} && is_active = true'
+
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 const HOSTNAME_LABEL_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 const NUMERIC_HOST_PATTERN = /^\d+(\.\d+)*$/
@@ -1215,6 +1231,250 @@ function deleteShareLinkFromKV(input, deps) {
   return { ok: true, key: key, status: outcome.status }
 }
 
+// Task 2.8: parse the resolve query {host, path}. The host is canonicalized
+// exactly like the KV publisher's key half (kvLinkKey), and the path must be a
+// single leading-slash segment (the Worker only ever sends `/{slug}`), so the
+// resolver and the publisher share one key space by construction.
+function parseResolveQuery(query) {
+  if (!isPlainObject(query)) {
+    return {
+      ok: false,
+      code: 'invalid_request',
+      message: 'resolve query must provide host and path parameters',
+      fields: [issue('query', 'host and path query parameters are required')]
+    }
+  }
+
+  const errors = []
+  const rawHost = query.host
+  const rawPath = query.path
+
+  const host = canonicalizeHost(rawHost)
+  if (host === null || !isValidHostname(host)) {
+    errors.push(issue('host', 'must be a valid hostname'))
+  }
+
+  let slug = null
+  if (typeof rawPath !== 'string' || rawPath.charAt(0) !== '/') {
+    errors.push(issue('path', 'must be a path starting with a leading slash'))
+  } else {
+    slug = rawPath.slice(1)
+    if (slug.length === 0 || slug.length > MAX_CONTENT_ID_LENGTH) {
+      errors.push(issue('path', 'must contain a segment of 1-' + MAX_CONTENT_ID_LENGTH + ' characters'))
+    } else if (slug.indexOf('/') !== -1 || URL_UNSAFE_PATTERN.test(rawPath) || rawPath.indexOf('\\') !== -1) {
+      errors.push(issue('path', 'must be a single URL-safe path segment'))
+    }
+  }
+
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      code: 'invalid_request',
+      message: 'resolve query is invalid',
+      fields: errors
+    }
+  }
+
+  return { ok: true, host: host, path: rawPath, slug: slug }
+}
+
+// Bearer-secret gate (profile §5.2). An unset server secret fails closed with
+// resolve_not_configured (503) rather than silently opening the endpoint;
+// missing/wrong/malformed credentials all collapse into one indistinguishable
+// 401. When a `hash` is injected (the hook passes $security.hs256) the
+// comparison runs through double-HMAC digests so timing leaks nothing about
+// the secret itself.
+function evaluateResolveAuth(authorization, secret, hash) {
+  if (typeof secret !== 'string' || secret.trim().length === 0) {
+    return {
+      ok: false,
+      code: 'resolve_not_configured',
+      message: 'Resolve endpoint is not configured with a bearer secret'
+    }
+  }
+
+  const unauthorized = {
+    ok: false,
+    code: 'resolve_unauthorized',
+    message: 'A valid bearer secret is required'
+  }
+
+  if (typeof authorization !== 'string') return unauthorized
+
+  const parts = authorization.trim().split(/\s+/)
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer' || parts[1].length === 0) {
+    return unauthorized
+  }
+
+  const expected = secret.trim()
+  const presented = parts[1]
+
+  if (typeof hash === 'function') {
+    let presentedDigest = null
+    let expectedDigest = null
+    try {
+      presentedDigest = hash(presented, expected)
+      expectedDigest = hash(expected, expected)
+    } catch (err) {
+      return unauthorized
+    }
+    if (presentedDigest !== expectedDigest) return unauthorized
+    return { ok: true }
+  }
+
+  if (presented !== expected) return unauthorized
+  return { ok: true }
+}
+
+// Rate-limit bucket key: the trusted proxy header (CF-Connecting-IP) when it
+// carries a usable IP, otherwise a shared "unknown" bucket so header-less
+// traffic is still bounded in aggregate.
+function resolveRateKey(value) {
+  const ip = normalizeClientIp(value)
+  return ip === null ? 'unknown' : ip
+}
+
+function parseResolveRateLimitPerMinute(value) {
+  let parsed = null
+  if (typeof value === 'number') {
+    parsed = value
+  } else if (typeof value === 'string' && value.trim().length > 0) {
+    parsed = Number(value)
+  }
+
+  if (parsed === null || !isFinite(parsed)) return null
+
+  const floored = Math.floor(parsed)
+  if (floored < 1 || floored > MAX_RESOLVE_RATE_LIMIT_PER_MINUTE) return null
+  return floored
+}
+
+// Endpoint-local fixed-window limiter (profile §5.2: "rate-limited"). This is
+// defense-in-depth behind the edge WAF rule (task 4.3), so a broken clock
+// fails open (a limiter bug must not take down the click path's fallback) and
+// memory stays bounded by sweeping stale windows once maxKeys is reached.
+function createResolveRateLimiter(config) {
+  if (!isPlainObject(config)) return null
+  if (!isInteger(config.max) || config.max < 1) return null
+  if (!isInteger(config.windowMs) || config.windowMs < 1) return null
+  if (typeof config.now !== 'function') return null
+  const maxKeys =
+    isInteger(config.maxKeys) && config.maxKeys > 0 ? config.maxKeys : MAX_RESOLVE_RATE_KEYS
+
+  const buckets = new Map()
+
+  return {
+    take: function (key) {
+      const bucketKey = typeof key === 'string' && key.length > 0 ? key : 'unknown'
+
+      const now = config.now()
+      if (typeof now !== 'number' || !isFinite(now)) {
+        return { allowed: true, count: 0, remaining: config.max, retryAfterSeconds: 0 }
+      }
+
+      const windowId = Math.floor(now / config.windowMs)
+      let entry = buckets.get(bucketKey)
+      if (entry === undefined || entry.windowId !== windowId) {
+        if (buckets.size >= maxKeys) {
+          const staleKeys = []
+          for (const existingKey of buckets.keys()) {
+            const existing = buckets.get(existingKey)
+            if (existing !== undefined && existing.windowId !== windowId) {
+              staleKeys.push(existingKey)
+            }
+          }
+          for (const staleKey of staleKeys) {
+            buckets.delete(staleKey)
+          }
+          if (buckets.size >= maxKeys) {
+            buckets.clear()
+          }
+        }
+        entry = { windowId: windowId, count: 0 }
+        buckets.set(bucketKey, entry)
+      }
+
+      entry.count += 1
+      if (entry.count > config.max) {
+        const windowEndMs = (windowId + 1) * config.windowMs
+        return {
+          allowed: false,
+          count: entry.count,
+          remaining: 0,
+          retryAfterSeconds: Math.max(1, Math.ceil((windowEndMs - now) / 1000))
+        }
+      }
+
+      return {
+        allowed: true,
+        count: entry.count,
+        remaining: config.max - entry.count,
+        retryAfterSeconds: 0
+      }
+    }
+  }
+}
+
+// Process-wide limiter for the resolve route (JSVM keeps no hook-file
+// top-level bindings inside callbacks, so the singleton lives here like the
+// KV publish counter). Env is read once on first use.
+let sharedResolveRateLimiter = null
+function resolveRateLimiter(getenv) {
+  if (sharedResolveRateLimiter === null) {
+    let perMinute = null
+    if (typeof getenv === 'function') {
+      try {
+        perMinute = parseResolveRateLimitPerMinute(getenv(RESOLVE_RATE_LIMIT_ENV))
+      } catch (err) {
+        perMinute = null
+      }
+    }
+    sharedResolveRateLimiter = createResolveRateLimiter({
+      max: perMinute === null ? DEFAULT_RESOLVE_RATE_LIMIT_PER_MINUTE : perMinute,
+      windowMs: RESOLVE_RATE_WINDOW_MS,
+      now: function () {
+        return Date.now()
+      }
+    })
+  }
+  return sharedResolveRateLimiter
+}
+
+// Edge parity gate: the engine drops isActive=false rules from the radix tree
+// and 404s expired links (handleRequest), so the resolver must never resurrect
+// what the edge would not serve. An unparseable expires_at fails closed (the
+// purge cron owns cleaning such rows up).
+function evaluateLinkResolvable(input) {
+  if (!isPlainObject(input)) {
+    return { resolvable: false, reason: 'invalid_input' }
+  }
+  if (input.isActive !== true) {
+    return { resolvable: false, reason: 'inactive' }
+  }
+
+  const expiresAt = input.expiresAt
+  if (expiresAt === null || expiresAt === undefined || expiresAt === '') {
+    return { resolvable: true, reason: 'ok' }
+  }
+  if (!isDateLike(input.now)) {
+    return { resolvable: false, reason: 'invalid_input' }
+  }
+
+  let expiryMs = null
+  if (isDateLike(expiresAt)) {
+    expiryMs = expiresAt.getTime()
+  } else if (typeof expiresAt === 'string') {
+    expiryMs = Date.parse(expiresAt.trim().replace(' ', 'T'))
+  }
+  if (expiryMs === null || isNaN(expiryMs)) {
+    return { resolvable: false, reason: 'invalid_expiry' }
+  }
+  if (input.now.getTime() > expiryMs) {
+    return { resolvable: false, reason: 'expired' }
+  }
+  return { resolvable: true, reason: 'ok' }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -1275,5 +1535,21 @@ module.exports = {
   createKVPublishMetrics: createKVPublishMetrics,
   kvPublishMetrics: kvPublishMetrics,
   publishShareLinkToKV: publishShareLinkToKV,
-  deleteShareLinkFromKV: deleteShareLinkFromKV
+  deleteShareLinkFromKV: deleteShareLinkFromKV,
+  RESOLVE_PATH: RESOLVE_PATH,
+  RESOLVE_SECRET_ENV: RESOLVE_SECRET_ENV,
+  RESOLVE_RATE_LIMIT_ENV: RESOLVE_RATE_LIMIT_ENV,
+  DEFAULT_RESOLVE_RATE_LIMIT_PER_MINUTE: DEFAULT_RESOLVE_RATE_LIMIT_PER_MINUTE,
+  MAX_RESOLVE_RATE_LIMIT_PER_MINUTE: MAX_RESOLVE_RATE_LIMIT_PER_MINUTE,
+  RESOLVE_RATE_WINDOW_MS: RESOLVE_RATE_WINDOW_MS,
+  MAX_RESOLVE_RATE_KEYS: MAX_RESOLVE_RATE_KEYS,
+  RESOLVE_APP_QUERY_EXPRESSION: RESOLVE_APP_QUERY_EXPRESSION,
+  RESOLVE_LINK_QUERY_EXPRESSION: RESOLVE_LINK_QUERY_EXPRESSION,
+  parseResolveQuery: parseResolveQuery,
+  evaluateResolveAuth: evaluateResolveAuth,
+  resolveRateKey: resolveRateKey,
+  parseResolveRateLimitPerMinute: parseResolveRateLimitPerMinute,
+  createResolveRateLimiter: createResolveRateLimiter,
+  resolveRateLimiter: resolveRateLimiter,
+  evaluateLinkResolvable: evaluateLinkResolvable
 }

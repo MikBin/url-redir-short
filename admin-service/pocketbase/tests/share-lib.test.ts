@@ -105,6 +105,22 @@ interface ShareLib {
   kvPublishMetrics: () => KVMetrics
   publishShareLinkToKV: (input: unknown, deps: unknown) => KVResult
   deleteShareLinkFromKV: (input: unknown, deps: unknown) => KVResult
+  RESOLVE_PATH: string
+  RESOLVE_SECRET_ENV: string
+  RESOLVE_RATE_LIMIT_ENV: string
+  DEFAULT_RESOLVE_RATE_LIMIT_PER_MINUTE: number
+  MAX_RESOLVE_RATE_LIMIT_PER_MINUTE: number
+  RESOLVE_RATE_WINDOW_MS: number
+  MAX_RESOLVE_RATE_KEYS: number
+  RESOLVE_APP_QUERY_EXPRESSION: string
+  RESOLVE_LINK_QUERY_EXPRESSION: string
+  parseResolveQuery: (query: unknown) => ResolveQueryResult
+  evaluateResolveAuth: (authorization: unknown, secret: unknown, hash: unknown) => ResolveAuthResult
+  resolveRateKey: (value: unknown) => string
+  parseResolveRateLimitPerMinute: (value: unknown) => number | null
+  createResolveRateLimiter: (config: unknown) => ResolveRateLimiter | null
+  resolveRateLimiter: (getenv: unknown) => ResolveRateLimiter
+  evaluateLinkResolvable: (input: unknown) => LinkResolvableResult
 }
 
 interface KVConfig {
@@ -147,6 +163,30 @@ type KVResult =
 type SlugGenerationResult =
   | { ok: true; slug: string; attempts: number }
   | { ok: false; code: string; message: string }
+
+type ResolveQueryResult =
+  | { ok: true; host: string; path: string; slug: string }
+  | { ok: false; code: 'invalid_request'; message: string; fields: ValidationIssue[] }
+
+type ResolveAuthResult =
+  | { ok: true }
+  | { ok: false; code: 'resolve_not_configured' | 'resolve_unauthorized'; message: string }
+
+interface ResolveRateDecision {
+  allowed: boolean
+  count: number
+  remaining: number
+  retryAfterSeconds: number
+}
+
+interface ResolveRateLimiter {
+  take: (key: unknown) => ResolveRateDecision
+}
+
+interface LinkResolvableResult {
+  resolvable: boolean
+  reason: 'ok' | 'inactive' | 'expired' | 'invalid_expiry' | 'invalid_input'
+}
 
 function createSiteverifyMock(response: unknown): SiteverifyMock {
   const calls: SiteverifyCall[] = []
@@ -1681,5 +1721,299 @@ describe('share hook lib: KV publisher (task 2.7)', () => {
         kv_network_error: 1
       })
     })
+  })
+})
+
+describe('share hook lib: parseResolveQuery (task 2.8)', () => {
+  it('accepts a canonical host and single-segment path', () => {
+    const result = share.parseResolveQuery({ host: 'sh.macrolattice.com', path: '/Ab3xK9z' })
+
+    expect(result).toEqual({
+      ok: true,
+      host: 'sh.macrolattice.com',
+      path: '/Ab3xK9z',
+      slug: 'Ab3xK9z'
+    })
+  })
+
+  it('canonicalizes the host like the KV key half (case, trailing dot, padding)', () => {
+    const result = share.parseResolveQuery({ host: '  SH.MacroLattice.COM.  ', path: '/abc1234' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.host).toBe('sh.macrolattice.com')
+      expect(result.slug).toBe('abc1234')
+    }
+  })
+
+  it('preserves slug case: the path is an exact key, never lowercased', () => {
+    const result = share.parseResolveQuery({ host: 'sh.macrolattice.com', path: '/AbC123x' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.slug).toBe('AbC123x')
+    }
+  })
+
+  it('rejects missing, empty, malformed or oversized hosts', () => {
+    for (const host of [undefined, null, '', '   ', 'not_a_host', 'has space.com', 'a'.repeat(254), 42]) {
+      const result = share.parseResolveQuery({ host, path: '/Ab3xK9z' })
+      expect(result.ok, `host ${JSON.stringify(host)}`).toBe(false)
+      if (!result.ok) {
+        expect(result.fields.map((error) => error.field)).toContain('host')
+      }
+    }
+  })
+
+  it('rejects paths without a leading slash, empty segments, or multiple segments', () => {
+    for (const path of [undefined, null, '', 'Ab3xK9z', '/', '//', '/a/b', '/a/', 42]) {
+      const result = share.parseResolveQuery({ host: 'sh.macrolattice.com', path })
+      expect(result.ok, `path ${JSON.stringify(path)}`).toBe(false)
+      if (!result.ok) {
+        expect(result.fields.map((error) => error.field)).toContain('path')
+      }
+    }
+  })
+
+  it('rejects paths with unsafe transport characters or oversized slugs', () => {
+    for (const path of ['/ab cd', '/ab\tcd', '/ab\\cd', `/${'a'.repeat(129)}`]) {
+      const result = share.parseResolveQuery({ host: 'sh.macrolattice.com', path })
+      expect(result.ok, `path ${JSON.stringify(path)}`).toBe(false)
+      if (!result.ok) {
+        expect(result.fields.map((error) => error.field)).toContain('path')
+      }
+    }
+  })
+
+  it('accepts printable-ASCII oddities that can never match a slug (exact-key lookup decides)', () => {
+    // Same transport rule as the KV publisher's path half: printable ASCII,
+    // single segment. Quotes or semicolons are not injection vectors here
+    // (lookups use named parameters) and simply miss every stored slug.
+    for (const path of ['/"quoted"', '/a;b', '/%41']) {
+      expect(share.parseResolveQuery({ host: 'sh.macrolattice.com', path }).ok, path).toBe(true)
+    }
+  })
+
+  it('rejects non-object queries and reports both invalid fields together', () => {
+    for (const query of [null, undefined, 'host', 42, []]) {
+      expect(share.parseResolveQuery(query).ok, JSON.stringify(query)).toBe(false)
+    }
+
+    const both = share.parseResolveQuery({ host: '', path: 'nope' })
+    expect(both.ok).toBe(false)
+    if (!both.ok) {
+      expect(both.code).toBe('invalid_request')
+      expect(both.fields.map((error) => error.field).sort()).toEqual(['host', 'path'])
+    }
+  })
+})
+
+describe('share hook lib: evaluateResolveAuth (task 2.8)', () => {
+  const hmacHash = (value: string, key: string): string =>
+    createHmac('sha256', key).update(value).digest('hex')
+
+  it('accepts the correct bearer secret with and without a timing-safe hash', () => {
+    expect(share.evaluateResolveAuth('Bearer ci-secret', 'ci-secret', hmacHash).ok).toBe(true)
+    expect(share.evaluateResolveAuth('Bearer ci-secret', 'ci-secret', undefined).ok).toBe(true)
+  })
+
+  it('accepts a case-insensitive scheme and surrounding whitespace, trims secret config', () => {
+    expect(share.evaluateResolveAuth('bearer ci-secret', 'ci-secret', hmacHash).ok).toBe(true)
+    expect(share.evaluateResolveAuth('  Bearer   ci-secret  ', 'ci-secret', hmacHash).ok).toBe(true)
+    expect(share.evaluateResolveAuth('Bearer ci-secret', '  ci-secret  ', hmacHash).ok).toBe(true)
+  })
+
+  it('rejects wrong secrets identically with and without the hash', () => {
+    for (const hash of [hmacHash, undefined]) {
+      const result = share.evaluateResolveAuth('Bearer wrong-secret', 'ci-secret', hash)
+      expect(result).toEqual({
+        ok: false,
+        code: 'resolve_unauthorized',
+        message: 'A valid bearer secret is required'
+      })
+    }
+  })
+
+  it('rejects missing, empty, and non-bearer authorization headers', () => {
+    for (const header of [undefined, null, '', 'Bearer', 'Bearer ', 'Basic ci-secret', 'ci-secret', 42]) {
+      const result = share.evaluateResolveAuth(header, 'ci-secret', hmacHash)
+      expect(result.ok, `header ${JSON.stringify(header)}`).toBe(false)
+      if (!result.ok) {
+        expect(result.code).toBe('resolve_unauthorized')
+      }
+    }
+  })
+
+  it('fails closed with resolve_not_configured when the server secret is unset', () => {
+    for (const secret of [undefined, null, '', '   ', 42]) {
+      const result = share.evaluateResolveAuth('Bearer ci-secret', secret, hmacHash)
+      expect(result.ok, `secret ${JSON.stringify(secret)}`).toBe(false)
+      if (!result.ok) {
+        expect(result.code).toBe('resolve_not_configured')
+      }
+    }
+  })
+
+  it('fails closed when the injected hash throws', () => {
+    const throwingHash = (): string => {
+      throw new Error('hash unavailable')
+    }
+
+    const result = share.evaluateResolveAuth('Bearer ci-secret', 'ci-secret', throwingHash)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('resolve_unauthorized')
+    }
+  })
+})
+
+describe('share hook lib: resolve rate limiter (task 2.8)', () => {
+  it('derives the bucket key from the trusted client IP and falls back to one shared bucket', () => {
+    expect(share.resolveRateKey('198.51.100.10')).toBe('198.51.100.10')
+    expect(share.resolveRateKey(' 2001:DB8::1 ')).toBe('2001:db8::1')
+    expect(share.resolveRateKey('[2001:db8::1]')).toBe('2001:db8::1')
+
+    for (const value of [undefined, null, '', 'garbage', 'not an ip']) {
+      expect(share.resolveRateKey(value), JSON.stringify(value)).toBe('unknown')
+    }
+  })
+
+  it('parses the per-minute limit with bounds and rejects garbage', () => {
+    expect(share.parseResolveRateLimitPerMinute(300)).toBe(300)
+    expect(share.parseResolveRateLimitPerMinute('42')).toBe(42)
+    expect(share.parseResolveRateLimitPerMinute(' 7 ')).toBe(7)
+    expect(share.parseResolveRateLimitPerMinute(2.9)).toBe(2)
+    expect(share.parseResolveRateLimitPerMinute(100000)).toBe(100000)
+
+    for (const value of ['abc', '', '   ', null, undefined, 0, -1, 1.5e9, Number.NaN]) {
+      expect(share.parseResolveRateLimitPerMinute(value), JSON.stringify(value)).toBeNull()
+    }
+  })
+
+  it('rejects invalid limiter configurations', () => {
+    for (const config of [null, undefined, 'x', {}, { max: 0, windowMs: 1000, now: () => 0 }, { max: 5, windowMs: 0, now: () => 0 }, { max: 5, windowMs: 1000 }]) {
+      expect(share.createResolveRateLimiter(config), JSON.stringify(config)).toBeNull()
+    }
+  })
+
+  it('allows up to max requests per window then denies with a bounded retry hint', () => {
+    let clock = 120_000
+    const limiter = share.createResolveRateLimiter({ max: 3, windowMs: 60_000, now: () => clock })
+
+    expect(limiter?.take('ip-a')).toEqual({ allowed: true, count: 1, remaining: 2, retryAfterSeconds: 0 })
+    expect(limiter?.take('ip-a')).toEqual({ allowed: true, count: 2, remaining: 1, retryAfterSeconds: 0 })
+    expect(limiter?.take('ip-a')).toEqual({ allowed: true, count: 3, remaining: 0, retryAfterSeconds: 0 })
+
+    const denied = limiter?.take('ip-a')
+    expect(denied?.allowed).toBe(false)
+    expect(denied?.retryAfterSeconds).toBeGreaterThanOrEqual(1)
+    expect(denied?.retryAfterSeconds).toBeLessThanOrEqual(60)
+  })
+
+  it('resets the counter when the fixed window rolls over', () => {
+    let clock = 120_000
+    const limiter = share.createResolveRateLimiter({ max: 1, windowMs: 60_000, now: () => clock })
+
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+    expect(limiter?.take('ip-a').allowed).toBe(false)
+
+    clock += 60_001
+    expect(limiter?.take('ip-a')).toEqual({ allowed: true, count: 1, remaining: 0, retryAfterSeconds: 0 })
+  })
+
+  it('isolates buckets per key', () => {
+    const clock = 500_000
+    const limiter = share.createResolveRateLimiter({ max: 1, windowMs: 60_000, now: () => clock })
+
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+    expect(limiter?.take('ip-a').allowed).toBe(false)
+    expect(limiter?.take('ip-b').allowed).toBe(true)
+  })
+
+  it('bounds memory by clearing stale buckets once maxKeys is exceeded', () => {
+    let clock = 0
+    const limiter = share.createResolveRateLimiter({ max: 1, windowMs: 60_000, maxKeys: 2, now: () => clock })
+
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+    expect(limiter?.take('ip-b').allowed).toBe(true)
+    expect(limiter?.take('ip-c').allowed).toBe(true)
+    // The clear-on-overflow reset the map, so a previously exhausted key is fresh.
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+  })
+
+  it('fails open when the injected clock is broken', () => {
+    const limiter = share.createResolveRateLimiter({
+      max: 1,
+      windowMs: 60_000,
+      now: (): number => Number.NaN
+    })
+
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+    expect(limiter?.take('ip-a').allowed).toBe(true)
+  })
+
+  it('exposes a process-wide singleton configured once from env', () => {
+    const first = share.resolveRateLimiter((): string => '2')
+    const second = share.resolveRateLimiter((): string => '99999')
+
+    expect(second).toBe(first)
+    expect(typeof first.take).toBe('function')
+  })
+})
+
+describe('share hook lib: evaluateLinkResolvable (task 2.8)', () => {
+  const now = new Date('2026-10-06T12:00:00.000Z')
+
+  it('resolves active links without an expiry', () => {
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: null, now })).toEqual({
+      resolvable: true,
+      reason: 'ok'
+    })
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: '', now })).toEqual({
+      resolvable: true,
+      reason: 'ok'
+    })
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: undefined, now })).toEqual({
+      resolvable: true,
+      reason: 'ok'
+    })
+  })
+
+  it('does not resolve inactive links (PB stores unset bools as false)', () => {
+    for (const isActive of [false, undefined, null]) {
+      expect(share.evaluateLinkResolvable({ isActive, expiresAt: null, now }).reason).toBe('inactive')
+    }
+  })
+
+  it('resolves links with a future expiry and drops expired ones (engine parity)', () => {
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: '2099-01-01 00:00:00.000Z', now })).toEqual({
+      resolvable: true,
+      reason: 'ok'
+    })
+    expect(
+      share.evaluateLinkResolvable({ isActive: true, expiresAt: new Date(now.getTime() + 1000), now }).reason
+    ).toBe('ok')
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: '2020-01-01 00:00:00.000Z', now }).reason).toBe(
+      'expired'
+    )
+  })
+
+  it('keeps a link resolvable exactly at its expiry instant (now > expiry is the engine rule)', () => {
+    expect(
+      share.evaluateLinkResolvable({ isActive: true, expiresAt: new Date(now.getTime()), now }).reason
+    ).toBe('ok')
+  })
+
+  it('fails closed on an unparseable expiry or invalid input', () => {
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: 'not-a-date', now }).reason).toBe(
+      'invalid_expiry'
+    )
+    expect(share.evaluateLinkResolvable({ isActive: true, expiresAt: '2099-01-01 00:00:00.000Z' }).reason).toBe(
+      'invalid_input'
+    )
+    for (const input of [null, undefined, 'x', 42]) {
+      expect(share.evaluateLinkResolvable(input).reason, JSON.stringify(input)).toBe('invalid_input')
+    }
   })
 })
