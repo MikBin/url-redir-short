@@ -75,6 +75,14 @@ const MAX_RESOLVE_RATE_KEYS = 10000
 const RESOLVE_APP_QUERY_EXPRESSION = 'share_host = {:host} && active = true'
 const RESOLVE_LINK_QUERY_EXPRESSION = 'app = {:app} && slug = {:slug} && is_active = true'
 
+// Task 2.9: create idempotency. The canonical destination (as returned by
+// validateDestination) is the exact key scoped per app: a repeat share of the
+// same content returns the existing short URL instead of a duplicate row.
+// content_ref persists the parsed {appId, type, contentId, params} echo.
+// Note: findRecordsByFilter speaks the filter language (`&&`), not SQL (`AND`).
+const IDEMPOTENCY_QUERY_EXPRESSION = 'app = {:app} && destination_url = {:destination}'
+const MAX_CONTENT_REF_JSON_LENGTH = 2048
+
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 const HOSTNAME_LABEL_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 const NUMERIC_HOST_PATTERN = /^\d+(\.\d+)*$/
@@ -1475,6 +1483,82 @@ function evaluateLinkResolvable(input) {
   return { resolvable: true, reason: 'ok' }
 }
 
+// Task 2.9: exact-key idempotency lookup on (app, canonical destination).
+// Parameterized like every other query so destination text cannot escape the
+// filter. Links created before idempotency (operator seeds with a distinct
+// destination_url) simply never match — no migration needed.
+function idempotencyQuery(appRecordId, destination) {
+  if (typeof appRecordId !== 'string' || appRecordId.length === 0 || appRecordId.length > MAX_APP_ID_LENGTH) {
+    return null
+  }
+  if (
+    typeof destination !== 'string' ||
+    destination.length === 0 ||
+    destination.length > MAX_DESTINATION_LENGTH
+  ) {
+    return null
+  }
+
+  return {
+    expression: IDEMPOTENCY_QUERY_EXPRESSION,
+    params: { app: appRecordId, destination: destination }
+  }
+}
+
+// Short URL shown to clients: https://${share_host}/${slug}. The host is
+// canonicalized and the slug half transport-validated (kvSlugPath), so the
+// returned URL always round-trips through both the resolve endpoint and the
+// host-keyed KV namespace.
+function buildShareLinkUrl(shareHost, slug) {
+  const host = canonicalizeHost(shareHost)
+  if (host === null || !isValidHostname(host)) return null
+  const path = kvSlugPath(slug)
+  if (path === null) return null
+  return 'https://' + host + path
+}
+
+// Task 2.9 record payload for the anonymous create path. Validation here is
+// the structural half of the A2 guard: created_from_ip must already be the
+// salted-HMAC hex digest (IP_HASH_PATTERN), so a raw IP can never be stored
+// by accident — the write is rejected before it reaches PocketBase.
+function buildShareLinkRecordData(input) {
+  if (!isPlainObject(input)) return null
+
+  if (typeof input.app !== 'string' || input.app.length === 0 || input.app.length > MAX_APP_ID_LENGTH) {
+    return null
+  }
+  if (!isValidGeneratedSlug(input.slug)) return null
+  if (
+    typeof input.destination !== 'string' ||
+    input.destination.length === 0 ||
+    input.destination.length > MAX_DESTINATION_LENGTH
+  ) {
+    return null
+  }
+  if (typeof input.ipHash !== 'string' || !IP_HASH_PATTERN.test(input.ipHash)) return null
+
+  let contentRefJson = ''
+  if (isPlainObject(input.contentRef)) {
+    try {
+      contentRefJson = JSON.stringify(input.contentRef) || ''
+    } catch (err) {
+      return null
+    }
+  } else {
+    return null
+  }
+  if (contentRefJson.length === 0 || contentRefJson.length > MAX_CONTENT_REF_JSON_LENGTH) return null
+
+  return {
+    app: input.app,
+    slug: input.slug,
+    destination_url: input.destination,
+    content_ref: input.contentRef,
+    created_from_ip: input.ipHash,
+    is_active: true
+  }
+}
+
 module.exports = {
   CREATE_PATH: CREATE_PATH,
   MAX_DESTINATION_LENGTH: MAX_DESTINATION_LENGTH,
@@ -1551,5 +1635,10 @@ module.exports = {
   parseResolveRateLimitPerMinute: parseResolveRateLimitPerMinute,
   createResolveRateLimiter: createResolveRateLimiter,
   resolveRateLimiter: resolveRateLimiter,
-  evaluateLinkResolvable: evaluateLinkResolvable
+  evaluateLinkResolvable: evaluateLinkResolvable,
+  IDEMPOTENCY_QUERY_EXPRESSION: IDEMPOTENCY_QUERY_EXPRESSION,
+  MAX_CONTENT_REF_JSON_LENGTH: MAX_CONTENT_REF_JSON_LENGTH,
+  idempotencyQuery: idempotencyQuery,
+  buildShareLinkUrl: buildShareLinkUrl,
+  buildShareLinkRecordData: buildShareLinkRecordData
 }

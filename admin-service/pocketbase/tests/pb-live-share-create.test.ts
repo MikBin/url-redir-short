@@ -224,6 +224,11 @@ interface KVFailureLogList {
 interface LinkRecord {
   id: string
   slug: string
+  app?: string
+  content_ref?: Record<string, unknown>
+  created_from_ip?: string
+  destination_url?: string
+  is_active?: boolean
 }
 
 interface SeedOverrides {
@@ -235,6 +240,12 @@ interface SeedOverrides {
 interface ResolveResponse {
   destination?: string
   code?: number
+}
+
+interface CreateResponse {
+  url?: string
+  slug?: string
+  created?: boolean
 }
 
 interface ResolveOptions {
@@ -285,11 +296,12 @@ async function readJsonBody<T>(response: Response): Promise<T> {
 
 const binary = resolveBinary()
 
-describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () => {
+describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.9)', () => {
   let dataDir = ''
   let baseUrl = ''
   let superuserToken = ''
   let quotaOwnerId: string | null = null
+  let createdShortUrl = ''
   let serverProcess: ReturnType<typeof spawn> | null = null
   let serverOutput = ''
 
@@ -495,6 +507,17 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
     return list.totalItems
   }
 
+  const findLinkBySlug = async (slug: string): Promise<LinkRecord> => {
+    const filter = encodeURIComponent(`slug='${slug}'`)
+    const response = await fetch(`${baseUrl}/api/collections/links/records?perPage=1&filter=${filter}`, {
+      headers: { Authorization: superuserToken }
+    })
+    const list = await readJsonBody<{ items: LinkRecord[] }>(response)
+    const record = list.items[0]
+    if (record === undefined) throw new Error(`Link '${slug}' was not found`)
+    return record
+  }
+
   beforeAll(async () => {
     const pb = requireBinary()
 
@@ -576,16 +599,28 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
 
     expect(response.status).not.toBe(401)
     expect(response.status).not.toBe(403)
-    expect(response.status).toBe(501)
+    expect(response.status).toBe(201)
+
+    const payload = (await response.json()) as CreateResponse
+    expect(payload.created).toBe(true)
+    expect(payload.slug).toMatch(/^[A-Za-z0-9]{7}$/)
+    expect(payload.url).toBe(`https://sh.macrolattice.com/${payload.slug}`)
+    createdShortUrl = payload.url ?? ''
   })
 
-  it('fails closed with 501 until tasks 2.6-2.9 complete the pipeline', async () => {
+  it('returns the existing short URL for a repeated destination instead of duplicating (task 2.9)', async () => {
+    const linksBefore = await countLinks()
+
     const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
 
-    expect(response.status).toBe(501)
-    const payload = await errorPayload(response)
-    expect(payload.code).toBe('not_implemented')
+    expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
+    const payload = (await response.json()) as CreateResponse
+    expect(payload.created).toBe(false)
+    expect(payload.url).toBe(createdShortUrl)
+
+    // Idempotent hit: no new row, no duplicate short URL.
+    expect(await countLinks()).toBe(linksBefore)
   })
 
   it('renders and allowlist-validates content references (task 2.2)', async () => {
@@ -605,11 +640,12 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
 
     for (const origin of APP_ORIGINS) {
       const accepted = await postCreate(createBody(VALID_REFERENCE), origin)
-      expect(accepted.status, origin).toBe(501)
+      expect(accepted.status, origin).toBe(200)
     }
   })
 
   it('ignores client-supplied slug and url fields (task 2.6)', async () => {
+    const linksBefore = await countLinks()
     const response = await postCreate(
       createBody({
         ...VALID_REFERENCE,
@@ -620,11 +656,14 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
       APP_ORIGINS[0]
     )
 
-    // The slug is server-generated from crypto randomness; the pipeline still
-    // holds at the interim 501 and nothing is persisted.
-    expect(response.status).toBe(501)
-    expect((await errorPayload(response)).code).toBe('not_implemented')
-    expect(await countLinks()).toBe(0)
+    // The slug is server-generated from crypto randomness; the repeat is an
+    // idempotent hit (same destination) and nothing new is persisted.
+    expect(response.status).toBe(200)
+    const payload = (await response.json()) as CreateResponse
+    expect(payload.slug).toMatch(/^[A-Za-z0-9]{7}$/)
+    expect(payload.slug).not.toBe('my-custom-slug')
+    expect(payload.url).toBe(createdShortUrl)
+    expect(await countLinks()).toBe(linksBefore)
   })
 
   it('echoes the exact first-party origin on create responses', async () => {
@@ -645,7 +684,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
 
     const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
 
-    expect(response.status).toBe(501)
+    expect(response.status).toBe(200)
     expect(siteverifyCalls).toHaveLength(1)
     expect(siteverifyCalls[0]?.secret).toBe(TURNSTILE_SECRET)
     expect(siteverifyCalls[0]?.response).toBe(VALID_TOKEN)
@@ -767,18 +806,26 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
     expect([404, 405]).toContain(response.status)
   })
 
-  it('stores nothing for any rejected or placeholder request', async () => {
-    const links = await fetch(`${baseUrl}/api/collections/links/records?perPage=1`, {
-      headers: { Authorization: superuserToken }
-    })
-    const list = await readJsonBody<RecordList>(links)
-    expect(list.totalItems).toBe(0)
+  it('stores nothing for rejected requests', async () => {
+    const linksBefore = await countLinks()
+
+    // Every rejection path (Turnstile, allowlist, shape) leaves the table untouched.
+    const rejected = await postCreate(createBody(VALID_REFERENCE, INVALID_TOKEN), APP_ORIGINS[0])
+    expect(rejected.status).toBe(403)
+    const unknownApp = await postCreate(
+      createBody({ appId: 'nosuchapp', type: 'meal', contentId: 'x' }),
+      APP_ORIGINS[0]
+    )
+    expect(unknownApp.status).toBe(400)
+
+    expect(await countLinks()).toBe(linksBefore)
 
     const anonymous = await fetch(`${baseUrl}/api/collections/links/records?perPage=1`)
     expect(anonymous.status).toBe(403)
   })
 
   it('enforces the per-IP daily quota at the limit with 429 and reset metadata (task 2.4)', async () => {
+    const linksBefore = await countLinks()
     const app = await findApp('macrolattice')
     await setDailyCreateLimit(app.id, 2)
     const ownerId = await ensureQuotaOwner()
@@ -808,7 +855,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
       headers: { Authorization: superuserToken }
     })
     const list = await readJsonBody<RecordList>(links)
-    expect(list.totalItems).toBe(2)
+    expect(list.totalItems).toBe(linksBefore + 2)
   })
 
   it('allows requests below the per-IP quota and keys the counter by IP (task 2.4)', async () => {
@@ -816,11 +863,13 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
     const ownerId = await ensureQuotaOwner()
     await seedLink(app.id, ownerId, 'quota-seed-3', hashIp(QUOTA_IP_2))
 
-    const response = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0], {
-      'CF-Connecting-IP': QUOTA_IP_2
-    })
+    const response = await postCreate(
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'below-quota' }),
+      APP_ORIGINS[0],
+      { 'CF-Connecting-IP': QUOTA_IP_2 }
+    )
 
-    expect(response.status).toBe(501)
+    expect(response.status).toBe(201)
   })
 
   it('keys the quota per app: an exhausted app does not block other apps (task 2.4)', async () => {
@@ -830,7 +879,7 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
       { 'CF-Connecting-IP': QUOTA_IP }
     )
 
-    expect(response.status).toBe(501)
+    expect(response.status).toBe(201)
   })
 
   it('verifies Turnstile before evaluating the quota (task 2.4)', async () => {
@@ -939,8 +988,11 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
     expect((await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])).status).toBe(503)
 
     await setBreakerFlag(false)
-    const resumed = await postCreate(createBody(VALID_REFERENCE), APP_ORIGINS[0])
-    expect(resumed.status).toBe(501)
+    const resumed = await postCreate(
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'after-reset' }),
+      APP_ORIGINS[0]
+    )
+    expect(resumed.status).toBe(201)
     expect((await findBreakerRecord()).value).toBe(false)
   })
 
@@ -1209,5 +1261,73 @@ describe.skipIf(binary === null)('live share/create route (tasks 2.1-2.8)', () =
     })
 
     expect([404, 405]).toContain(response.status)
+  })
+
+  it('persists the hashed create IP and the content reference (task 2.9, A2 guard)', async () => {
+    const response = await postCreate(
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'persist01', params: { week: 3 } }),
+      APP_ORIGINS[0],
+      { 'CF-Connecting-IP': '203.0.113.90' }
+    )
+
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as CreateResponse
+    const record = await findLinkBySlug(payload.slug ?? '')
+
+    // A2 contract: salted HMAC of the client IP (test salt), never the raw IP.
+    expect(record.created_from_ip).toBe(hashIp('203.0.113.90'))
+    expect(record.created_from_ip).not.toBe('203.0.113.90')
+    expect(record.destination_url).toBe('https://macrolattice.com/meal/persist01')
+    expect(record.content_ref).toEqual({
+      appId: 'macrolattice',
+      type: 'meal',
+      contentId: 'persist01',
+      params: { week: 3 }
+    })
+    expect(record.is_active).toBe(true)
+    expect(record.app).toEqual(expect.any(String))
+  })
+
+  it('publishes an anonymously created link to KV through the record hook (task 2.9)', async () => {
+    kvCalls.length = 0
+
+    const response = await postCreate(
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'kvpub29' }),
+      APP_ORIGINS[0],
+      { 'CF-Connecting-IP': '203.0.113.91' }
+    )
+
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as CreateResponse
+
+    const expectedKey = `sh.macrolattice.com:/${payload.slug}`
+    const call = kvCalls.find(
+      (item) => item.method === 'PUT' && item.url.includes(encodeURIComponent(expectedKey))
+    )
+    expect(call).toBeDefined()
+
+    const value = JSON.parse(call?.body ?? '{}') as Record<string, unknown>
+    expect(value.path).toBe(`/${payload.slug}`)
+    expect(value.destination).toBe('https://macrolattice.com/meal/kvpub29')
+    expect(value.code).toBe(302)
+    expect(value.isActive).toBe(true)
+  })
+
+  it('keys idempotency per app, not per content alone (task 2.9)', async () => {
+    const macro = await postCreate(
+      createBody({ appId: 'macrolattice', type: 'meal', contentId: 'crossapp' }),
+      APP_ORIGINS[0],
+      { 'CF-Connecting-IP': '203.0.113.92' }
+    )
+    expect(macro.status).toBe(201)
+    expect(((await macro.json()) as CreateResponse).url).toMatch(/^https:\/\/sh\.macrolattice\.com\//)
+
+    const supra = await postCreate(
+      createBody({ appId: 'supatrainer', type: 'workout', contentId: 'crossapp' }),
+      APP_ORIGINS[1],
+      { 'CF-Connecting-IP': '203.0.113.92' }
+    )
+    expect(supra.status).toBe(201)
+    expect(((await supra.json()) as CreateResponse).url).toMatch(/^https:\/\/sh\.supatrainer\.com\//)
   })
 })

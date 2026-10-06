@@ -122,9 +122,28 @@
   },
   {
     "id": "pbc_links",
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
     "name": "links",
     "type": "base",
     "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
       {
         "autogeneratePattern": "",
         "hidden": false,
@@ -136,6 +155,7 @@
         "presentable": false,
         "primaryKey": false,
         "required": true,
+        "system": false,
         "type": "text"
       },
       {
@@ -148,7 +168,8 @@
         "pattern": "",
         "presentable": false,
         "primaryKey": false,
-        "required": true,
+        "required": false,
+        "system": false,
         "type": "text"
       },
       {
@@ -160,7 +181,8 @@
         "minSelect": 0,
         "name": "owner_id",
         "presentable": false,
-        "required": true,
+        "required": false,
+        "system": false,
         "type": "relation"
       },
       {
@@ -173,6 +195,7 @@
         "name": "domain_id",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "relation"
       },
       {
@@ -181,6 +204,7 @@
         "name": "is_active",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "bool"
       },
       {
@@ -190,6 +214,7 @@
         "name": "targeting",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "json"
       },
       {
@@ -199,6 +224,7 @@
         "name": "ab_testing",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "json"
       },
       {
@@ -208,6 +234,7 @@
         "name": "hsts",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "json"
       },
       {
@@ -217,6 +244,7 @@
         "name": "password_protection",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "json"
       },
       {
@@ -227,6 +255,7 @@
         "name": "expires_at",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "date"
       },
       {
@@ -238,6 +267,7 @@
         "onlyInt": false,
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "number"
       },
       {
@@ -250,6 +280,7 @@
         "name": "app",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "relation"
       },
       {
@@ -259,6 +290,7 @@
         "name": "content_ref",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "json"
       },
       {
@@ -272,6 +304,7 @@
         "presentable": false,
         "primaryKey": false,
         "required": false,
+        "system": false,
         "type": "text"
       },
       {
@@ -282,6 +315,7 @@
         "name": "last_click_at",
         "presentable": false,
         "required": false,
+        "system": false,
         "type": "date"
       },
       {
@@ -295,6 +329,7 @@
         "presentable": false,
         "primaryKey": false,
         "required": false,
+        "system": false,
         "type": "text"
       },
       {
@@ -304,17 +339,16 @@
         "onCreate": true,
         "onUpdate": false,
         "presentable": false,
+        "system": false,
         "type": "autodate"
       }
     ],
     "indexes": [
       "CREATE UNIQUE INDEX `idx_links_app_slug` ON `links` (`app`, `slug`)"
     ],
-    "listRule": null,
-    "viewRule": null,
-    "createRule": null,
-    "updateRule": null,
-    "deleteRule": null
+    "created": "2026-10-06 13:04:23.237Z",
+    "updated": "2026-10-06 13:04:23.278Z",
+    "system": false
   },
   {
     "id": "pbc_sessions",

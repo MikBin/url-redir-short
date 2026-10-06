@@ -21,7 +21,7 @@ interface CommandResult {
 }
 
 interface CollectionInfo {
-  fields: Array<{ name: string }>
+  fields: Array<{ name: string; required?: boolean }>
   indexes: string[]
   listRule: string | null
   viewRule: string | null
@@ -175,6 +175,20 @@ describe.skipIf(binary === null)('live PocketBase migration chain (task 1.6 beha
       expect(fieldNames, `links.${field}`).toContain(field)
     }
     expect(collection.indexes.some((index) => index.includes('idx_links_app_slug'))).toBe(true)
+  })
+
+  it('relaxes legacy required fields for anonymous creates (task 2.9)', async () => {
+    const response = await fetch(`${baseUrl}/api/collections/links`, {
+      headers: { Authorization: authToken }
+    })
+    const collection = await readJsonBody<CollectionInfo>(response)
+
+    const field = (name: string) => collection.fields.find((entry) => entry.name === name)
+    // Anonymous share creates carry no legacy owner and write destination_url,
+    // so the pre-pivot required flags must be off; slug stays mandatory.
+    expect(field('destination')?.required).toBe(false)
+    expect(field('owner_id')?.required).toBe(false)
+    expect(field('slug')?.required).toBe(true)
   })
 
   it('locks all five links rules for anonymous and non-superuser access', async () => {

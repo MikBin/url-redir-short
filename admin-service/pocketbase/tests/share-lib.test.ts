@@ -121,6 +121,11 @@ interface ShareLib {
   createResolveRateLimiter: (config: unknown) => ResolveRateLimiter | null
   resolveRateLimiter: (getenv: unknown) => ResolveRateLimiter
   evaluateLinkResolvable: (input: unknown) => LinkResolvableResult
+  IDEMPOTENCY_QUERY_EXPRESSION: string
+  MAX_CONTENT_REF_JSON_LENGTH: number
+  idempotencyQuery: (appRecordId: unknown, destination: unknown) => QuotaQuery | null
+  buildShareLinkUrl: (shareHost: unknown, slug: unknown) => string | null
+  buildShareLinkRecordData: (input: unknown) => ShareLinkRecordData | null
 }
 
 interface KVConfig {
@@ -186,6 +191,15 @@ interface ResolveRateLimiter {
 interface LinkResolvableResult {
   resolvable: boolean
   reason: 'ok' | 'inactive' | 'expired' | 'invalid_expiry' | 'invalid_input'
+}
+
+interface ShareLinkRecordData {
+  app: string
+  slug: string
+  destination_url: string
+  content_ref: Record<string, unknown>
+  created_from_ip: string
+  is_active: boolean
 }
 
 function createSiteverifyMock(response: unknown): SiteverifyMock {
@@ -2014,6 +2028,107 @@ describe('share hook lib: evaluateLinkResolvable (task 2.8)', () => {
     )
     for (const input of [null, undefined, 'x', 42]) {
       expect(share.evaluateLinkResolvable(input).reason, JSON.stringify(input)).toBe('invalid_input')
+    }
+  })
+})
+
+describe('share hook lib: create idempotency helpers (task 2.9)', () => {
+  const validIpHash = 'a'.repeat(64)
+
+  it('builds the parameterized (app, canonical destination) lookup', () => {
+    const result = share.idempotencyQuery('pbc_record_123', 'https://macrolattice.com/meal/r_8f3k')
+
+    expect(result).toEqual({
+      expression: 'app = {:app} && destination_url = {:destination}',
+      params: { app: 'pbc_record_123', destination: 'https://macrolattice.com/meal/r_8f3k' }
+    })
+  })
+
+  it('rejects malformed idempotency inputs', () => {
+    for (const app of ['', null, undefined, 'x'.repeat(65), 42]) {
+      expect(share.idempotencyQuery(app, 'https://macrolattice.com/meal/r_8f3k'), JSON.stringify(app)).toBeNull()
+    }
+    for (const destination of ['', null, undefined, 'x'.repeat(2049), 42]) {
+      expect(share.idempotencyQuery('pbc_record_123', destination), JSON.stringify(destination)).toBeNull()
+    }
+  })
+
+  it('builds the short URL from a canonical share host and slug', () => {
+    expect(share.buildShareLinkUrl('sh.macrolattice.com', 'Ab3xK9z')).toBe(
+      'https://sh.macrolattice.com/Ab3xK9z'
+    )
+    expect(share.buildShareLinkUrl('SH.MacroLattice.COM.', 'Ab3xK9z')).toBe(
+      'https://sh.macrolattice.com/Ab3xK9z'
+    )
+    expect(share.buildShareLinkUrl('sh.macrolattice.com', 'operator-seeded-1')).toBe(
+      'https://sh.macrolattice.com/operator-seeded-1'
+    )
+  })
+
+  it('rejects short URLs from invalid hosts or slugs', () => {
+    for (const host of ['', 'not a host', 'a'.repeat(254), null, 42]) {
+      expect(share.buildShareLinkUrl(host, 'Ab3xK9z'), JSON.stringify(host)).toBeNull()
+    }
+    for (const slug of ['', '/leading', 'trail/', 'has space', 'a\\b', null, 42]) {
+      expect(share.buildShareLinkUrl('sh.macrolattice.com', slug), JSON.stringify(slug)).toBeNull()
+    }
+  })
+
+  it('builds the record payload with the A2 hashed IP and content reference echo', () => {
+    const result = share.buildShareLinkRecordData({
+      app: 'pbc_record_123',
+      slug: 'Ab3xK9z',
+      destination: 'https://macrolattice.com/meal/r_8f3k',
+      contentRef: { appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: { week: 3 } },
+      ipHash: validIpHash
+    })
+
+    expect(result).toEqual({
+      app: 'pbc_record_123',
+      slug: 'Ab3xK9z',
+      destination_url: 'https://macrolattice.com/meal/r_8f3k',
+      content_ref: { appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: { week: 3 } },
+      created_from_ip: validIpHash,
+      is_active: true
+    })
+  })
+
+  it('structurally rejects a raw IP in created_from_ip (A2 guard)', () => {
+    for (const ipHash of ['198.51.100.10', '2001:db8::1', 'short', 'z'.repeat(64), 'a'.repeat(63), '', null, 42]) {
+      const result = share.buildShareLinkRecordData({
+        app: 'pbc_record_123',
+        slug: 'Ab3xK9z',
+        destination: 'https://macrolattice.com/meal/r_8f3k',
+        contentRef: { appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: {} },
+        ipHash
+      })
+      expect(result, JSON.stringify(ipHash)).toBeNull()
+    }
+  })
+
+  it('rejects record payloads with invalid app, slug, destination, or content reference', () => {
+    const base = {
+      app: 'pbc_record_123',
+      slug: 'Ab3xK9z',
+      destination: 'https://macrolattice.com/meal/r_8f3k',
+      contentRef: { appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: {} },
+      ipHash: validIpHash
+    }
+
+    for (const input of [
+      null,
+      undefined,
+      'x',
+      { ...base, app: '' },
+      { ...base, slug: 'custom-slug!' },
+      { ...base, slug: 'short' },
+      { ...base, destination: '' },
+      { ...base, destination: 'x'.repeat(2049) },
+      { ...base, contentRef: null },
+      { ...base, contentRef: 'text' },
+      { ...base, contentRef: { appId: 'macrolattice', type: 'meal', contentId: 'r_8f3k', params: { pad: 'x'.repeat(2000) } } }
+    ]) {
+      expect(share.buildShareLinkRecordData(input), JSON.stringify(input)).toBeNull()
     }
   })
 })

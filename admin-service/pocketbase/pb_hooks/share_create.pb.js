@@ -209,6 +209,50 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
+  // Task 2.9: idempotency — the canonical destination is the exact key scoped
+  // per app. A repeat share (client retry, second tap on the same content)
+  // returns the existing short URL instead of creating a duplicate row; the
+  // KV publisher (2.7) already mirrored that key on create, and read-through
+  // (2.8/3.5) covers any missed publish. Checked before slug generation so
+  // repeats skip the generate/collision loop entirely.
+  const idempotency = share.idempotencyQuery(appRecord.id, destination.destination)
+  if (idempotency === null) {
+    return e.json(500, {
+      code: "idempotency_unavailable",
+      message: "Create idempotency could not be evaluated"
+    })
+  }
+
+  let existing = []
+  try {
+    existing = $app.findRecordsByFilter(
+      "links",
+      idempotency.expression,
+      "-created",
+      1,
+      0,
+      idempotency.params
+    )
+  } catch (err) {
+    existing = []
+  }
+
+  if (existing.length > 0) {
+    const existingSlug = existing[0].getString("slug")
+    const existingUrl = share.buildShareLinkUrl(appRecord.getString("share_host"), existingSlug)
+    if (existingUrl === null) {
+      return e.json(500, {
+        code: "share_link_error",
+        message: "Existing short URL could not be built"
+      })
+    }
+    return e.json(200, {
+      url: existingUrl,
+      slug: existingSlug,
+      created: false
+    })
+  }
+
   // Task 2.6: random slug — client-supplied slug/url fields are never read
   // (parseContentReference drops unknown fields), so custom slugs are
   // impossible by construction. Collision scope is per app, matching the
@@ -232,12 +276,49 @@ routerAdd("POST", "/api/share/create", (e) => {
     })
   }
 
-  // TODO(task 2.9): persist the record (with the hashed IP that task 2.4
-  // already keys the quota on) and apply create idempotency. The KV publish
-  // is handled by the pb_hooks/share_kv.pb.js record hooks, so persisting is
-  // all that remains before the response can carry the short URL.
-  return e.json(501, {
-    code: "not_implemented",
-    message: "Create pipeline is not implemented yet"
+  // Task 2.9: persist. The record payload is validated in the lib so the A2
+  // contract is structural — created_from_ip must be the salted-HMAC digest,
+  // never a raw IP (a raw value fails buildShareLinkRecordData and nothing is
+  // written). The KV publish (2.7) fires from the after-create record hook.
+  const recordData = share.buildShareLinkRecordData({
+    app: appRecord.id,
+    slug: slug.slug,
+    destination: destination.destination,
+    contentRef: parsed.value,
+    ipHash: ipHash
+  })
+  if (recordData === null) {
+    return e.json(500, {
+      code: "share_link_error",
+      message: "Share link record could not be built"
+    })
+  }
+
+  try {
+    const collection = $app.findCollectionByNameOrId("links")
+    const record = new Record(collection)
+    for (const key of Object.keys(recordData)) {
+      record.set(key, recordData[key])
+    }
+    $app.save(record)
+  } catch (err) {
+    return e.json(500, {
+      code: "persist_failed",
+      message: "Share link could not be stored"
+    })
+  }
+
+  const url = share.buildShareLinkUrl(appRecord.getString("share_host"), slug.slug)
+  if (url === null) {
+    return e.json(500, {
+      code: "share_link_error",
+      message: "Short URL could not be built"
+    })
+  }
+
+  return e.json(201, {
+    url: url,
+    slug: slug.slug,
+    created: true
   })
 }, $apis.bodyLimit(4096))
